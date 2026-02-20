@@ -1,15 +1,12 @@
-module enygma_dvp
+module enygma_dvp/src_go
 
 go 1.24.0
 
-toolchain go1.24.12
-
 require (
-	enygma_dvp/src_go v0.0.0
 	github.com/ethereum/go-ethereum v1.16.8
+	github.com/iden3/go-iden3-crypto v0.0.16
+	golang.org/x/crypto v0.36.0
 )
-
-replace enygma_dvp/src_go => ../src_go
 
 require (
 	github.com/Microsoft/go-winio v0.6.2 // indirect
@@ -29,12 +26,10 @@ require (
 	github.com/google/uuid v1.3.0 // indirect
 	github.com/gorilla/websocket v1.4.2 // indirect
 	github.com/holiman/uint256 v1.3.2 // indirect
-	github.com/iden3/go-iden3-crypto v0.0.16 // indirect
 	github.com/shirou/gopsutil v3.21.4-0.20210419000835-c7a38de76ee5+incompatible // indirect
 	github.com/supranational/blst v0.3.16-0.20250831170142-f48500c1fdbe // indirect
 	github.com/tklauser/go-sysconf v0.3.12 // indirect
 	github.com/tklauser/numcpus v0.6.1 // indirect
-	golang.org/x/crypto v0.36.0 // indirect
 	golang.org/x/sync v0.12.0 // indirect
 	golang.org/x/sys v0.36.0 // indirect
 )
