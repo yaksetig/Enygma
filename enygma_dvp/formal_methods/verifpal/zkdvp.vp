@@ -1,0 +1,106 @@
+attacker[active]
+
+principal Auditor[
+	generates msk
+
+	mpk = G^msk
+]
+
+principal Blockchain[
+
+	generates token_id
+]
+
+principal Alice[
+
+	generates view_sk_A
+	view_pk_A = G^view_sk_A
+
+	generates spend_sk_A
+	spend_pk_A = HASH(spend_sk_A)
+]
+
+principal Bob[
+
+	generates view_sk_B
+	view_pk_B = G^view_sk_B
+
+	generates spend_sk_B
+	spend_pk_B = HASH(spend_sk_B)
+]
+
+// Alice and Bob register their public-keys on the blockchain
+Alice -> Blockchain: [view_pk_A], [spend_pk_A]
+Bob   -> Blockchain: [view_pk_B], [spend_pk_B]
+
+
+// Alice and Bob retrieve the other party's public-key
+Blockchain -> Alice: [spend_pk_B], [view_pk_B], [token_id]
+Blockchain -> Bob  : [spend_pk_A], [view_pk_A], [token_id]
+
+
+// Alice creates the destination commitment
+principal Alice[
+
+	generates salt
+	generates amount
+
+	// This is the ML-KEM phase of the protocol
+	ctxt_i  = PKE_ENC(view_pk_B, salt)
+	
+	// creation of the commitment for Bob
+	commit = HASH(salt, spend_pk_B, token_id, amount)
+	
+	// transaction data
+	msg 	= CONCAT(token_id, amount)
+
+	// Encrypted tx data
+	ctxt_ii = AEAD_ENC(salt, msg, nil)
+
+	// TODO: ZK PROOF HERE
+
+]
+
+Alice -> Blockchain: [ctxt_i], [commit], [ctxt_ii]
+
+principal Blockchain[
+	// checks the zk proof and registers the commitment
+]
+
+Blockchain -> Bob: [ctxt_i], [commit], [ctxt_ii]
+
+principal Bob[
+
+	// decrypt and obtain salt
+	salt_ = PKE_DEC(view_sk_B, ctxt_i)
+
+	// use salt to decrypt ciphertext
+	m = AEAD_DEC(salt_, ctxt_ii, nil)
+
+	// extract vars from plaintext
+	token_id_, amount_ = SPLIT(m)
+
+	// check if token id is correct
+	_ = ASSERT(token_id, token_id_)
+
+	// check if commitment opens
+	commit_ = HASH(salt_, spend_pk_B, token_id, amount_)
+
+	// check if Bob can open the commitment
+	_ = ASSERT(commit, commit_)
+
+ ]
+
+queries[
+	confidentiality? amount
+	confidentiality? salt
+
+	equivalence? salt, salt_
+	equivalence? commit, commit_
+
+	confidentiality? view_sk_A
+	confidentiality? view_sk_B
+
+	confidentiality? spend_sk_A
+	confidentiality? spend_sk_B
+]
