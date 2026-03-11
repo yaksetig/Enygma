@@ -139,9 +139,22 @@ func (c *GnarkClient) Erc20JoinSplitProof(
 		endpoint = "/proof/joinSplitERC20_10_2"
 	}
 
-	_, err := c.PostProof(endpoint, payload)
+	body, err := c.PostProof(endpoint, payload)
 	if err != nil {
 		return nil, fmt.Errorf("erc20JoinSplit proof request failed: %w", err)
+	}
+
+	// The gnark handler marshals []*big.Int as JSON numbers (big.Int.MarshalJSON returns
+	// raw decimal bytes). Use json.Number to accept either JSON number or JSON string.
+	var gnarkResp struct {
+		Proof []json.Number `json:"proof"`
+	}
+	if parseErr := json.Unmarshal(body, &gnarkResp); parseErr != nil {
+		return nil, fmt.Errorf("failed to parse joinSplit proof response: %w", parseErr)
+	}
+	proofStrs := make([]string, len(gnarkResp.Proof))
+	for i, n := range gnarkResp.Proof {
+		proofStrs[i] = n.String()
 	}
 
 	// Statement: [message, tree[0], root[0], null[0], ..., commit[0], commit[1]]
@@ -153,6 +166,7 @@ func (c *GnarkClient) Erc20JoinSplitProof(
 	statement = append(statement, stCommitmentsOut...)
 
 	return &ProofResult{
+		Proof:           proofStrs,
 		Statement:       statement,
 		NumberOfInputs:  nIn,
 		NumberOfOutputs: nOut,
@@ -269,9 +283,20 @@ func (c *GnarkClient) Erc20WithdrawProof(
 		endpoint = "/proof/joinSplitERC20_10_2"
 	}
 
-	_, err = c.PostProof(endpoint, payload)
+	body2, err := c.PostProof(endpoint, payload)
 	if err != nil {
 		return nil, fmt.Errorf("erc20Withdraw proof request failed: %w", err)
+	}
+
+	var gnarkResp2 struct {
+		Proof []json.Number `json:"proof"`
+	}
+	if parseErr := json.Unmarshal(body2, &gnarkResp2); parseErr != nil {
+		return nil, fmt.Errorf("failed to parse withdraw proof response: %w", parseErr)
+	}
+	proofStrs2 := make([]string, len(gnarkResp2.Proof))
+	for i, n := range gnarkResp2.Proof {
+		proofStrs2[i] = n.String()
 	}
 
 	// Statement: [message, tree[0], root[0], null[0], ..., commit[0], commit[1]]
@@ -283,6 +308,7 @@ func (c *GnarkClient) Erc20WithdrawProof(
 	statement = append(statement, stCommitmentsOut...)
 
 	return &ProofResult{
+		Proof:           proofStrs2,
 		Statement:       statement,
 		NumberOfInputs:  nIn,
 		NumberOfOutputs: 2,

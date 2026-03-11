@@ -453,19 +453,22 @@ func formatVKey(vkey VerificationKeyJSON) VerifyingKey {
 	delta2Y0, _ := new(big.Int).SetString(vkey.VkDelta2[1][0], 10)
 	delta2Y1, _ := new(big.Int).SetString(vkey.VkDelta2[1][1], 10)
 
+	// VkBeta2[0][0] = A1 (imaginary), VkBeta2[0][1] = A0 (real).
+	// EIP-197 / GenericGroth16Verifier expects x[0]=imaginary, x[1]=real,
+	// so use [beta2X0, beta2X1] = [imaginary, real] order.
 	return VerifyingKey{
 		Alpha1: G1Point{X: alpha1X, Y: alpha1Y},
 		Beta2: G2Point{
-			X: [2]*big.Int{beta2X1, beta2X0},
-			Y: [2]*big.Int{beta2Y1, beta2Y0},
+			X: [2]*big.Int{beta2X0, beta2X1},
+			Y: [2]*big.Int{beta2Y0, beta2Y1},
 		},
 		Gamma2: G2Point{
-			X: [2]*big.Int{gamma2X1, gamma2X0},
-			Y: [2]*big.Int{gamma2Y1, gamma2Y0},
+			X: [2]*big.Int{gamma2X0, gamma2X1},
+			Y: [2]*big.Int{gamma2Y0, gamma2Y1},
 		},
 		Delta2: G2Point{
-			X: [2]*big.Int{delta2X1, delta2X0},
-			Y: [2]*big.Int{delta2Y1, delta2Y0},
+			X: [2]*big.Int{delta2X0, delta2X1},
+			Y: [2]*big.Int{delta2Y0, delta2Y1},
 		},
 		Ic: ic,
 	}

@@ -144,12 +144,23 @@ func deploy() error {
 	fmt.Printf("PrivateMintVerifier has been deployed to %s\n", privateMintVerifierAddress.Hex())
 	receipts["PrivateMintVerifier"] = receiptToData(receipt, privateMintVerifierAddress)
 
-	// Deploy PoseidonWrapper (with library linking)
+	// Deploy PoseidonT5 (4-input Poseidon, used by PoseidonWrapper.poseidon4)
+	fmt.Println("Deploying poseidonT5 smart contract...")
+	poseidonT5Address, receipt, err := deployContract(client, owner, "core/contracts/Poseidon.sol/PoseidonT5")
+	if err != nil {
+		return fmt.Errorf("failed to deploy PoseidonT5: %w", err)
+	}
+	fmt.Printf("poseidonT5 has been deployed to %s\n", poseidonT5Address.Hex())
+
+	// Deploy PoseidonWrapper linking both PoseidonT3 and PoseidonT5
 	fmt.Println("Deploying PoseidonWrapper smart contract...")
-	poseidonWrapperAddress, receipt, err := deployContractWithLibrary(
+	poseidonWrapperAddress, receipt, err := deployContractWithLibraries(
 		client, owner,
 		"core/contracts/PoseidonWrapper.sol/PoseidonWrapper",
-		"PoseidonT3", poseidonT3Address,
+		map[string]common.Address{
+			"PoseidonT3": poseidonT3Address,
+			"PoseidonT5": poseidonT5Address,
+		},
 	)
 	if err != nil {
 		return fmt.Errorf("failed to deploy PoseidonWrapper: %w", err)
@@ -390,6 +401,64 @@ func deployContractWithArgs(client *ethclient.Client, auth *bind.TransactOpts, c
 		return common.Address{}, nil, fmt.Errorf("failed to wait for deployment: %w", err)
 	}
 
+	return address, receipt, nil
+}
+
+// deployContractWithLibraries deploys a contract linking multiple libraries.
+// libMap maps library name (e.g. "PoseidonT3") to its deployed address.
+// The artifact's linkReferences are used to find the exact placeholder per library.
+func deployContractWithLibraries(client *ethclient.Client, auth *bind.TransactOpts, contractPath string, libMap map[string]common.Address) (common.Address, *types.Receipt, error) {
+	// Load raw artifact JSON to access linkReferences
+	artifactPath := filepath.Join(projectRoot, "artifacts/contracts", contractPath+".json")
+	rawData, err := os.ReadFile(artifactPath)
+	if err != nil {
+		return common.Address{}, nil, fmt.Errorf("failed to read artifact %s: %w", contractPath, err)
+	}
+
+	var fullArtifact struct {
+		ABI            json.RawMessage                       `json:"abi"`
+		Bytecode       string                                `json:"bytecode"`
+		LinkReferences map[string]map[string][]struct {
+			Start  int `json:"start"`
+			Length int `json:"length"`
+		} `json:"linkReferences"`
+	}
+	if err := json.Unmarshal(rawData, &fullArtifact); err != nil {
+		return common.Address{}, nil, fmt.Errorf("failed to parse artifact JSON: %w", err)
+	}
+
+	parsedABI, err := abi.JSON(strings.NewReader(string(fullArtifact.ABI)))
+	if err != nil {
+		return common.Address{}, nil, fmt.Errorf("failed to parse ABI: %w", err)
+	}
+
+	bytecodeHex := fullArtifact.Bytecode[2:] // strip 0x
+
+	// Replace each library placeholder using byte offsets from linkReferences
+	for _, libs := range fullArtifact.LinkReferences {
+		for libName, positions := range libs {
+			addr, ok := libMap[libName]
+			if !ok {
+				return common.Address{}, nil, fmt.Errorf("missing address for library %s", libName)
+			}
+			addrHex := strings.ToLower(strings.TrimPrefix(addr.Hex(), "0x"))
+			for _, pos := range positions {
+				start := pos.Start * 2
+				end := start + pos.Length*2
+				bytecodeHex = bytecodeHex[:start] + addrHex + bytecodeHex[end:]
+			}
+		}
+	}
+
+	bytecode := common.FromHex("0x" + bytecodeHex)
+	address, tx, _, err := bind.DeployContract(auth, parsedABI, bytecode, client)
+	if err != nil {
+		return common.Address{}, nil, fmt.Errorf("failed to deploy contract: %w", err)
+	}
+	receipt, err := bind.WaitMined(context.Background(), client, tx)
+	if err != nil {
+		return common.Address{}, nil, fmt.Errorf("failed to wait for deployment: %w", err)
+	}
 	return address, receipt, nil
 }
 
