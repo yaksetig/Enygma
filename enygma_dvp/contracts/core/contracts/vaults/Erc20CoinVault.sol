@@ -34,25 +34,17 @@ contract Erc20CoinVault is AbstractCoinVault {
     }
 
     // Standards that are currently supported: ERC20, ERC721, ERC1155
+    // params[0] = amount to deposit
+    // params[1] = commitment computed off-chain as
+    //             Poseidon(pk_spend, saltB_field, amount, tokenId)  (V2, non-interactive flow)
     function deposit(uint256[] memory params) public override returns (bool) {
-        // Transferring the ERC20 tokens from User to ZkDvp
         uint256 amount = params[0];
-        uint256 publicKey = params[1];
+        uint256 commitment = params[1];
+
         IERC20(_assetContractAddress).transferFrom(
             msg.sender,
             address(this),
             amount
-        );
-
-        uint256[] memory assetParams = new uint256[](2);
-        assetParams[0] = amount;
-        assetParams[1] = uint256(uint160(_assetContractAddress));
-        // Generating uniqueId for the ERC20 token
-        uint256 uid = generateUniqueId(assetParams);
-
-        // Generating the commitment based on the ERC20 uniqueId and the publickey
-        uint256 commitment = IPoseidonWrapper(_hashContractAddress).poseidon(
-            [uid, publicKey]
         );
 
         uint256[] memory commitments = new uint256[](1);
@@ -65,30 +57,129 @@ contract Erc20CoinVault is AbstractCoinVault {
         return true;
     }
 
+    // depositV2 — non-interactive flow.
+    // Same as deposit but also emits EncryptedNote so that the recipient can
+    // scan the chain and discover notes sent to them without prior interaction.
+    //
+    // params[0]    = amount to deposit
+    // params[1]    = commitment = Poseidon(pk_spend, saltB_field, amount, tokenId)
+    // ciphertextI  = ML-KEM-768 capsule (1088 bytes)
+    // ciphertextII = ChaCha20-Poly1305 ciphertext of tokenId||amount
+    function depositV2(
+        uint256[] memory params,
+        bytes calldata ciphertextI,
+        bytes calldata ciphertextII
+    ) public returns (bool) {
+        uint256 amount = params[0];
+        uint256 commitment = params[1];
+
+        IERC20(_assetContractAddress).transferFrom(
+            msg.sender,
+            address(this),
+            amount
+        );
+
+        uint256[] memory commitments = new uint256[](1);
+        commitments[0] = commitment;
+
+        insertLeaves(commitments);
+
+        emit Commitment(_vaultId, commitment);
+        emit EncryptedNote(_vaultId, commitment, ciphertextI, ciphertextII);
+
+        return true;
+    }
+
     function transfer(
         IEnygmaDvp.ProofReceipt memory receipt
     ) public override returns (bool) {
-        // jsReceipt.inputs;
-        // message;
-        // treeNumbers[numberOfInputs];
-        // merkleRoots[numberOfInputs];
-        // nullifiers[numberOfInputs];
-        // commitments[numberOfOutputs];
+        checkReceiptConditions(receipt);
+        _insertCommitmentsFromReceipt(receipt);
+        _nullifyFromReceipt(receipt);
+        return true;
+    }
 
-        uint jInputSize = receipt.numberOfInputs;
-        uint jTreeNumbersIndex = 1 + jInputSize;
-        uint jNullifiersIndex = jTreeNumbersIndex + (2 * jInputSize);
-        uint jCommitmentsIndex = jNullifiersIndex + jInputSize;
+    // transferV2 — non-interactive flow.
+    // Same as transfer but also emits one EncryptedNote per output commitment
+    // so that recipients can scan for notes sent to them.
+    //
+    // ciphertextI[i]  — ML-KEM capsule for output note i
+    // ciphertextII[i] — AEAD ciphertext of tokenId||amount for output note i
+    //
+    // Statement layout (mirrors checkReceiptConditions):
+    //   [0]           message
+    //   [1..nIn]      treeNumbers
+    //   [1+nIn..nIn]  merkleRoots
+    //   [1+2nIn..]    nullifiers
+    //   [1+3nIn..]    commitments  ← EncryptedNote emitted for each
+    function transferV2(
+        IEnygmaDvp.ProofReceipt memory receipt,
+        bytes[] calldata ciphertextI,
+        bytes[] calldata ciphertextII
+    ) public returns (bool) {
+        require(
+            ciphertextI.length == receipt.numberOfOutputs &&
+            ciphertextII.length == receipt.numberOfOutputs,
+            "Erc20CoinVault: ciphertext length mismatch"
+        );
 
-        // checking the proof
+        checkReceiptConditions(receipt);
+        _insertCommitmentsFromReceipt(receipt);
+        _nullifyFromReceipt(receipt);
+
+        // Emit EncryptedNote for each output so recipients can scan
+        uint256 commitmentsIndex = 1 + 3 * receipt.numberOfInputs;
+        for (uint256 i = 0; i < receipt.numberOfOutputs; i++) {
+            uint256 commitment = receipt.statement[commitmentsIndex + i];
+            emit EncryptedNote(_vaultId, commitment, ciphertextI[i], ciphertextII[i]);
+        }
+
+        return true;
+    }
+
+    // withdrawV2 — non-interactive flow.
+    // Output commitment encodes the recipient as pk_spend with salt=0:
+    //   commitment = Poseidon4(uint160(recipient), 0, amount, tokenId)
+    //
+    // withdrawParams[0] = amount
+    // withdrawParams[1] = tokenId (must match the value used when input notes were created)
+    function withdrawV2(
+        uint256[] memory withdrawParams,
+        address recipient,
+        IEnygmaDvp.ProofReceipt memory receipt
+    ) public returns (bool) {
+        uint256 amount  = withdrawParams[0];
+        uint256 tokenId = withdrawParams[1];
+
+        uint256 commitmentsIndex = 1 + 3 * receipt.numberOfInputs;
+
+        uint256 commitment = IPoseidonWrapper(_hashContractAddress).poseidon4(
+            [uint256(uint160(recipient)), 0, amount, tokenId]
+        );
+
+        if (receipt.statement[commitmentsIndex] != commitment) {
+            revert InvalidOpening();
+        }
 
         checkReceiptConditions(receipt);
 
-        _insertCommitmentsFromReceipt(receipt);
+        IERC20(_assetContractAddress).transfer(recipient, amount);
 
-        // Nullifying the old coins
-        _nullifyFromReceipt(receipt);
-
+        uint256 treeNumbersIndex = 1;
+        uint256 nullifiersIndex  = 1 + 2 * receipt.numberOfInputs;
+        for (uint256 i = 0; i < receipt.numberOfInputs; i++) {
+            if (receipt.statement[nullifiersIndex + i] != 0) {
+                setNullifier(
+                    receipt.statement[treeNumbersIndex + i],
+                    receipt.statement[nullifiersIndex + i]
+                );
+                emit Nullifier(
+                    _vaultId,
+                    receipt.statement[treeNumbersIndex + i],
+                    receipt.statement[nullifiersIndex + i]
+                );
+            }
+        }
         return true;
     }
 

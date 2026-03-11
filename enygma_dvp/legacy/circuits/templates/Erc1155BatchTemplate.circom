@@ -5,7 +5,6 @@ include "../circomlib/circuits/poseidon.circom";
 include "../circomlib/circuits/gates.circom";
 include "../circomlib/circuits/mux1.circom";
 include "../primitives/MerkleProof.circom";
-include "../primitives/Commitment.circom";
 include "../primitives/Nullifier.circom";
 include "../primitives/PublicKey.circom";
 include "../primitives/Erc1155UniqueId.circom";
@@ -37,7 +36,6 @@ template Erc1155BatchTemplate(tm_numOfTokens, tm_merkleTreeDepth) {
 
     component cp_outPublicKeys[tm_numOfTokens];
     component cp_inPublicKeys[tm_numOfTokens];
-    component cp_uniqueIds[tm_numOfTokens];
     component cp_nullifiers[tm_numOfTokens];
     component cp_inCommitments[tm_numOfTokens];
     component cp_outCommitments[tm_numOfTokens];
@@ -65,16 +63,12 @@ template Erc1155BatchTemplate(tm_numOfTokens, tm_merkleTreeDepth) {
         cp_checkEqualIfIsNotDummys[i].in[0] <== cp_nullifiers[i].out;
         cp_checkEqualIfIsNotDummys[i].in[1] <== st_nullifiers[i];
 
-        //compute uniqueId per token
-        cp_uniqueIds[i] = Erc1155UniqueId();
-        cp_uniqueIds[i].erc1155ContractAddress <== wt_erc1155ContractAddress;
-        cp_uniqueIds[i].erc1155TokenId <== wt_erc1155TokenIds[i];
-        cp_uniqueIds[i].amount <== wt_values[i];
-
-        // compute and verify input commitment
-        cp_inCommitments[i] = Commitment();
-        cp_inCommitments[i].uniqueId <== cp_uniqueIds[i].out;
-        cp_inCommitments[i].publicKey <== cp_inPublicKeys[i].out;
+        // compute and verify input commitment as single 4-input Poseidon hash
+        cp_inCommitments[i] = Poseidon(4);
+        cp_inCommitments[i].inputs[0] <== wt_erc1155ContractAddress;
+        cp_inCommitments[i].inputs[1] <== wt_erc1155TokenIds[i];
+        cp_inCommitments[i].inputs[2] <== wt_values[i];
+        cp_inCommitments[i].inputs[3] <== cp_inPublicKeys[i].out;
 
         // verify merkleComp proof on the note commitment
         cp_merkle[i] = MerkleProof(tm_merkleTreeDepth);
@@ -89,10 +83,12 @@ template Erc1155BatchTemplate(tm_numOfTokens, tm_merkleTreeDepth) {
         cp_checkEqualIfIsNotDummys2[i].in[0] <== cp_merkle[i].root;
         cp_checkEqualIfIsNotDummys2[i].in[1] <== st_merkleRoots[i];
 
-        // compute and verifiy output commitment
-        cp_outCommitments[i] = Commitment();
-        cp_outCommitments[i].uniqueId <== cp_uniqueIds[i].out;
-        cp_outCommitments[i].publicKey <== wt_outPublicKeys[i];
+        // compute output commitment as single 4-input Poseidon hash
+        cp_outCommitments[i] = Poseidon(4);
+        cp_outCommitments[i].inputs[0] <== wt_erc1155ContractAddress;
+        cp_outCommitments[i].inputs[1] <== wt_erc1155TokenIds[i];
+        cp_outCommitments[i].inputs[2] <== wt_values[i];
+        cp_outCommitments[i].inputs[3] <== wt_outPublicKeys[i];
 
         cp_checkEqualIfIsNotDummys3[i] = ForceEqualIfEnabled();
         cp_checkEqualIfIsNotDummys3[i].enabled <== 1 - cp_isDummyInputs[i].out;

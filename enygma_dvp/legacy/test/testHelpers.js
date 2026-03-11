@@ -68,6 +68,17 @@ async function deployForTest(userCount) {
 
   console.log("poseidonT3 has been deployed to " + poseidonT3Contract.address);
 
+  await overwriteArtifact("PoseidonT5", poseidonGenContract.createCode(4));
+
+  const PoseidonT5Factory = await hre.ethers.getContractFactory(
+    "PoseidonT5",
+    owner,
+  );
+  const poseidonT5Contract = await PoseidonT5Factory.deploy();
+  await poseidonT5Contract.deployTransaction.wait();
+
+  console.log("poseidonT5 has been deployed to " + poseidonT5Contract.address);
+
   /////////////////////////////////////////////////
   console.log("Deploying GenericGroth16Verifier smart contract...");
 
@@ -104,6 +115,7 @@ async function deployForTest(userCount) {
     {
       libraries: {
         PoseidonT3: poseidonT3Contract.address,
+        PoseidonT5: poseidonT5Contract.address,
       },
     },
     owner,

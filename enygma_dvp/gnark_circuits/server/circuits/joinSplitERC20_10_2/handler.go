@@ -46,19 +46,20 @@ func NewHandler(pkPath, vkPath string) gin.HandlerFunc {
 			TmRange: frontend.Variable("1000000000000000000000000000000000000"),
 		}
 
-		circuitJoinSplitERC20_10_2:=templates.Erc20Circuit{
-			Config: joinsplit_erc20_10_2_config,
-			StTreeNumber:    				make([]frontend.Variable, joinsplit_erc20_10_2_config.TmNInputs),
-			StMerkleRoots:    			make([]frontend.Variable, joinsplit_erc20_10_2_config.TmNInputs),
-			StNullifiers:  				make([]frontend.Variable, joinsplit_erc20_10_2_config.TmNInputs),
-			StCommitmentOut:  			make([]frontend.Variable, joinsplit_erc20_10_2_config.TmMOutputs),
-			WtPrivateKeysIn: 				make([]frontend.Variable, joinsplit_erc20_10_2_config.TmNInputs),
-			WtValuesIn: 					make([]frontend.Variable, joinsplit_erc20_10_2_config.TmNInputs),
-			WtPathElements:				make([][]frontend.Variable, joinsplit_erc20_10_2_config.TmNInputs),
-			WtPathIndices:				make([]frontend.Variable, joinsplit_erc20_10_2_config.TmNInputs),
-			WtPublicKeysOut:				make([]frontend.Variable, joinsplit_erc20_10_2_config.TmMOutputs),
-			WtValuesOut:    				make([]frontend.Variable, joinsplit_erc20_10_2_config.TmMOutputs),
-    
+		circuitJoinSplitERC20_10_2 := templates.Erc20Circuit{
+			Config:               joinsplit_erc20_10_2_config,
+			StTreeNumber:         make([]frontend.Variable, joinsplit_erc20_10_2_config.TmNInputs),
+			StMerkleRoots:        make([]frontend.Variable, joinsplit_erc20_10_2_config.TmNInputs),
+			StNullifiers:         make([]frontend.Variable, joinsplit_erc20_10_2_config.TmNInputs),
+			StCommitmentOut:      make([]frontend.Variable, joinsplit_erc20_10_2_config.TmMOutputs),
+			WtPrivateKeysIn:      make([]frontend.Variable, joinsplit_erc20_10_2_config.TmNInputs),
+			WtValuesIn:           make([]frontend.Variable, joinsplit_erc20_10_2_config.TmNInputs),
+			WtSaltsIn:            make([]frontend.Variable, joinsplit_erc20_10_2_config.TmNInputs),
+			WtPathElements:       make([][]frontend.Variable, joinsplit_erc20_10_2_config.TmNInputs),
+			WtPathIndices:        make([]frontend.Variable, joinsplit_erc20_10_2_config.TmNInputs),
+			WtSpendPublicKeysOut: make([]frontend.Variable, joinsplit_erc20_10_2_config.TmMOutputs),
+			WtValuesOut:          make([]frontend.Variable, joinsplit_erc20_10_2_config.TmMOutputs),
+			WtSaltsOut:           make([]frontend.Variable, joinsplit_erc20_10_2_config.TmMOutputs),
 		}
 		
 		for i := range circuitJoinSplitERC20_10_2.WtPathElements {
@@ -66,19 +67,20 @@ func NewHandler(pkPath, vkPath string) gin.HandlerFunc {
 			circuitJoinSplitERC20_10_2.WtPathElements[i] = make([]frontend.Variable, joinsplit_erc20_10_2_config.TmMerkleTreeDepth)
 		}
 		
-		witness:=templates.Erc20Circuit{
-			
-			Config: joinsplit_erc20_10_2_config,
-			StTreeNumber:    				make([]frontend.Variable, joinsplit_erc20_10_2_config.TmNInputs),
-			StMerkleRoots:    			make([]frontend.Variable, joinsplit_erc20_10_2_config.TmNInputs),
-			StNullifiers:  				make([]frontend.Variable, joinsplit_erc20_10_2_config.TmNInputs),
-			StCommitmentOut:  			make([]frontend.Variable, joinsplit_erc20_10_2_config.TmMOutputs),
-			WtPrivateKeysIn: 				make([]frontend.Variable, joinsplit_erc20_10_2_config.TmNInputs),
-			WtValuesIn: 					make([]frontend.Variable, joinsplit_erc20_10_2_config.TmNInputs),
-			WtPathElements:				make([][]frontend.Variable, joinsplit_erc20_10_2_config.TmNInputs),
-			WtPathIndices:				make([]frontend.Variable, joinsplit_erc20_10_2_config.TmNInputs),
-			WtPublicKeysOut:				make([]frontend.Variable, joinsplit_erc20_10_2_config.TmMOutputs),
-			WtValuesOut:    				make([]frontend.Variable, joinsplit_erc20_10_2_config.TmMOutputs),
+		witness := templates.Erc20Circuit{
+			Config:               joinsplit_erc20_10_2_config,
+			StTreeNumber:         make([]frontend.Variable, joinsplit_erc20_10_2_config.TmNInputs),
+			StMerkleRoots:        make([]frontend.Variable, joinsplit_erc20_10_2_config.TmNInputs),
+			StNullifiers:         make([]frontend.Variable, joinsplit_erc20_10_2_config.TmNInputs),
+			StCommitmentOut:      make([]frontend.Variable, joinsplit_erc20_10_2_config.TmMOutputs),
+			WtPrivateKeysIn:      make([]frontend.Variable, joinsplit_erc20_10_2_config.TmNInputs),
+			WtValuesIn:           make([]frontend.Variable, joinsplit_erc20_10_2_config.TmNInputs),
+			WtSaltsIn:            make([]frontend.Variable, joinsplit_erc20_10_2_config.TmNInputs),
+			WtPathElements:       make([][]frontend.Variable, joinsplit_erc20_10_2_config.TmNInputs),
+			WtPathIndices:        make([]frontend.Variable, joinsplit_erc20_10_2_config.TmNInputs),
+			WtSpendPublicKeysOut: make([]frontend.Variable, joinsplit_erc20_10_2_config.TmMOutputs),
+			WtValuesOut:          make([]frontend.Variable, joinsplit_erc20_10_2_config.TmMOutputs),
+			WtSaltsOut:           make([]frontend.Variable, joinsplit_erc20_10_2_config.TmMOutputs),
 		}
 		
 		for i := range witness.WtPathElements {
@@ -88,27 +90,26 @@ func NewHandler(pkPath, vkPath string) gin.HandlerFunc {
 		
 
 		witness.StMessage = frontend.Variable(request.StMessage)
-		witness.WtErc20ContractAddress = frontend.Variable(request.WtErc20ContractAddress)
-		
+		witness.WtTokenId = frontend.Variable(request.WtTokenId)
 
-		for i:=0; i < joinsplit_erc20_10_2_config.TmNInputs ;i++{
+		for i := 0; i < joinsplit_erc20_10_2_config.TmNInputs; i++ {
 			witness.StTreeNumber[i] = frontend.Variable(request.StTreeNumber[i])
 			witness.StMerkleRoots[i] = frontend.Variable(request.StMerkleRoots[i])
-			witness.StNullifiers[i] =  frontend.Variable(request.StNullifiers[i])
-			
-			witness.WtPrivateKeysIn[i] =  frontend.Variable(request.WtPrivateKeysIn[i])
+			witness.StNullifiers[i] = frontend.Variable(request.StNullifiers[i])
+			witness.WtPrivateKeysIn[i] = frontend.Variable(request.WtPrivateKeysIn[i])
 			witness.WtValuesIn[i] = frontend.Variable(request.WtValuesIn[i])
+			witness.WtSaltsIn[i] = frontend.Variable(request.WtSaltsIn[i])
 			witness.WtPathIndices[i] = frontend.Variable(request.WtPathIndices[i])
-
-			for j:=0 ; j < joinsplit_erc20_10_2_config.TmMerkleTreeDepth; j++{
+			for j := 0; j < joinsplit_erc20_10_2_config.TmMerkleTreeDepth; j++ {
 				witness.WtPathElements[i][j] = frontend.Variable(request.WtPathElements[i][j])
 			}
 		}
 
-		for i:=0; i < joinsplit_erc20_10_2_config.TmMOutputs; i++{
-			witness.StCommitmentOut[i] =  frontend.Variable(request.StCommitmentOut[i])
-			witness.WtPublicKeysOut[i] =  frontend.Variable(request.WtPublicKeysOut[i])
-			witness.WtValuesOut[i] =  frontend.Variable(request.WtValuesOut[i])
+		for i := 0; i < joinsplit_erc20_10_2_config.TmMOutputs; i++ {
+			witness.StCommitmentOut[i] = frontend.Variable(request.StCommitmentOut[i])
+			witness.WtSpendPublicKeysOut[i] = frontend.Variable(request.WtSpendPublicKeysOut[i])
+			witness.WtValuesOut[i] = frontend.Variable(request.WtValuesOut[i])
+			witness.WtSaltsOut[i] = frontend.Variable(request.WtSaltsOut[i])
 		}
 		witness.Config = joinsplit_erc20_10_2_config
 

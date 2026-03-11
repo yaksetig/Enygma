@@ -46,6 +46,7 @@ template Erc721WithAuditorTemplate(tm_numOfTokens, tm_merkleTreeDepth) {
     signal input wt_values[tm_numOfTokens];
     signal input wt_pathElements[tm_numOfTokens][tm_merkleTreeDepth];
     signal input wt_pathIndices[tm_numOfTokens];
+    signal input wt_erc721ContractAddress;
     signal input wt_publicKeysOut[tm_numOfTokens]; 
 
 
@@ -65,6 +66,7 @@ template Erc721WithAuditorTemplate(tm_numOfTokens, tm_merkleTreeDepth) {
     cp_coinProof.wt_pathElements <== wt_pathElements;
 
     cp_coinProof.st_commitmentsOut <== st_commitmentsOut;
+    cp_coinProof.wt_erc721ContractAddress <== wt_erc721ContractAddress;
     cp_coinProof.wt_publicKeysOut <== wt_publicKeysOut; 
 
     component cp_auditorAccess;

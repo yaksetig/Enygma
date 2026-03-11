@@ -30,10 +30,13 @@ type Erc721WithAuditorCircuit struct {
 	WtAuditorRandom			 frontend.Variable
 
 	WtPrivateKeysIn   		[]frontend.Variable //NInputs
-	WtValues				[]frontend.Variable //NInputs
-	WtPathElements    		[][] frontend.Variable //NInputs //MerkleTreeDepth 
+	WtValues				[]frontend.Variable //NInputs (raw tokenIds)
+	WtSaltsIn				[]frontend.Variable //NInputs
+	WtPathElements    		[][] frontend.Variable //NInputs //MerkleTreeDepth
 	WtPathIndices     		[]frontend.Variable //NInputs
+	WtErc721ContractAddress frontend.Variable
 	WtPrivateKeysOut        []frontend.Variable //MOutputs
+	WtSaltsOut				[]frontend.Variable //MOutputs
 
 }
 
@@ -53,11 +56,14 @@ func (circuit *Erc721WithAuditorCircuit) Define(api frontend.API) error{
 		StNullifiers: circuit.StNullifiers,
 		StCommitmentOut: circuit.StCommitmentOut,
 		
-		WtPrivateKeysIn: circuit.WtPrivateKeysIn, 
-		WtValues: circuit.WtValues,			
+		WtPrivateKeysIn: circuit.WtPrivateKeysIn,
+		WtValues: circuit.WtValues,
+		WtSaltsIn: circuit.WtSaltsIn,
 		WtPathElements: circuit.WtPathElements,
-		WtPathIndices:circuit.WtPathIndices,
-		WtPublicKeysOut:circuit.WtPrivateKeysOut,
+		WtPathIndices: circuit.WtPathIndices,
+		WtErc721ContractAddress: circuit.WtErc721ContractAddress,
+		WtPublicKeysOut: circuit.WtPrivateKeysOut,
+		WtSaltsOut: circuit.WtSaltsOut,
 	}
 
 	err := erc721Circuit.Define(api)

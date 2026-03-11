@@ -1,53 +1,27 @@
 /*
 Low-level proof generation.
-These functions are directly calling proof generation functions
-    from snarkJs library
+These functions call the gnark HTTP server for proof generation.
 */
-const snarkjs = require("snarkjs");
 const utils = require("./utils");
 const { babyjub: babyJub } = require("circomlibjs");
 const { GnarkProver } = require("./prover_gnark");
-
-function getWasmPath(circuitName) {
-  return "./build/" + circuitName + ".wasm";
-}
 
 function getZkeyPath(circuitName) {
   return "./build/" + circuitName + ".zkey";
 }
 
-function formatProof(proof) {
-  return {
-    a: proof.pi_a.slice(0, 2),
-    b: proof.pi_b.map((x) => x.reverse()).slice(0, 2),
-    c: proof.pi_c.slice(0, 2),
-  };
-}
-
 async function prove(circuitName, inputs) {
   console.log(`Constructing proof of ${circuitName}`);
-  // console.log("inputs: ", JSON.stringify(inputs, null, 4));
 
-  const wasmPath = getWasmPath(circuitName);
   const zkeyPath = getZkeyPath(circuitName);
 
-  console.log("Circuit paths: ", wasmPath, zkeyPath);
-
   const circuitInputs = prepareCircuitInputs(circuitName, inputs);
-  GnarkProver(circuitInputs, zkeyPath);
-
-  let curve = await snarkjs.curves.getCurveFromName("bn128");
-  const fullProof = await snarkjs.groth16.fullProve(
-    circuitInputs,
-    wasmPath,
-    zkeyPath
-  );
-  curve.terminate();
+  const gnarkResult = await GnarkProver(circuitInputs, zkeyPath);
 
   if ("keysOut" in inputs) {
     return packProof(
       circuitInputs,
-      formatProof(fullProof.proof),
+      gnarkResult.proof,
       inputs.keysIn.length,
       inputs.keysOut.length
     );
@@ -55,12 +29,12 @@ async function prove(circuitName, inputs) {
     if ("keysIn" in inputs) {
       return packProof(
         circuitInputs,
-        formatProof(fullProof.proof),
+        gnarkResult.proof,
         inputs.keysIn.length,
         0
       );
     } else {
-      return packProof(circuitInputs, formatProof(fullProof.proof), 0, 0);
+      return packProof(circuitInputs, gnarkResult.proof, 0, 0);
     }
   }
 }
@@ -219,20 +193,71 @@ function generateParameters(circuitName, inputs) {
       pathIndices[i]
     );
   }
+
+  // Generate fresh random salts for each output note
+  const saltsOut = [];
   if ("keysOut" in inputs) {
     for (let i = 0; i < inputs.keysOut.length; i++) {
-      var idOut = generateUniqueId(circuitName, inputs, i, "Out");
-      commitmentsOut[i] = utils.getCommitment(
-        idOut,
-        inputs.keysOut[i].publicKey
-      );
+      const salt = utils.randomInField();
+      saltsOut.push(salt);
+      if (circuitName.includes("Erc20")) {
+        var selectorString = "valuesOut" in inputs ? "valuesOut" : "values";
+        commitmentsOut[i] = utils.erc20Commitment(
+          inputs.erc20ContractAddress,
+          inputs[selectorString][i],
+          inputs.keysOut[i].publicKey,
+          salt
+        );
+      } else if (circuitName.includes("Erc1155")) {
+        var selectorString = "valuesOut" in inputs ? "valuesOut" : "values";
+        var tokenId = "erc1155TokenId" in inputs
+          ? inputs.erc1155TokenId
+          : inputs.erc1155TokenIds[i];
+        commitmentsOut[i] = utils.erc1155Commitment(
+          inputs.erc1155ContractAddress,
+          tokenId,
+          inputs[selectorString][i],
+          inputs.keysOut[i].publicKey,
+          salt
+        );
+      } else if (circuitName.includes("Erc721")) {
+        var selectorString = "valuesOut" in inputs ? "valuesOut" : "values";
+        commitmentsOut[i] = utils.erc721Commitment(
+          inputs.erc721ContractAddress,
+          inputs[selectorString][i],
+          inputs.keysOut[i].publicKey,
+          salt
+        );
+      } else {
+        var idOut = generateUniqueId(circuitName, inputs, i, "Out");
+        commitmentsOut[i] = utils.getCommitment(
+          idOut,
+          inputs.keysOut[i].publicKey
+        );
+      }
     }
   } else {
     if (circuitName.includes("AuctionInit")) {
-      var idIn = generateUniqueId(circuitName, inputs, 0, "In");
-      commitmentsOut.push(
-        utils.getCommitment(idIn, inputs.keysIn[0].publicKey)
-      );
+      const salt = utils.randomInField();
+      saltsOut.push(salt);
+      if (inputs.vaultId == 0) {
+        commitmentsOut.push(
+          utils.erc20Commitment(inputs.contractAddress, inputs.idParams[0], inputs.keysIn[0].publicKey, salt)
+        );
+      } else if (inputs.vaultId == 1) {
+        commitmentsOut.push(
+          utils.erc721Commitment(inputs.contractAddress, inputs.idParams[0], inputs.keysIn[0].publicKey, salt)
+        );
+      } else if (inputs.vaultId == 2) {
+        commitmentsOut.push(
+          utils.erc1155Commitment(inputs.contractAddress, inputs.idParams[1], inputs.idParams[0], inputs.keysIn[0].publicKey, salt)
+        );
+      } else {
+        var idIn = generateUniqueId(circuitName, inputs, 0, "In");
+        commitmentsOut.push(
+          utils.getCommitment(idIn, inputs.keysIn[0].publicKey)
+        );
+      }
     }
   }
   pathElements = pathElements.flat(1);
@@ -243,6 +268,7 @@ function generateParameters(circuitName, inputs) {
     nullifiers,
     commitmentsOut,
     uniqueIds,
+    saltsOut,
   };
 }
 
@@ -446,7 +472,8 @@ function prepareErc721CircuitInputs(circuitName, inputs) {
   params = generateParameters(circuitName, inputs);
   const circuitInputs = packCommonCircuitInputs(inputs, params);
 
-  circuitInputs.wt_values = params.uniqueIds;
+  circuitInputs.wt_values = inputs.values;
+  circuitInputs.wt_erc721ContractAddress = BigInt(inputs.erc721ContractAddress);
 
   return circuitInputs;
 }
@@ -507,6 +534,8 @@ function packCommonCircuitInputs(inputs, generatedParams) {
     wt_publicKeysOut: inputs.keysOut.map((k) => k.publicKey),
     wt_pathElements: generatedParams.pathElements,
     wt_pathIndices: generatedParams.pathIndices,
+    wt_saltsIn: inputs.saltsIn || new Array(inputs.keysIn.length).fill(0n),
+    wt_saltsOut: generatedParams.saltsOut,
   };
 }
 

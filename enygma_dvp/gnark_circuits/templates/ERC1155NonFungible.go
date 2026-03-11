@@ -30,10 +30,12 @@ type ERC1155NonFungibleCircuit struct {
 
 	WtPrivateKeysIn		 	 []frontend.Variable //numOfTokens
 	WtValues    		 	 []frontend.Variable //numOfTokens
+	WtSaltsIn				 []frontend.Variable //numOfTokens
 	WtPathElements   		 [][]frontend.Variable //numOfTokens  //MerkleTreeDepthERC1155NonFungible
 	WtPathIndices     		 []frontend.Variable //numOfTokens
 	WtErc1155TokenId         []frontend.Variable //numOfTokens
 	WtPublicKeysOut	     	 []frontend.Variable //numOfTokens
+	WtSaltsOut				 []frontend.Variable //numOfTokens
 	WtErc1155ContractAddress frontend.Variable
 
 	WtAssetGroupPathElements [][]frontend.Variable //numOfTokens  //AssetGroupMerkleTreeDepth
@@ -68,22 +70,19 @@ func (circuit *ERC1155NonFungibleCircuit) Define(api frontend.API) error{
 	
 		api.AssertIsEqual(api.Mul(Diff2, Enable), 0)
 		
-		erc1155uniqueId2 := primitives.Erc1155UniqueId2(api, circuit.WtErc1155ContractAddress,circuit.WtErc1155TokenId[i],circuit.WtValues[i])
-		
-	
-		commitment  := primitives.CommitmentNative(api,erc1155uniqueId2,publicKey)
-		
+		commitment := primitives.Erc1155Commitment(api, circuit.WtErc1155ContractAddress, circuit.WtErc1155TokenId[i], circuit.WtValues[i], publicKey, circuit.WtSaltsIn[i])
+
 		merklePathElement := make([]frontend.Variable,circuit.Config.TmMerkleTreeDepth)
 		for j:=0 ; j< circuit.Config.TmMerkleTreeDepth;j++{
 			merklePathElement[j] = circuit.WtPathElements[i][j]
 		}
-		root2 := primitives.MerkleProofNative(api,commitment ,circuit.WtPathIndices[i],merklePathElement)
-		
+		root2 := primitives.MerkleProofNative(api, commitment, circuit.WtPathIndices[i], merklePathElement)
+
 		Diff3  := api.Sub(root2, circuit.StMerkleRoots[i])
-		
+
 		api.AssertIsEqual(api.Mul(Diff3, Enable), 0)
-		
-		commitment2  := primitives.CommitmentNative(api,erc1155uniqueId2,circuit.WtPublicKeysOut[i])
+
+		commitment2 := primitives.Erc1155Commitment(api, circuit.WtErc1155ContractAddress, circuit.WtErc1155TokenId[i], circuit.WtValues[i], circuit.WtPublicKeysOut[i], circuit.WtSaltsOut[i])
 
 		Diff4  := api.Sub(circuit.StCommitmentOut[i], commitment2)
 		

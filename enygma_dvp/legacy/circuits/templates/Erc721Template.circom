@@ -5,7 +5,6 @@ include "../circomlib/circuits/poseidon.circom";
 include "../circomlib/circuits/gates.circom";
 include "../circomlib/circuits/mux1.circom";
 include "../primitives/MerkleProof.circom";
-include "../primitives/Commitment.circom";
 include "../primitives/Nullifier.circom";
 include "../primitives/PublicKey.circom";
 
@@ -32,6 +31,7 @@ template Erc721Template(tm_numOfTokens, tm_merkleTreeDepth) {
     signal input wt_values[tm_numOfTokens];
     signal input wt_pathElements[tm_numOfTokens][tm_merkleTreeDepth];
     signal input wt_pathIndices[tm_numOfTokens];
+    signal input wt_erc721ContractAddress;
     signal input wt_publicKeysOut[tm_numOfTokens]; 
 
     component cp_publicKeys[tm_numOfTokens];
@@ -55,10 +55,11 @@ template Erc721Template(tm_numOfTokens, tm_merkleTreeDepth) {
         cp_nullfiers[i].pathIndex <== wt_pathIndices[i];
         cp_nullfiers[i].out === st_nullifiers[i];
 
-        //compute note commitment
-        cp_notesIn[i] = Commitment();
-        cp_notesIn[i].uniqueId <== wt_values[i];
-        cp_notesIn[i].publicKey <== cp_publicKeys[i].out;
+        //compute note commitment as single 3-input Poseidon hash
+        cp_notesIn[i] = Poseidon(3);
+        cp_notesIn[i].inputs[0] <== wt_erc721ContractAddress;
+        cp_notesIn[i].inputs[1] <== wt_values[i];
+        cp_notesIn[i].inputs[2] <== cp_publicKeys[i].out;
 
         //verify merkleComp proof on the note commitment
         cp_merkles[i] = MerkleProof(tm_merkleTreeDepth);
@@ -79,10 +80,11 @@ template Erc721Template(tm_numOfTokens, tm_merkleTreeDepth) {
         cp_checkEqualIfIsNotDummys[i].in[0] <== st_merkleRoots[i];
         cp_checkEqualIfIsNotDummys[i].in[1] <== cp_merkles[i].root;
 
-        //verify commitment of output note
-        cp_notesOut[i] = Commitment();
-        cp_notesOut[i].uniqueId <== wt_values[i];
-        cp_notesOut[i].publicKey <== wt_publicKeysOut[i];
+        //verify commitment of output note as single 3-input Poseidon hash
+        cp_notesOut[i] = Poseidon(3);
+        cp_notesOut[i].inputs[0] <== wt_erc721ContractAddress;
+        cp_notesOut[i].inputs[1] <== wt_values[i];
+        cp_notesOut[i].inputs[2] <== wt_publicKeysOut[i];
         cp_notesOut[i].out === st_commitmentsOut[i];
 
     }

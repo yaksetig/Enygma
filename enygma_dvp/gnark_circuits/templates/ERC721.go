@@ -24,10 +24,13 @@ type Erc721Circuit struct {
 	StCommitmentOut   		[]frontend.Variable  `gnark:",public"`  //MOutputs
 	
 	WtPrivateKeysIn   		[]frontend.Variable //NInputs
-	WtValues				[]frontend.Variable //NInputs
-	WtPathElements    		[][] frontend.Variable //NInputs //MerkleTreeDepth 
+	WtValues				[]frontend.Variable //NInputs (raw tokenIds)
+	WtSaltsIn				[]frontend.Variable //NInputs
+	WtPathElements    		[][] frontend.Variable //NInputs //MerkleTreeDepth
 	WtPathIndices     		[]frontend.Variable //NInputs
+	WtErc721ContractAddress frontend.Variable
 	WtPublicKeysOut         []frontend.Variable //MOutputs
+	WtSaltsOut				[]frontend.Variable //MOutputs
 	
 }
 
@@ -44,7 +47,7 @@ func (circuit *Erc721Circuit) Define(api frontend.API) error{
 		nullifier := primitives.Nullifier(api,circuit.WtPrivateKeysIn[i],circuit.WtPathIndices[i])
 		api.AssertIsEqual(nullifier,circuit.StNullifiers[i])
 
-		commitment :=primitives.Commitment(api, circuit.WtValues[i],publicKey)
+		commitment := primitives.Erc721Commitment(api, circuit.WtErc721ContractAddress, circuit.WtValues[i], publicKey, circuit.WtSaltsIn[i])
 		
 		pathElement := make([]frontend.Variable, circuit.Config.TmMerkleTreeDepth)
 
@@ -60,7 +63,7 @@ func (circuit *Erc721Circuit) Define(api frontend.API) error{
 
 		api.AssertIsEqual(api.Mul(Diff, Enable), 0)
 	
-		commitmentOut :=primitives.Commitment(api, circuit.WtValues[i],circuit.WtPublicKeysOut[i])
+		commitmentOut := primitives.Erc721Commitment(api, circuit.WtErc721ContractAddress, circuit.WtValues[i], circuit.WtPublicKeysOut[i], circuit.WtSaltsOut[i])
 		api.AssertIsEqual(commitmentOut, circuit.StCommitmentOut[i])
 		
 	}

@@ -1,11 +1,23 @@
 /*
 Low-level proof generation.
-These functions are directly calling proof generation functions
-  from snarkJs library
+These functions post proof requests to the gnark HTTP server and return
+the proof in {a, b, c} format suitable for on-chain verification.
 */
-const snarkjs = require("snarkjs");
-const utils = require("./utils");
 const axios = require("axios");
+
+// Converts a flat 8-element proof array from the gnark server into
+// the {a, b, c} struct expected by the Solidity GenericGroth16Verifier.
+// proofArray = [a.X, a.Y, b.X.A1, b.X.A0, b.Y.A1, b.Y.A0, c.X, c.Y]
+function formatGnarkProof(proofArray) {
+  return {
+    a: [proofArray[0], proofArray[1]],
+    b: [
+      [proofArray[2], proofArray[3]],
+      [proofArray[4], proofArray[5]],
+    ],
+    c: [proofArray[6], proofArray[7]],
+  };
+}
 
 async function GnarkProver(circuitInput, zkeyPath) {
   if (zkeyPath.includes("OwnershipErc721")) {
@@ -33,6 +45,7 @@ async function GnarkProver(circuitInput, zkeyPath) {
   }
   return;
 }
+
 async function postRequestGnarkCircuit(url, data) {
   try {
     const res = await axios.post(url, data, {
@@ -41,11 +54,14 @@ async function postRequestGnarkCircuit(url, data) {
       },
     });
     console.log("Response:", res.data);
+    return res.data;
   } catch (err) {
     if (err.response) {
       console.error("Error:", err.response.status, err.response.data);
+      throw new Error(`Gnark proof request failed: ${err.response.data}`);
     } else {
       console.error("Request failed:", err.message);
+      throw new Error(`Gnark proof request failed: ${err.message}`);
     }
   }
 }
@@ -59,12 +75,9 @@ async function Erc20Proof(inputs, zkeyPath) {
       ? "http://localhost:8081/proof/joinSplitERC20_10_2"
       : "http://localhost:8081/proof/joinSplitERC20";
 
-  split1 = [];
-  split2 = [];
-
   const chunks = splitPathElements(inputs);
 
-  let proofGnark = postRequestGnarkCircuit(stringURL, {
+  const proofData = await postRequestGnarkCircuit(stringURL, {
     StMessage: inputs.st_message.toString(),
     StTreeNumber: inputs.st_treeNumbers.map((k) => k.toString()),
     StMerkleRoots: inputs.st_merkleRoots,
@@ -77,16 +90,15 @@ async function Erc20Proof(inputs, zkeyPath) {
     WtValuesIn: inputs.wt_valuesIn,
     WtValuesOut: inputs.wt_valuesOut,
     WtErc20ContractAddress: BigInt(inputs.wt_erc20ContractAddress).toString(),
+    WtSaltsIn: inputs.wt_saltsIn.map((k) => k.toString()),
+    WtSaltsOut: inputs.wt_saltsOut.map((k) => k.toString()),
   });
 
-  return {
-    status: 200,
-    message: "ok",
-  };
+  return { proof: formatGnarkProof(proofData.proof) };
 }
 
 async function Erc721Proof(inputs) {
-  let proofGnark = postRequestGnarkCircuit(
+  const proofData = await postRequestGnarkCircuit(
     "http://localhost:8081/proof/ownershipERC721",
     {
       StMessage: inputs.st_message,
@@ -99,17 +111,17 @@ async function Erc721Proof(inputs) {
       WtPathElements: [inputs.wt_pathElements],
       WtPathIndices: inputs.wt_pathIndices,
       WtPublicKeysOut: inputs.wt_publicKeysOut,
+      WtSaltsIn: inputs.wt_saltsIn.map((k) => k.toString()),
+      WtSaltsOut: inputs.wt_saltsOut.map((k) => k.toString()),
     }
   );
 
-  return {
-    status: 200,
-    message: "ok",
-  };
+  return { proof: formatGnarkProof(proofData.proof) };
 }
+
 async function Erc1155FungibleProof(inputs) {
-  split1 = [];
-  split2 = [];
+  let split1 = [];
+  let split2 = [];
   for (let i = 0; i < 16; i++) {
     if (i < 8) {
       split1.push(inputs.wt_pathElements[i]);
@@ -118,39 +130,39 @@ async function Erc1155FungibleProof(inputs) {
     }
   }
 
-  let url = "http://localhost:8081/proof/erc155Fungible";
+  const proofData = await postRequestGnarkCircuit(
+    "http://localhost:8081/proof/erc155Fungible",
+    {
+      StMessage: inputs.st_message,
+      StTreeNumbers: inputs.st_treeNumbers.map((k) => k.toString()),
+      StMerkleRoots: inputs.st_merkleRoots,
+      StCommitmentOut: inputs.st_commitmentsOut,
+      StNullifiers: inputs.st_nullifiers,
+      StAssetGroupMerkleRoot: inputs.st_assetGroup_merkleRoot.toString(),
+      StAssetGroupTreeNumber: inputs.st_assetGroup_treeNumber.toString(),
+      WtPrivateKeysIn: inputs.wt_privateKeysIn,
+      WtValuesIn: inputs.wt_valuesIn.map((k) => k.toString()),
+      WtPathElements: [split1, split2],
+      WtPathIndices: inputs.wt_pathIndices.map((k) => k.toString()),
+      WtErc1155ContractAddress: inputs.wt_erc1155ContractAddress,
+      WtErc1155TokenId: inputs.wt_erc1155TokenId,
+      WtPublicKeysOut: inputs.wt_publicKeysOut,
+      WtValuesOut: inputs.wt_valuesOut.map((k) => k.toString()),
+      WtAssetGroupPathElements: inputs.wt_assetGroup_pathElements.map((k) =>
+        k.toString()
+      ),
+      WtAssetGroupPathIndices: inputs.wt_assetGroup_pathIndices,
+      WtSaltsIn: inputs.wt_saltsIn.map((k) => k.toString()),
+      WtSaltsOut: inputs.wt_saltsOut.map((k) => k.toString()),
+    }
+  );
 
-  let proofGnark = postRequestGnarkCircuit(url, {
-    StMessage: inputs.st_message,
-    StTreeNumbers: inputs.st_treeNumbers.map((k) => k.toString()),
-    StMerkleRoots: inputs.st_merkleRoots,
-    StCommitmentOut: inputs.st_commitmentsOut,
-    StNullifiers: inputs.st_nullifiers,
-    StAssetGroupMerkleRoot: inputs.st_assetGroup_merkleRoot.toString(),
-    StAssetGroupTreeNumber: inputs.st_assetGroup_treeNumber.toString(),
-    WtPrivateKeysIn: inputs.wt_privateKeysIn,
-    WtValuesIn: inputs.wt_valuesIn.map((k) => k.toString()),
-    WtPathElements: [split1, split2],
-    WtPathIndices: inputs.wt_pathIndices.map((k) => k.toString()),
-    WtErc1155ContractAddress: inputs.wt_erc1155ContractAddress,
-    WtErc1155TokenId: inputs.wt_erc1155TokenId,
-    WtPublicKeysOut: inputs.wt_publicKeysOut,
-    WtValuesOut: inputs.wt_valuesOut.map((k) => k.toString()),
-    WtAssetGroupPathElements: inputs.wt_assetGroup_pathElements.map((k) =>
-      k.toString()
-    ),
-    WtAssetGroupPathIndices: inputs.wt_assetGroup_pathIndices,
-  });
-
-  return {
-    status: 200,
-    message: "ok",
-  };
+  return { proof: formatGnarkProof(proofData.proof) };
 }
 
 async function Erc1155FungibleAuditorProof(inputs) {
-  split1 = [];
-  split2 = [];
+  let split1 = [];
+  let split2 = [];
   for (let i = 0; i < 16; i++) {
     if (i < 8) {
       split1.push(inputs.wt_pathElements[i]);
@@ -159,45 +171,45 @@ async function Erc1155FungibleAuditorProof(inputs) {
     }
   }
 
-  let url = "http://localhost:8081/proof/erc1155FungibleAuditor";
+  const proofData = await postRequestGnarkCircuit(
+    "http://localhost:8081/proof/erc1155FungibleAuditor",
+    {
+      StMessage: inputs.st_message,
+      StTreeNumbers: inputs.st_treeNumbers.map((k) => k.toString()),
+      StMerkleRoots: inputs.st_merkleRoots,
+      StCommitmentOut: inputs.st_commitmentsOut,
+      StNullifiers: inputs.st_nullifiers,
+      StAssetGroupMerkleRoot: inputs.st_assetGroup_merkleRoot.toString(),
+      StAssetGroupTreeNumber: inputs.st_assetGroup_treeNumber.toString(),
+      WtPrivateKeysIn: inputs.wt_privateKeysIn,
+      WtValuesIn: inputs.wt_valuesIn.map((k) => k.toString()),
+      WtPathElements: [split1, split2],
+      WtPathIndices: inputs.wt_pathIndices.map((k) => k.toString()),
+      WtErc1155ContractAddress: inputs.wt_erc1155ContractAddress,
+      WtErc1155TokenId: inputs.wt_erc1155TokenId,
+      WtPublicKeysOut: inputs.wt_publicKeysOut,
+      WtValuesOut: inputs.wt_valuesOut.map((k) => k.toString()),
+      WtAssetGroupPathElements: inputs.wt_assetGroup_pathElements.map((k) =>
+        k.toString()
+      ),
+      WtAssetGroupPathIndices: inputs.wt_assetGroup_pathIndices,
+      StAuditorPublickey: inputs.st_auditor_publicKey,
+      StAuditorAuthKey: inputs.st_auditor_authKey,
+      StAuditorNonce: inputs.st_auditor_nonce,
+      StAuditorEncryptedValues: inputs.st_auditor_encryptedValues,
+      WtAuditorRandom: inputs.wt_auditor_random,
+      WtSaltsIn: inputs.wt_saltsIn.map((k) => k.toString()),
+      WtSaltsOut: inputs.wt_saltsOut.map((k) => k.toString()),
+    }
+  );
 
-  let proofGnark = postRequestGnarkCircuit(url, {
-    StMessage: inputs.st_message,
-    StTreeNumbers: inputs.st_treeNumbers.map((k) => k.toString()),
-    StMerkleRoots: inputs.st_merkleRoots,
-    StCommitmentOut: inputs.st_commitmentsOut,
-    StNullifiers: inputs.st_nullifiers,
-    StAssetGroupMerkleRoot: inputs.st_assetGroup_merkleRoot.toString(),
-    StAssetGroupTreeNumber: inputs.st_assetGroup_treeNumber.toString(),
-    WtPrivateKeysIn: inputs.wt_privateKeysIn,
-    WtValuesIn: inputs.wt_valuesIn.map((k) => k.toString()),
-    WtPathElements: [split1, split2],
-    WtPathIndices: inputs.wt_pathIndices.map((k) => k.toString()),
-    WtErc1155ContractAddress: inputs.wt_erc1155ContractAddress,
-    WtErc1155TokenId: inputs.wt_erc1155TokenId,
-    WtPublicKeysOut: inputs.wt_publicKeysOut,
-    WtValuesOut: inputs.wt_valuesOut.map((k) => k.toString()),
-    WtAssetGroupPathElements: inputs.wt_assetGroup_pathElements.map((k) =>
-      k.toString()
-    ),
-    WtAssetGroupPathIndices: inputs.wt_assetGroup_pathIndices,
-    StAuditorPublickey: inputs.st_auditor_publicKey,
-    StAuditorAuthKey: inputs.st_auditor_authKey,
-    StAuditorNonce: inputs.st_auditor_nonce,
-    StAuditorEncryptedValues: inputs.st_auditor_encryptedValues,
-    WtAuditorRandom: inputs.wt_auditor_random,
-  });
-
-  return {
-    status: 200,
-    message: "ok",
-  };
+  return { proof: formatGnarkProof(proofData.proof) };
 }
 
 // Generates proof for transfer of the ownership of an Erc1155 coin
 // Erc1155NonFungibleTemplate with size 1
 async function Erc1155NonFungibleProof(inputs) {
-  let proofGnark = postRequestGnarkCircuit(
+  const proofData = await postRequestGnarkCircuit(
     "http://localhost:8081/proof/erc1155NonFungible",
     {
       StMessage: inputs.st_message.toString(),
@@ -221,17 +233,16 @@ async function Erc1155NonFungibleProof(inputs) {
           arrayOfBigInts.map((bigIntValue) => bigIntValue.toString())
       ),
       WtAssetGroupPathIndices: inputs.wt_assetGroup_pathIndices,
+      WtSaltsIn: inputs.wt_saltsIn.map((k) => k.toString()),
+      WtSaltsOut: inputs.wt_saltsOut.map((k) => k.toString()),
     }
   );
 
-  return {
-    status: 200,
-    message: "ok",
-  };
+  return { proof: formatGnarkProof(proofData.proof) };
 }
 
 async function Erc1155NonFungibleWithAuditorProof(inputs) {
-  let proofGnark = postRequestGnarkCircuit(
+  const proofData = await postRequestGnarkCircuit(
     "http://localhost:8081/proof/erc1155NonFungibleAuditor",
     {
       StMessage: inputs.st_message.toString(),
@@ -239,7 +250,6 @@ async function Erc1155NonFungibleWithAuditorProof(inputs) {
       StMerkleRoots: inputs.st_merkleRoots,
       StNullifiers: inputs.st_nullifiers,
       StCommitmentOut: inputs.st_commitmentsOut,
-
       StAssetGroupTreeNumber: inputs.st_assetGroup_treeNumbers.map((k) =>
         k.toString()
       ),
@@ -255,25 +265,23 @@ async function Erc1155NonFungibleWithAuditorProof(inputs) {
         (arrayOfBigInts) =>
           arrayOfBigInts.map((bigIntValue) => bigIntValue.toString())
       ),
-
       WtAssetGroupPathIndices: inputs.wt_assetGroup_pathIndices,
       StAuditorPublickey: inputs.st_auditor_publicKey,
       StAuditorAuthKey: inputs.st_auditor_authKey,
       StAuditorNonce: inputs.st_auditor_nonce,
       StAuditorEncryptedValues: inputs.st_auditor_encryptedValues,
       WtAuditorRandom: inputs.wt_auditor_random,
+      WtSaltsIn: inputs.wt_saltsIn.map((k) => k.toString()),
+      WtSaltsOut: inputs.wt_saltsOut.map((k) => k.toString()),
     }
   );
 
-  return {
-    status: 200,
-    message: "ok",
-  };
+  return { proof: formatGnarkProof(proofData.proof) };
 }
 
 async function AuctionBidAuditorProof(inputs) {
-  split1 = [];
-  split2 = [];
+  let split1 = [];
+  let split2 = [];
   for (let i = 0; i < 16; i++) {
     if (i < 8) {
       split1.push(inputs.wt_pathElements[i]);
@@ -282,7 +290,7 @@ async function AuctionBidAuditorProof(inputs) {
     }
   }
 
-  let proofGnark = postRequestGnarkCircuit(
+  const proofData = await postRequestGnarkCircuit(
     "http://localhost:8081/proof/auctionBidAuditor",
     {
       stBeacon: inputs.st_beacon.toString(),
@@ -336,16 +344,11 @@ async function AuctionBidAuditorProof(inputs) {
     }
   );
 
-  return {
-    status: 200,
-    message: "ok",
-  };
+  return { proof: formatGnarkProof(proofData.proof) };
 }
 
-// Generating proof for AuctionBidErc20.circom
-
 async function AuctionInitAuditorProof(inputs) {
-  let proofGnark = postRequestGnarkCircuit(
+  const proofData = await postRequestGnarkCircuit(
     "http://localhost:8081/proof/auctionInitAuditor",
     {
       StBeacon: inputs.st_beacon.toString(),
@@ -380,204 +383,11 @@ async function AuctionInitAuditorProof(inputs) {
     }
   );
 
-  return {
-    status: 200,
-    message: "ok",
-  };
-}
-
-async function AuctionBidProof(
-  st_auctionId,
-  wt_bidAmount,
-  wt_bidRandom,
-  assetAddress,
-  wt_valuesIn,
-  keysIn,
-  wt_valuesOut,
-  keysOut,
-  merkleDepth,
-  merkleProofs,
-  st_merkleRoots,
-  st_treeNumbers,
-  st_vaultId,
-  wt_idParamsIn,
-  wt_idParamsOut,
-  st_assetGroup_merkleRoot,
-  assetGroup_merkleProof
-) {
-  const st_blindedBid = utils.pedersen(wt_bidAmount, wt_bidRandom);
-  const st_commitmentsOut = [];
-  const st_nullifiers = [];
-  const wt_pathIndices = [];
-  let wt_pathElements = [];
-
-  for (let i = 0; i < wt_valuesIn.length; i++) {
-    let uniqueId;
-    if (st_vaultId == 0) {
-      uniqueId = utils.erc20UniqueId(assetAddress, wt_idParamsIn[i][0]);
-    } else if (st_vaultId == 1) {
-      uniqueId = utils.erc721UniqueId(assetAddress, wt_idParamsIn[i][0]);
-    } else if (st_vaultId == 2) {
-      uniqueId = utils.erc1155UniqueId(
-        assetAddress,
-        wt_idParamsIn[i][1],
-        wt_idParamsIn[i][0]
-      );
-    }
-    const cmt = utils.getCommitment(uniqueId, keysIn[i].publicKey);
-
-    if (wt_valuesIn[i] === 0n) {
-      wt_pathIndices[i] = 0;
-      wt_pathElements.push(new Array(merkleDepth).fill(0n));
-    } else {
-      wt_pathIndices[i] = merkleProofs[i].indices;
-      wt_pathElements.push(merkleProofs[i].elements);
-    }
-    st_nullifiers.push(
-      utils.getNullifier(keysIn[i].privateKey, wt_pathIndices[i])
-    );
-  }
-  for (let i = 0; i < keysOut.length; i++) {
-    let uniqueIdOut;
-    if (st_vaultId == 0) {
-      uniqueIdOut = utils.erc20UniqueId(assetAddress, wt_idParamsOut[i][0]);
-    } else if (st_vaultId == 1) {
-      uniqueIdOut = utils.erc721UniqueId(assetAddress, wt_idParamsOut[i][0]);
-    } else if (st_vaultId == 2) {
-      uniqueIdOut = utils.erc1155UniqueId(
-        assetAddress,
-        wt_idParamsOut[i][1],
-        wt_idParamsOut[i][0]
-      );
-    }
-
-    st_commitmentsOut.push(
-      utils.getCommitment(uniqueIdOut, keysOut[i].publicKey)
-    );
-  }
-  wt_pathElements = wt_pathElements.flat(1);
-
-  const { ws, pk } = { ws: wasm.auctionBidErc20, pk: pKeys.auctionBidErc20 };
-
-  let wt_assetGroup_pathElements;
-  if (st_assetGroup_merkleRoot != 0) {
-    wt_assetGroup_pathElements = assetGroup_merkleProof.elements;
-  } else {
-    wt_assetGroup_pathElements = [];
-    for (var i = 0; i < merkleDepth; i++) {
-      wt_assetGroup_pathElements.push(0n);
-    }
-  }
-
-  let wt_assetGroup_pathIndices = 0;
-  if (st_assetGroup_merkleRoot != 0) {
-    wt_assetGroup_pathIndices = assetGroup_merkleProof.indices;
-  }
-
-  const circuitInputs = {
-    st_auctionId,
-    st_blindedBid,
-    st_vaultId,
-    st_merkleRoots,
-    st_nullifiers,
-    st_treeNumbers,
-    st_commitmentsOut,
-    wt_bidAmount,
-    wt_bidRandom,
-    wt_privateKeys: keysIn.map((k) => k.privateKey),
-    wt_valuesIn,
-    wt_pathElements,
-    wt_pathIndices,
-    wt_assetContractAddress: BigInt(assetAddress),
-    wt_recipientPK: keysOut.map((k) => k.publicKey),
-    wt_valuesOut,
-    st_assetGroup_merkleRoot,
-    wt_assetGroup_pathIndices,
-    wt_assetGroup_pathElements,
-    wt_idParamsIn: wt_idParamsIn.flat(1),
-    wt_idParamsOut: wt_idParamsOut.flat(1),
-  };
-  let curve = await snarkjs.curves.getCurveFromName("bn128");
-
-  const fullProof = await snarkjs.groth16.fullProve(circuitInputs, ws, pk);
-  const solidityProof = formatProof(fullProof.proof);
-
-  let pathElementsString = [];
-  let first = [];
-  let second = [];
-  for (i = 0; i < 8; i++) {
-    first[i] = wt_pathElements[i].toString(); // elements  0..7
-    second[i] = wt_pathElements[i + 8].toString(); // elements  8..15
-  }
-  pathElementsString.push(first);
-  pathElementsString.push(second);
-
-  let In = wt_idParamsIn.flat(1);
-  let wtIn = [];
-  let firstWtIn = [];
-  let secondWtIn = [];
-  for (i = 0; i < 5; i++) {
-    firstWtIn[i] = In[i].toString(); // elements  0..7
-    secondWtIn[i] = In[i + 5].toString(); // elements  8..15
-  }
-  wtIn.push(firstWtIn);
-  wtIn.push(secondWtIn);
-
-  let Out = wt_idParamsOut.flat(1);
-  let wtOut = [];
-  let firstWtOut = [];
-  let secondWtOut = [];
-  for (i = 0; i < 5; i++) {
-    firstWtOut[i] = Out[i].toString(); // elements  0..7
-    secondWtOut[i] = Out[i + 5].toString(); // elements  8..15
-  }
-  wtOut.push(firstWtOut);
-  wtOut.push(secondWtOut);
-
-  let proofGnark = postRequestGnarkCircuit(
-    "http://localhost:8081/proof/auctionBid",
-    {
-      StAuctionId: st_auctionId.toString(),
-      StBlindedBid: st_blindedBid,
-      StVaultId: st_vaultId.toString(),
-      StTreeNumber: st_treeNumbers.map((k) => k.toString()),
-      StMerkleRoot: st_merkleRoots,
-      StNullifier: st_nullifiers,
-      StCommitmentsOuts: st_commitmentsOut,
-      StAssetGroupMerkleRoot: st_assetGroup_merkleRoot,
-      WtBidAmount: wt_bidAmount,
-      WtBidRandom: wt_bidRandom,
-      WtPrivateKeys: keysIn.map((k) => k.privateKey),
-      WtValuesIn: wt_valuesIn,
-      WtPathElements: pathElementsString,
-      WtPathIndices: wt_pathIndices.map((k) => k.toString()),
-      WtContractAddress: BigInt(assetAddress).toString(),
-      WtRecipientPK: keysOut.map((k) => k.publicKey.toString()),
-      WtValuesOut: wt_valuesOut,
-      WtAssetGroupPathElements: wt_assetGroup_pathElements,
-      WtAssetGroupPathIndices: wt_assetGroup_pathIndices.toString(),
-      WtIdParamsIn: wtIn,
-      WtIdParamsOut: wtOut,
-    }
-  );
-
-  let statement = [st_auctionId, st_blindedBid, st_vaultId]
-    .concat(st_treeNumbers)
-    .concat(st_merkleRoots)
-    .concat(st_nullifiers)
-    .concat(st_commitmentsOut)
-    .concat([st_assetGroup_merkleRoot]);
-  curve.terminate();
-  return {
-    proof: solidityProof,
-    statement,
-    numberOfInputs: 2,
-    numberOfOutputs: 2,
-  };
+  return { proof: formatGnarkProof(proofData.proof) };
 }
 
 async function AuctionPrivateOpeningProof(inputs) {
-  let proofGnark = postRequestGnarkCircuit(
+  const proofData = await postRequestGnarkCircuit(
     "http://localhost:8081/proof/auctionPrivateOpening",
     {
       StVaultId: inputs.st_auctionId.toString(),
@@ -587,16 +397,12 @@ async function AuctionPrivateOpeningProof(inputs) {
     }
   );
 
-  return {
-    status: 200,
-    message: "ok",
-  };
+  return { proof: formatGnarkProof(proofData.proof) };
 }
 
-// Generates proof for AuctionNotWinningBid.circom
-// proves that a bid is less than the winning bid.
+// Generates proof for AuctionNotWinningBid
 async function AuctionNotWinningBidProof(inputs) {
-  let proofGnark = postRequestGnarkCircuit(
+  const proofData = await postRequestGnarkCircuit(
     "http://localhost:8081/proof/auctionNotWinning",
     {
       StVaultId: inputs.st_auctionId.toString(),
@@ -611,10 +417,7 @@ async function AuctionNotWinningBidProof(inputs) {
     }
   );
 
-  return {
-    status: 200,
-    message: "ok",
-  };
+  return { proof: formatGnarkProof(proofData.proof) };
 }
 
 function chunkArray(arr, chunkSize = 8) {
@@ -623,20 +426,17 @@ function chunkArray(arr, chunkSize = 8) {
 
   const result = [];
 
-  // Split array into chunks
   for (let i = 0; i < arr.length; i += chunkSize) {
     const chunk = [];
-
-    // Fill current chunk
     for (let j = 0; j < chunkSize; j++) {
       chunk.push(arr[i + j]);
     }
-
     result.push(chunk);
   }
 
   return result;
 }
+
 function splitPathElements(inputs) {
   return chunkArray(inputs.wt_pathElements, 8);
 }

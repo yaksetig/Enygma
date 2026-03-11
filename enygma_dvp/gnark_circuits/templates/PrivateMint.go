@@ -27,18 +27,14 @@ type PrivateMintCircuit struct {
 
 func (circuit *PrivateMintCircuit) Define(api frontend.API) error{
 
+	// V2 commitment: Poseidon(pk_spend, salt, amount, tokenId)
+	// Matches the format expected by the JoinSplit circuit's input-side check.
+	calculatedCommitment := primitives.Erc20CommitmentV2(api, circuit.PublicKey, circuit.Salt, circuit.Amount, circuit.TokenId)
+	api.AssertIsEqual(calculatedCommitment, circuit.Commitment)
 
-	erc1155uniqueId :=  primitives.Erc1155UniqueId2(api, circuit.ContractAddress,circuit.TokenId,circuit.Amount)
-	
-	calculatedCommitmentPart1  := primitives.Commitment(api,erc1155uniqueId,circuit.PublicKey)
-
-	calculatedCommitmentPart2  := primitives.Commitment(api,calculatedCommitmentPart1,circuit.Salt)
-
-	api.AssertIsEqual(calculatedCommitmentPart2,circuit.Commitment)
-
-	calculatedCipherText  := primitives.Commitment(api,circuit.PublicKey,circuit.Salt)
-
-	api.AssertIsEqual(calculatedCipherText,circuit.CipherText)
+	// Note tag: lets Alice find her own mint on chain when scanning.
+	calculatedCipherText := primitives.Commitment(api, circuit.PublicKey, circuit.Salt)
+	api.AssertIsEqual(calculatedCipherText, circuit.CipherText)
 
 	return nil
 }

@@ -5,7 +5,6 @@ include "../circomlib/circuits/poseidon.circom";
 include "../circomlib/circuits/gates.circom";
 include "../circomlib/circuits/mux1.circom";
 include "../primitives/MerkleProof.circom";
-include "../primitives/Commitment.circom";
 include "../primitives/Nullifier.circom";
 include "../primitives/PublicKey.circom";
 include "../primitives/Erc1155UniqueId.circom";
@@ -57,8 +56,6 @@ template Erc1155FungibleWithBrokerV1Template(nInputs, mOutputs, MerkleTreeDepth,
     component cp_isDummyInputs[nInputs];
     component cp_checkEqualIfIsNotDummys[nInputs];
 
-    component cp_uniqueIds[nInputs];
-    component cp_outUniqueIds[mOutputs];
     component cp_outCommitments[mOutputs];
 
     component cp_assetGroup_merkle;
@@ -94,12 +91,6 @@ template Erc1155FungibleWithBrokerV1Template(nInputs, mOutputs, MerkleTreeDepth,
         assert(wt_valuesIn[i] < range);
         assert(0 <= wt_valuesIn[i]);
 
-        // Generating UniqueId for the commitment
-        cp_uniqueIds[i] = Erc1155UniqueId();
-        cp_uniqueIds[i].erc1155ContractAddress <== wt_erc1155ContractAddress;
-        cp_uniqueIds[i].erc1155TokenId <== wt_erc1155TokenId;
-        cp_uniqueIds[i].amount <== wt_valuesIn[i];
-                
         //derive pubkey from the privatekey
         cp_publicKeys[i] = PublicKey();
         cp_publicKeys[i].privateKey <== wt_privateKeys[i];
@@ -110,10 +101,12 @@ template Erc1155FungibleWithBrokerV1Template(nInputs, mOutputs, MerkleTreeDepth,
         cp_nullfiers[i].pathIndex <== wt_pathIndices[i];
         cp_nullfiers[i].out === st_nullifiers[i];
 
-        //compute input commitment
-        cp_commitments[i] = Commitment();
-        cp_commitments[i].uniqueId <== cp_uniqueIds[i].out;
-        cp_commitments[i].publicKey <== cp_publicKeys[i].out;
+        //compute input commitment as single 4-input Poseidon hash
+        cp_commitments[i] = Poseidon(4);
+        cp_commitments[i].inputs[0] <== wt_erc1155ContractAddress;
+        cp_commitments[i].inputs[1] <== wt_erc1155TokenId;
+        cp_commitments[i].inputs[2] <== wt_valuesIn[i];
+        cp_commitments[i].inputs[3] <== cp_publicKeys[i].out;
 
         //verify merkleComp proof on the note commitment
         cp_merkle[i] = MerkleProof(MerkleTreeDepth);
@@ -146,17 +139,12 @@ template Erc1155FungibleWithBrokerV1Template(nInputs, mOutputs, MerkleTreeDepth,
         assert(wt_valuesOut[i] < range);
         assert(0 <= wt_valuesOut[i]);
 
-        // Generating UniqueId
-        cp_outUniqueIds[i] = Erc1155UniqueId();
-        cp_outUniqueIds[i].erc1155ContractAddress <== wt_erc1155ContractAddress;
-        cp_outUniqueIds[i].erc1155TokenId <== wt_erc1155TokenId;
-        cp_outUniqueIds[i].amount <== wt_valuesOut[i];
-
-        //verify commitment of output note
-        cp_outCommitments[i] = Commitment();
-        
-        cp_outCommitments[i].uniqueId <== cp_outUniqueIds[i].out;
-        cp_outCommitments[i].publicKey <== wt_recipientPK[i];
+        //verify output commitment as single 4-input Poseidon hash
+        cp_outCommitments[i] = Poseidon(4);
+        cp_outCommitments[i].inputs[0] <== wt_erc1155ContractAddress;
+        cp_outCommitments[i].inputs[1] <== wt_erc1155TokenId;
+        cp_outCommitments[i].inputs[2] <== wt_valuesOut[i];
+        cp_outCommitments[i].inputs[3] <== wt_recipientPK[i];
         cp_outCommitments[i].out === st_commitmentsOut[i];
 
         //accumulates output amount

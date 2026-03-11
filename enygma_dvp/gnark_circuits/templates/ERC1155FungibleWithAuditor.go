@@ -36,6 +36,7 @@ type Erc1155FungibleWithAuditorCircuit struct {
 	
 	WtPrivateKeysIn		     []frontend.Variable //NInputs
 	WtValuesIn    		 	 []frontend.Variable //NInputs
+	WtSaltsIn				 []frontend.Variable //NInputs
 	WtPathElements   		 [][]frontend.Variable //NInputs//MerkleTreeDepth
 	WtPathIndices     		 []frontend.Variable //NInputs
 	WtErc1155ContractAddress frontend.Variable
@@ -43,6 +44,7 @@ type Erc1155FungibleWithAuditorCircuit struct {
 
 	WtPublicKeysOut			 []frontend.Variable //MOutputs
 	WtValuesOut              []frontend.Variable //MOutputs
+	WtSaltsOut				 []frontend.Variable //MOutputs
 
 	WtAssetGroupPathElements []frontend.Variable //AssetGroupMerkleTree
 	WtAssetGroupPathIndices  frontend.Variable
@@ -73,6 +75,7 @@ func (circuit *Erc1155FungibleWithAuditorCircuit) Define(api frontend.API) error
 		
 		WtPrivateKeysIn: circuit.WtPrivateKeysIn,
 		WtValuesIn : circuit.WtValuesIn,
+		WtSaltsIn: circuit.WtSaltsIn,
 		WtPathElements : circuit.WtPathElements,
 		WtPathIndices: circuit.WtPathIndices,
 		WtErc1155ContractAddress: circuit.WtErc1155ContractAddress,
@@ -80,6 +83,7 @@ func (circuit *Erc1155FungibleWithAuditorCircuit) Define(api frontend.API) error
 
 		WtPublicKeysOut:circuit.WtPublicKeysOut,
 		WtValuesOut: circuit.WtValuesOut,
+		WtSaltsOut: circuit.WtSaltsOut,
 
 		WtAssetGroupPathElements:circuit.WtAssetGroupPathElements,
 		WtAssetGroupPathIndices:circuit.WtAssetGroupPathIndices,

@@ -36,12 +36,14 @@ type Erc20WithBrokerCircuit struct {
 
 	WtPrivateKeys   			[]frontend.Variable  // Input
 	WtValuesIn					[]frontend.Variable // Input
+	WtSaltsIn					[]frontend.Variable // Input
 	WtPathElements    			[][]frontend.Variable // Input //MerkleTree
 	WtPathIndices     			[]frontend.Variable // Input
 	WtErc20ContractAddress    	frontend.Variable
 
 	WtPublicKeyOut              []frontend.Variable //Moutputs
 	WtValuesOut					[]frontend.Variable  //Moutputs
+	WtSaltsOut					[]frontend.Variable  //Moutputs
 }
 
 
@@ -65,15 +67,13 @@ func (circuit *Erc20WithBrokerCircuit) Define(api frontend.API) error{
 		isValid2 := cmp.IsLess(api, 0, circuit.WtValuesIn[i])
 		api.AssertIsEqual(isValid2, 1)
 
-		id := primitives.UniqueId(api, circuit.WtErc20ContractAddress, circuit.WtValuesIn[i])
-
 		publicKey := primitives.PublicKey(api, circuit.WtPrivateKeys[i])
 
 		nullifier := primitives.Nullifier(api, publicKey, circuit.WtPathIndices[i])
 
 		api.AssertIsEqual(nullifier, circuit.StNullifiers[i])
 
-		commitment := primitives.Commitment(api, id, publicKey)
+		commitment := primitives.Erc20Commitment(api, circuit.WtErc20ContractAddress, circuit.WtValuesIn[i], publicKey, circuit.WtSaltsIn[i])
 
 		pathElement := make([]frontend.Variable,circuit.Config.TmMerkleTree)
 		for j:=0 ; j< circuit.Config.TmMerkleTree;j++{
@@ -102,8 +102,7 @@ func (circuit *Erc20WithBrokerCircuit) Define(api frontend.API) error{
 		isValid1 := cmp.IsLess(api, circuit.WtValuesOut[i], circuit.Config.TmRange)
 		api.AssertIsEqual(isValid1, 1)
 
-		uniqueId := primitives.UniqueId(api, circuit.WtErc20ContractAddress, circuit.WtValuesOut[i])
-		commitment := primitives.Commitment(api,uniqueId, circuit.WtPublicKeyOut[i])
+		commitment := primitives.Erc20Commitment(api, circuit.WtErc20ContractAddress, circuit.WtValuesOut[i], circuit.WtPublicKeyOut[i], circuit.WtSaltsOut[i])
 
 		api.AssertIsEqual(commitment, circuit.StCommitmentOut[i])	
 

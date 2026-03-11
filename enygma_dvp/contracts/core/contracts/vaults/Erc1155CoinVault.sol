@@ -58,14 +58,22 @@ contract Erc1155CoinVault is AbstractCoinVault, ERC1155Holder {
     //////////////////////////////////////////////
     // Vault functions
     //////////////////////////////////////////////
+    // Single deposit:
+    //   params[0] = amountOrOne
+    //   params[1] = tokenId
+    //   params[2] = commitment (off-chain: poseidon([contractAddress, tokenId, amount, publicKey, salt]))
+    //
+    // Batch deposit (params.length is a multiple of 3):
+    //   params[0..tokenCount-1]            = tokenIds
+    //   params[tokenCount..2*tokenCount-1] = amounts
+    //   params[2*tokenCount..3*tokenCount-1] = commitments (one per token, computed off-chain)
     function deposit(uint256[] memory params) public override returns (bool) {
         if (params.length == 3) {
             uint256 amountOrOne = params[0];
             uint256 tokenId = params[1];
-            uint256 publicKey = params[2];
+            uint256 commitment = params[2];
             bytes memory data = "";
 
-            // transfering from user to ZkDvp smart contract
             IERC1155(_assetContractAddress).safeTransferFrom(
                 msg.sender,
                 address(this),
@@ -73,16 +81,6 @@ contract Erc1155CoinVault is AbstractCoinVault, ERC1155Holder {
                 amountOrOne,
                 data
             );
-
-            uint256[] memory idParams = new uint256[](2);
-            idParams[0] = amountOrOne;
-            idParams[1] = tokenId;
-            // generating the uniqueId of ERC1155 token
-            uint256 uid = generateUniqueId(idParams);
-
-            // generating commitment based on uniqueId and publickey
-            uint256 commitment = IPoseidonWrapper(_hashContractAddress)
-                .poseidon([uid, publicKey]);
 
             uint256[] memory commitments = new uint256[](1);
             commitments[0] = commitment;
@@ -96,33 +94,12 @@ contract Erc1155CoinVault is AbstractCoinVault, ERC1155Holder {
             uint256 tokenCount = params.length / 3;
             uint256[] memory tokenIds = new uint256[](tokenCount);
             uint256[] memory amounts = new uint256[](tokenCount);
-            uint256[] memory publicKeys = new uint256[](tokenCount);
+            uint256[] memory batchCommitments = new uint256[](tokenCount);
 
-            for (uint i = 0; i < tokenIds.length; i++) {
-                // generating the uniqueId of ERC1155 token
+            for (uint i = 0; i < tokenCount; i++) {
                 tokenIds[i] = params[i];
                 amounts[i] = params[i + tokenCount];
-                publicKeys[i] = params[i + (tokenCount * 2)];
-
-                uint256[] memory params = new uint256[](1);
-                params[0] = tokenIds[i];
-
-                // checking if token is fungible
-                if (
-                    IRaylsERC1155(_assetContractAddress).isFungible(tokenIds[i])
-                ) {
-                    //  TODO:: check tokenId exists in fungibilityMerkle
-                    // TODO:: check range of fungible [[IMPORTANT]]
-
-                    uint256 uid1 = IPoseidonWrapper(_hashContractAddress)
-                        .poseidon(
-                            [
-                                uint256(uint160(_assetContractAddress)),
-                                tokenIds[i]
-                            ]
-                        );
-                    // IZkDvp(_zkDvpContractAddress).insertToFungibleAssetGroup(uid1);
-                }
+                batchCommitments[i] = params[i + (tokenCount * 2)];
             }
 
             IERC1155(_assetContractAddress).safeBatchTransferFrom(
@@ -133,24 +110,13 @@ contract Erc1155CoinVault is AbstractCoinVault, ERC1155Holder {
                 ""
             );
 
-            for (uint i = 0; i < tokenIds.length; i++) {
-                // generating the uniqueId of ERC1155 token
-
-                uint256[] memory idParams = new uint256[](2);
-                idParams[0] = amounts[i];
-                idParams[1] = tokenIds[i];
-                uint256 uid = generateUniqueId(idParams);
-
-                // generating commitment based on uniqueId and publickey to verify
-                uint256 commitment = IPoseidonWrapper(_hashContractAddress)
-                    .poseidon([uid, publicKeys[i]]);
-
+            for (uint i = 0; i < tokenCount; i++) {
                 uint256[] memory commitments = new uint256[](1);
-                commitments[0] = commitment;
+                commitments[0] = batchCommitments[i];
 
                 insertLeaves(commitments);
 
-                emit Commitment(_vaultId, commitment);
+                emit Commitment(_vaultId, batchCommitments[i]);
             }
         }
 

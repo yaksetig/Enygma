@@ -4,18 +4,20 @@ import(
 	"math/big"
 )
 type JoinSplitERC20_10_2Request struct {
-	StMessage         string                     `json:"stMessage" binding:"required"`
-	StTreeNumber      [10]string				   `json:"stTreeNumber" binding:"required,len=10"`
-	StMerkleRoots     [10]string                  `json:"stMerkleRoots" binding:"required,len=10""`
-	StNullifiers      [10]string                  `json:"stNullifiers" binding:"required,len=10"`
-	StCommitmentOut   [2]string                  `json:"stCommitmentOut" binding:"required,len=2"`
-	WtPrivateKeysIn     [10]string                  `json:"wtPrivateKeysIn" binding:"required,len=10"`
-	WtValuesIn        [10]string                  `json:"wtValuesIn" binding:"required,len=10"`
-	WtPathElements    [10][8]string     		   `json:"wtPathElements" binding:"required,len=10,dive,len=8"`
-	WtPathIndices     [10]string                  `json:"wtPathIndices" binding:"required,len=10"`
-	WtErc20ContractAddress string                `json:"wtErc20ContractAddress" binding:"required"`
-	WtPublicKeysOut     [2]string                  `json:"wtPublicKeysOut" binding:"required,len=2"`
-	WtValuesOut       [2]string                  `json:"wtValuesOut" binding:"required,len=2"`
+	StMessage            string       `json:"stMessage" binding:"required"`
+	StTreeNumber         [10]string   `json:"stTreeNumber" binding:"required,len=10"`
+	StMerkleRoots        [10]string   `json:"stMerkleRoots" binding:"required,len=10"`
+	StNullifiers         [10]string   `json:"stNullifiers" binding:"required,len=10"`
+	StCommitmentOut      [2]string    `json:"stCommitmentOut" binding:"required,len=2"`
+	WtPrivateKeysIn      [10]string   `json:"wtPrivateKeysIn" binding:"required,len=10"`
+	WtValuesIn           [10]string   `json:"wtValuesIn" binding:"required,len=10"`
+	WtSaltsIn            [10]string   `json:"wtSaltsIn" binding:"required,len=10"`
+	WtPathElements       [10][8]string `json:"wtPathElements" binding:"required,len=10,dive,len=8"`
+	WtPathIndices        [10]string   `json:"wtPathIndices" binding:"required,len=10"`
+	WtTokenId            string       `json:"wtTokenId" binding:"required"`
+	WtSpendPublicKeysOut [2]string    `json:"wtSpendPublicKeysOut" binding:"required,len=2"`
+	WtValuesOut          [2]string    `json:"wtValuesOut" binding:"required,len=2"`
+	WtSaltsOut           [2]string    `json:"wtSaltsOut" binding:"required,len=2"`
 }
 
 type JoinSplitERC20_10_2Output struct{

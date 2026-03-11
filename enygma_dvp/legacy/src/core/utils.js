@@ -161,15 +161,27 @@ function erc20UniqueId(erc20ContractAddress, amount) {
   return poseidon([BigInt(erc20ContractAddress), amount])
 }
 
+function erc20Commitment(erc20ContractAddress, amount, publicKey, salt) {
+  return poseidon([BigInt(erc20ContractAddress), amount, publicKey, salt]);
+}
+
 
 function erc721UniqueId(erc721ContractAddress, erc721TokenId) {
   return poseidon([BigInt(erc721ContractAddress), erc721TokenId])
+}
+
+function erc721Commitment(erc721ContractAddress, tokenId, publicKey, salt) {
+  return poseidon([BigInt(erc721ContractAddress), tokenId, publicKey, salt]);
 }
 
 
 function erc1155UniqueId(erc1155ContractAddress, tokenId, amount) {
   const uid1 = poseidon([BigInt(erc1155ContractAddress), tokenId]);
   return poseidon([uid1, amount])
+}
+
+function erc1155Commitment(erc1155ContractAddress, tokenId, amount, publicKey, salt) {
+  return poseidon([BigInt(erc1155ContractAddress), tokenId, amount, publicKey, salt]);
 }
 
 
@@ -215,8 +227,11 @@ module.exports = {
   writeToJson,
   poseidon,
   erc20UniqueId,
+  erc20Commitment,
   erc721UniqueId,
+  erc721Commitment,
   erc1155UniqueId,
+  erc1155Commitment,
   getAuctionId,
   blindedPublicKey,
   getPublicKey,

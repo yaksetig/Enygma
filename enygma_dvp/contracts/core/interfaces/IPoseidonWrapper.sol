@@ -8,4 +8,6 @@ interface IPoseidonWrapper {
 
     function poseidon(uint256[2] memory input) external pure returns (uint256);
 
+    function poseidon4(uint256[4] memory input) external pure returns (uint256);
+
 }
