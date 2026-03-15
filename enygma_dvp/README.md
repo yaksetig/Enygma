@@ -58,7 +58,7 @@ flowchart TD
     ZK("Zero-Knowledge Proofs")
     Commits("Commitments")
 
-    A -->  Asymmetric & ZK & Commits & Symmetric
+    A -->  Asymmetric & Commits & Symmetric & ZK
 
     Symmetric --> aes("AES-GCM")
     
