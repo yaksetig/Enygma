@@ -193,3 +193,8 @@ sequenceDiagram
     end
 
 ```
+
+
+## Auditing
+
+Our design supports different types of auditing. Concretely, 
