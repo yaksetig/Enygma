@@ -1,6 +1,9 @@
 # Enygma Delivery-vs-Payment (DvP)
 
-# Enygma Payments
+## Motivation
+TBD
+
+## Protocol Properties
 
 ## System Architecture
 Our system is simple: **users** (e.g., a bank customers) are directly connected to **privacy nodes** (i.e., a high-performance single-node EVM blockchain). Each of the privacy nodes, is connected to a **private network hub**, which effectively acts as a bulletin board for all privacy nodes to leverage as a universal (encrypted) messaging layer and verification layer. **Issuer(s)** are the managers/admins of specific assets on the private network hub. Optionally, there is an **auditor** that oversees (some of) the transactions that take place in the network. A more formal protocol description is documented [here](./protocol_description.md).
@@ -35,6 +38,9 @@ flowchart LR
 
 ```
 
+## Protocol Overview
+TBD
+
 ## Cryptographic Primitives
 
 ```mermaid
@@ -48,8 +54,13 @@ flowchart TD
     A(["Enygma DvP"])
     
     Asymmetric("Asymmetric Crypto")
+    Symmetric("Symmetric Crypto")
+    ZK("Zero-Knowledge Proofs")
+    Commits("Commitments")
 
-    A -->  Asymmetric & ZK("Zero-Knowledge Proofs") & Commits("Commitments")
+    A -->  Asymmetric & ZK & Commits & Symmetric
+
+    Symmetric --> aes("AES-GCM")
     
     Asymmetric --> View("View Keypair") & Spend("Spend Keypair")
 
