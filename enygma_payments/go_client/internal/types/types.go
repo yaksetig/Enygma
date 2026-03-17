@@ -1,8 +1,7 @@
 package types
 
-import(
+import (
 	"math/big"
-
 )
 
 type TransactionArgs struct {
@@ -12,34 +11,30 @@ type TransactionArgs struct {
 	Sk        *big.Int
 	PreviousV *big.Int
 	PreviousR *big.Int
-
 }
 
 type Response struct {
-	Message        string     `json:"message"`
-	Proof          []*big.Int   `json:"proof"`
-	PublicSignal   []*big.Int   `json:"publicSignal"`
+	Message      string     `json:"message"`
+	Proof        []*big.Int `json:"proof"`
+	PublicSignal []*big.Int `json:"publicSignal"`
 }
 
 type Proof struct {
-	
-	ArrayHashSecret [][]string `json:"arrayHashSecret`
-	PublicKeys      []string   `json:"publicKey"`
-	PreviousCommit [][]string `json:"previousCommit"`
-	BlockNumber     string     `json:"blockNumber"`
-	K               []string   `json:"kIndex"`
+	HashedSharedSecrets       []string   `json:"hashed_shared_secrets"`
+	PublicKey                 []string   `json:"public_keys"`
+	PreviousCommit            [][]string `json:"previous_commits"`
+	TxCommit                  [][]string `json:"tx_commits"`
+	BlockNumber               string     `json:"block_number"`
+	AnonymitySet              []string   `json:"anonymity_set"`
+	MessageTags               []string   `json:"message_tags"`
+	Nullifier                 string     `json:"nullifier"`
 
-	SenderId        string     `json:"senderId"`
-	Secrets         [][]string `json:"secrets"`
-	TagMessage		[]string   `json:"tagMessage"`
-	Sk              string     `json:"sk"`
-	PreviousV       string     `json:"previousV"`
-	PreviousR       string     `json:"previousR"`
-	TxCommit        [][]string `json:"txCommit"`
-	TxValue         []string   `json:"txValue"`
-	TxRandom        []string   `json:"txRandom"`
-	V               string     `json:"v"`
-	Nullifier       string     `json:"nullifier"`
-	
+	SenderID                  string     `json:"sender_id"`
+	SharedSecrets             []string   `json:"shared_secrets"`
+	SecretKey                 string     `json:"secret_key"`
+	PreviousSenderBalance     string     `json:"previous_sender_balance"`
+	PreviousSenderRandomValue string     `json:"previous_sender_random_value"`
+	TxValues                  []string   `json:"tx_values"`
+	TxRandomValues            []string   `json:"tx_random_values"`
+	SenderTxValue             string     `json:"sender_tx_value"`
 }
-

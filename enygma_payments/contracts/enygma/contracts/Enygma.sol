@@ -14,16 +14,20 @@ contract Enygma is IEnygma {
     uint256 private constant DEFAULT_SIZE = 6;
 
     // Public signal array offsets for proof verification
+    // Layout (k=6): [HashSecrets×6][PublicKeys×6][PrevCommit×12][TxCommit×12][BlockNum][AnonSet×6][MsgTags×6][Nullifier]
     uint256 private constant ARRAY_HASH_SECRET_OFFSET = 0;
-    uint256 private constant ARRAY_HASH_SECRET_SIZE = 36;
-    uint256 private constant PUBLIC_KEY_OFFSET = 36;
+    uint256 private constant ARRAY_HASH_SECRET_SIZE = 6;
+    uint256 private constant PUBLIC_KEY_OFFSET = 6;
     uint256 private constant PUBLIC_KEY_SIZE = 6;
-    uint256 private constant PREVIOUS_COMMIT_OFFSET = 42;
+    uint256 private constant PREVIOUS_COMMIT_OFFSET = 12;
     uint256 private constant PREVIOUS_COMMIT_SIZE = 12;
-    uint256 private constant BLOCK_NUMBER_OFFSET = 54;
-    uint256 private constant K_INDEX_OFFSET = 55;
+    uint256 private constant TX_COMMIT_OFFSET = 24;
+    uint256 private constant TX_COMMIT_SIZE = 12;
+    uint256 private constant BLOCK_NUMBER_OFFSET = 36;
+    uint256 private constant K_INDEX_OFFSET = 37;
     uint256 private constant K_INDEX_SIZE = 6;
-    uint256 private constant NULLIFIER_OFFSET = 61;
+    uint256 private constant MESSAGE_TAGS_OFFSET = 43;
+    uint256 private constant NULLIFIER_OFFSET = 49;
 
     // ============================================
     // STATE VARIABLES
@@ -548,7 +552,7 @@ contract Enygma is IEnygma {
 
         (bool success, ) = verifier.delegatecall(
             abi.encodeWithSignature(
-                "verifyProof(uint256[8],uint256[62])",
+                "verifyProof(uint256[8],uint256[50])",
                 proof
             )
         );

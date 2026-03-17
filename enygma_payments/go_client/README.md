@@ -53,16 +53,15 @@ This is only for demo purpose. It was randomly created. Please refer to protocol
 
 ```go
 // Secret values for each bank (used for commitment randomness)
-secrets = [][]*big.Int{
-  {
+secrets = []*big.Int{
+
 			big.NewInt(412321),
 			big.NewInt(634609235),
 			big.NewInt(8352331231),
 			big.NewInt(289412412),
 			big.NewInt(8932589237),
 			big.NewInt(423423523),
-		},
-    ....
+
 }
 ```
 
@@ -74,6 +73,15 @@ Basic Command
 go run ./transaction/main.go <qtyBank> <value> <senderId> <sk> <previousV> <previousR>
 
 ```
+
+Breakdown:
+
+- 6 banks in the network
+- 100 total tokens to send
+- 0 is the sender ID (Bank 0)
+- 35 is the sender's secret key
+- 1000 was the previous transaction value for this account
+- 0 was the previous randomness
 
 Transaction Values Configuration
 
@@ -110,21 +118,6 @@ KIndex array is configured in `./transaction/main.go`:
 	kIndex := []*big.Int{k0, k1, k2,k3,k4,k5}
 
 ```
-
-Examples
-
-```bash
-go run . 6 100 0 35 1000 0
-```
-
-Breakdown:
-
-- 6 banks in the network
-- 100 total tokens to send
-- 0 is the sender ID (Bank 0)
-- 35 is the sender's secret key
-- 1000 was the previous transaction value for this account
-- 0 was the previous randomness
 
 ---
 
