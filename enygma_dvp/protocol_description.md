@@ -134,7 +134,7 @@ sequenceDiagram
 
     note over Alice, Bob: < Agree on trade parameters. Swap 5 USDT (token_id = 10) for 1 concert ticket(token_id = 25) > 
 
-    note over Alice: Obtain <br>(saltB, ciphertext_I) = Encapsulate(view_pkB)
+    note over Alice: Obtain <br>(salt_B, ciphertext_I) = Encapsulate(view_pkB)
 
     note over Alice: Generate new salt : salt*
     note over Alice: Create new commitment (Bob will send funds here): <br>Commitment_A = Hash(spend_pkA, salt*, amount=1, token_id=25)
@@ -149,7 +149,7 @@ sequenceDiagram
 
     note over Alice: Calculate<br> ciphertext_II = ENC_AEAD(k, m)
 
-    note over Alice: Commitment_B = Hash(spend_pkB, saltB, amount, token_id)
+    note over Alice: Commitment_B = Hash(spend_pkB, salt_B, amount, token_id)
 
     note over Alice: Create DvP_id = HASH(Commitment_B, Commitment_A)
 
