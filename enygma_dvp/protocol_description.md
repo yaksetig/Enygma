@@ -178,13 +178,11 @@ sequenceDiagram
         alt TX OK
             Note over Chain: Calculate tx_id = HASH()
             Note over Chain: Mark nullifier_A & nullifier_B as used 
-            Note over Chain: Mark C_A & C_B as spent
 
             Note over Chain: Insert Commitment_A and Commitment_B in tree
         else Timeout
             Note over Chain: Move TX_id = DvP_id from 'pending' to 'reverted'
             Note over Chain: Mark nullifier_A as used 
-            Note over Chain: Mark C_A as spent
             Note over Chain: Insert C'_A into tree
         end
 
