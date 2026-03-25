@@ -26,6 +26,8 @@ type ERC1155FungibleRequest struct {
 
 	WtPublicKeysOut      [2]string 			`json:"wtPublicKeysOut" binding:"required,len=2""`
 	WtValuesOut      	 [2]string 			`json:"wtValuesOut" binding:"required,len=2""`
+	WtSaltsIn            [2]string          `json:"wtSaltsIn" binding:"required,len=2"`
+	WtSaltsOut           [2]string          `json:"wtSaltsOut" binding:"required,len=2"`
 
 	WtAssetGroupPathElements      [8]string 			`json:"wtAssetGroupPathElements" binding:"required,len=8""`
 	WtAssetGroupPathIndices       		   string      `json:"wtAssetGroupPathIndices" binding:"required"`

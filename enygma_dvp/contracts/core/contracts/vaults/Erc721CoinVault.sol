@@ -33,25 +33,16 @@ contract Erc721CoinVault is AbstractCoinVault {
     }
 
     // Standards that are currently supported: ERC20, ERC721, ERC1155
+    // params[0] = tokenId to deposit
+    // params[1] = commitment computed off-chain as poseidon([contractAddress, tokenId, publicKey, salt])
     function deposit(uint256[] memory params) public override returns (bool) {
-        // Transferring the ERC20 tokens from User to ZkDvp
         uint256 tokenId = params[0];
-        uint256 publicKey = params[1];
+        uint256 commitment = params[1];
+
         IERC721(_assetContractAddress).transferFrom(
             msg.sender,
             address(this),
             tokenId
-        );
-
-        uint256[] memory assetParams = new uint256[](2);
-        assetParams[0] = tokenId;
-        assetParams[1] = uint256(uint160(_assetContractAddress));
-        // Generating uniqueId for the ERC20 token
-        uint256 uid = generateUniqueId(assetParams);
-
-        // Generating the commitment based on the ERC20 uniqueId and the publickey
-        uint256 commitment = IPoseidonWrapper(_hashContractAddress).poseidon(
-            [uid, publicKey]
         );
 
         uint256[] memory commitments = new uint256[](1);

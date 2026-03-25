@@ -32,7 +32,7 @@ func Load(addressFilePath string) (*Config, error) {
 		ContractAddress: address,
 		CommitChainURL:  "http://127.0.0.1:8545",
 		ProofServerURL:  "http://127.0.0.1:8080/proof/enygma",
-		PrivateKey:      "Input Private Key",
+		PrivateKey:      "34d091c661db4c814d65c8ae9277b7055c0dde5a752ce5a3fdfd4ea11a8f7154",
 	}, nil
 }
 

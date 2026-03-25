@@ -34,12 +34,14 @@ type ERC1155NonFungibleWithAuditorCircuit struct {
 
 	WtPrivateKeysIn		 	 []frontend.Variable //numOfTokens
 	WtValues    		 	 []frontend.Variable //numOfTokens
+	WtSaltsIn				 []frontend.Variable //numOfTokens
 	WtPathElements   		 [][]frontend.Variable //numOfTokens  //MerkleTreeDepthERC1155NonFungible
 	WtPathIndices     		 []frontend.Variable //numOfTokens
 	WtErc1155TokenIds         []frontend.Variable //numOfTokens
 	WtErc1155ContractAddress frontend.Variable
 
 	WtPublicKeysOut	         []frontend.Variable //numOfTokens
+	WtSaltsOut				 []frontend.Variable //numOfTokens
 
 	WtAssetGroupPathElements [][]frontend.Variable //numOfTokens  //AssetGroupMerkleTreeDepth
 	WtAssetGroupPathIndices  []frontend.Variable //numOfTokens
@@ -67,12 +69,14 @@ func (circuit *ERC1155NonFungibleWithAuditorCircuit) Define(api frontend.API) er
 		
 		WtPrivateKeysIn: circuit.WtPrivateKeysIn,
 		WtValues : circuit.WtValues,
+		WtSaltsIn: circuit.WtSaltsIn,
 		WtPathElements : circuit.WtPathElements,
 		WtPathIndices: circuit.WtPathIndices,
 		WtErc1155ContractAddress: circuit.WtErc1155ContractAddress,
 		WtErc1155TokenId: circuit.WtErc1155TokenIds,
 
 		WtPublicKeysOut:circuit.WtPublicKeysOut,
+		WtSaltsOut: circuit.WtSaltsOut,
 
 		WtAssetGroupPathElements:circuit.WtAssetGroupPathElements,
 		WtAssetGroupPathIndices:circuit.WtAssetGroupPathIndices,

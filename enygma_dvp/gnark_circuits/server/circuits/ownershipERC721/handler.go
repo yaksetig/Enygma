@@ -51,10 +51,11 @@ func NewHandler(pkPath, vkPath string) gin.HandlerFunc {
 			StCommitmentOut:			make([]frontend.Variable, ownership_erc721_config.TmNumOfTokens),
 			WtPrivateKeysIn:			make([]frontend.Variable, ownership_erc721_config.TmNumOfTokens),
 			WtValues:					make([]frontend.Variable, ownership_erc721_config.TmNumOfTokens),
-			
 			WtPathElements:             make([][]frontend.Variable, ownership_erc721_config.TmNumOfTokens),
 			WtPathIndices:				make([]frontend.Variable, ownership_erc721_config.TmNumOfTokens),
 			WtPublicKeysOut:			make([]frontend.Variable, ownership_erc721_config.TmNumOfTokens),
+			WtSaltsIn:					make([]frontend.Variable, ownership_erc721_config.TmNumOfTokens),
+			WtSaltsOut:					make([]frontend.Variable, ownership_erc721_config.TmNumOfTokens),
 		}
 		
 		for i := range circuitOwnershipERC721.WtPathElements {
@@ -70,10 +71,11 @@ func NewHandler(pkPath, vkPath string) gin.HandlerFunc {
 			StCommitmentOut:			make([]frontend.Variable, ownership_erc721_config.TmNumOfTokens),
 			WtPrivateKeysIn:			make([]frontend.Variable, ownership_erc721_config.TmNumOfTokens),
 			WtValues:					make([]frontend.Variable, ownership_erc721_config.TmNumOfTokens),
-			
 			WtPathElements:             make([][]frontend.Variable, ownership_erc721_config.TmNumOfTokens),
 			WtPathIndices:				make([]frontend.Variable, ownership_erc721_config.TmNumOfTokens),
 			WtPublicKeysOut:			make([]frontend.Variable, ownership_erc721_config.TmNumOfTokens),
+			WtSaltsIn:					make([]frontend.Variable, ownership_erc721_config.TmNumOfTokens),
+			WtSaltsOut:					make([]frontend.Variable, ownership_erc721_config.TmNumOfTokens),
 		}
 		
 		for i := range witness.WtPathElements {
@@ -93,14 +95,17 @@ func NewHandler(pkPath, vkPath string) gin.HandlerFunc {
 
 			witness.WtPrivateKeysIn[i] =  frontend.Variable(request.WtPrivateKeysIn[i])
 			witness.WtValues[i] = frontend.Variable(request.WtValues[i])
-			
 			witness.WtPathIndices[i] = frontend.Variable(request.WtPathIndices[i])
 			witness.WtPublicKeysOut[i] = frontend.Variable(request.WtPublicKeysOut[i])
+			witness.WtSaltsIn[i] = frontend.Variable(request.WtSaltsIn[i])
+			witness.WtSaltsOut[i] = frontend.Variable(request.WtSaltsOut[i])
 
 			for j:=0 ; j < ownership_erc721_config.TmMerkleTreeDepth; j++{
 				witness.WtPathElements[i][j] = frontend.Variable(request.WtPathElements[i][j])
 			}
 		}
+
+		witness.WtErc721ContractAddress = frontend.Variable(request.WtErc721ContractAddress)
 
 		witness.Config = ownership_erc721_config
 

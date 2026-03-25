@@ -2,25 +2,24 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"github.com/consensys/gnark/frontend"
 	"github.com/consensys/gnark/backend/groth16"
 	"github.com/consensys/gnark-crypto/ecc"
 	"github.com/consensys/gnark/frontend/cs/r1cs"
 
-	enygma "enygma-server/pkg/circuits/enygma" 
-	deposit "enygma-server/pkg/circuits/deposit" 
-	withdraw "enygma-server/pkg/circuits/withdraw" 
+	enygma "enygma-server/pkg/circuits/enygma"
+	deposit "enygma-server/pkg/circuits/deposit"
+	withdraw "enygma-server/pkg/circuits/withdraw"
 	utils "enygma-server/utils"
 )
 
 const splitSize = 6
 
 // Generic key generation function to reduce code duplication
-func generateKeys(circuit frontend.Circuit, pkPath, vkPath string) error {
+func generateKeys(circuit frontend.Circuit, pkPath, vkPath, solPath string) error {
 	fmt.Printf("Generating keys for: %s\n", pkPath)
-	
+
 	ccs, err := frontend.Compile(ecc.BN254.ScalarField(), r1cs.NewBuilder, circuit)
 	if err != nil {
 		return fmt.Errorf("compile failed for %s: %w", pkPath, err)
@@ -35,69 +34,93 @@ func generateKeys(circuit frontend.Circuit, pkPath, vkPath string) error {
 		return fmt.Errorf("saving files failed for %s: %w", pkPath, err)
 	}
 
-	fmt.Printf("✓ Keys generated successfully: %s  and %s\n", pkPath,vkPath)
+	fSol, err := os.Create(solPath)
+	if err != nil {
+		return fmt.Errorf("could not create verifier sol %s: %w", solPath, err)
+	}
+	defer fSol.Close()
+	if err := vk.ExportSolidity(fSol); err != nil {
+		return fmt.Errorf("export solidity failed for %s: %w", solPath, err)
+	}
+
+	fmt.Printf("✓ Keys generated successfully: %s, %s, %s\n", pkPath, vkPath, solPath)
 	return nil
 }
 
 func generateKeysEnygma() error {
 	config:= enygma.EnygmaCircuitConfig{
-		BitWith:256,
 		NCommitment:6,
 	}
+	
 	enygmaCircuit:= enygma.EnygmaCircuit{
 		Config:config,
-		ArrayHashSecret:make([][]frontend.Variable, config.NCommitment),
-		PublicKey:      make([]frontend.Variable,config.NCommitment),
-		PreviousCommit: make([][2]frontend.Variable, config.NCommitment),
-		KIndex:  		make([]frontend.Variable,config.NCommitment),
-		Secrets:		make([][]frontend.Variable, config.NCommitment),
-		TagMessage: 	make([]frontend.Variable,config.NCommitment),
-		TxCommit: 		make([][2]frontend.Variable, config.NCommitment),
-		TxValue: 		make([]frontend.Variable,config.NCommitment),
-		TxRandom: 		make([]frontend.Variable,config.NCommitment),
-
+		HashedSharedSecrets: make([]frontend.Variable, config.NCommitment),
+		PublicKey:           make([]frontend.Variable, config.NCommitment),
+		PreviousCommit:      make([][2]frontend.Variable, config.NCommitment),
+		TxCommit:            make([][2]frontend.Variable, config.NCommitment),
+		AnonymitySet:        make([]frontend.Variable, config.NCommitment),
+		SharedSecrets:       make([]frontend.Variable, config.NCommitment),
+		MessageTags:         make([]frontend.Variable, config.NCommitment),
+		TxValues:            make([]frontend.Variable, config.NCommitment),
+		TxRandomValues:      make([]frontend.Variable, config.NCommitment),
 	}
 
-	for i := range config.NCommitment {
-
-        enygmaCircuit.ArrayHashSecret[i] = make([]frontend.Variable, config.NCommitment)
-		enygmaCircuit.Secrets[i] = make([]frontend.Variable, config.NCommitment)
-    }
-
-	
 	return generateKeys(
 		&enygmaCircuit,
 		"keys/EnygmaPk.key",
 		"keys/EnygmaVk.key",
+		"keys/EnygmaVerifier.sol",
 	)
 }
 
 func generateKeysZkDvpDeposit() error {
-	var depositCircuit deposit.DepositEnygmaCircuit
+	config := deposit.DepositEnygmaCircuitConfig{
+		NCommitment: 6,
+	}
+	depositCircuit := deposit.DepositEnygmaCircuit{
+		Config:              config,
+		HashedSharedSecrets: make([]frontend.Variable, config.NCommitment),
+		PublicKey:           make([]frontend.Variable, config.NCommitment),
+		PreviousCommit:      make([][2]frontend.Variable, config.NCommitment),
+		TxCommit:            make([][2]frontend.Variable, config.NCommitment),
+		AnonymitySet:        make([]frontend.Variable, config.NCommitment),
+		SharedSecrets:       make([]frontend.Variable, config.NCommitment),
+		MessageTags:         make([]frontend.Variable, config.NCommitment),
+		TxValues:            make([]frontend.Variable, config.NCommitment),
+		TxRandomValues:      make([]frontend.Variable, config.NCommitment),
+	}
 	return generateKeys(
 		&depositCircuit,
 		"keys/zkdvp/DepositPk.key",
 		"keys/zkdvp/DepositVk.key",
+		"keys/zkdvp/DepositVerifier.sol",
 	)
 }
 
 func generateKeysZkDvpWithdraw() error {
 	for i := 1; i <= splitSize; i++ {
 		config := withdraw.WithdrawEnygmaCircuitConfig{
-			NSplit: i,
+			NCommitment: 6,
 		}
 		
 		withdrawCircuit := withdraw.WithdrawEnygmaCircuit{
-			Config:    config,
-			HashArray: make([]frontend.Variable, config.NSplit),
-			VArray:    make([]frontend.Variable, config.NSplit),
-			Pk:        make([]frontend.Variable, config.NSplit),
+			Config:              config,
+			HashedSharedSecrets: make([]frontend.Variable, config.NCommitment),
+			PublicKey:           make([]frontend.Variable, config.NCommitment),
+			PreviousCommit:      make([][2]frontend.Variable, config.NCommitment),
+			TxCommit:            make([][2]frontend.Variable, config.NCommitment),
+			AnonymitySet:        make([]frontend.Variable, config.NCommitment),
+			SharedSecrets:       make([]frontend.Variable, config.NCommitment),
+			MessageTags:         make([]frontend.Variable, config.NCommitment),
+			TxValues:            make([]frontend.Variable, config.NCommitment),
+			TxRandomValues:      make([]frontend.Variable, config.NCommitment),
 		}
 		
 		pkPath := fmt.Sprintf("keys/zkdvp/WithdrawPk%d.key", i)
 		vkPath := fmt.Sprintf("keys/zkdvp/WithdrawVk%d.key", i)
-		
-		if err := generateKeys(&withdrawCircuit, pkPath, vkPath); err != nil {
+		solPath := fmt.Sprintf("keys/zkdvp/WithdrawVerifier%d.sol", i)
+
+		if err := generateKeys(&withdrawCircuit, pkPath, vkPath, solPath); err != nil {
 			return err
 		}
 	}
@@ -113,15 +136,15 @@ func main() {
 		return
 	}
 	
-	// if err := generateKeysZkDvpDeposit(); err != nil {
-	// 	fmt.Printf("Error generating Deposit keys: %v\n", err)
-	// 	return
-	// }
+	if err := generateKeysZkDvpDeposit(); err != nil {
+		fmt.Printf("Error generating Deposit keys: %v\n", err)
+		return
+	}
 	
-	// if err := generateKeysZkDvpWithdraw(); err != nil {
-	// 	fmt.Printf("Error generating Withdraw keys: %v\n", err)
-	// 	return
-	// }
+	if err := generateKeysZkDvpWithdraw(); err != nil {
+		fmt.Printf("Error generating Withdraw keys: %v\n", err)
+		return
+	}
 	
 	fmt.Println("✓ All keys generated successfully!")
 }

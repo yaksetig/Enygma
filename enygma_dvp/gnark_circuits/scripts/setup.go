@@ -321,6 +321,8 @@ func SetupBatchERC1155(config templates.ERC1155NonFungibleCircuitConfig, circuit
 		WtPathIndices:				make([]frontend.Variable, config.TmNumOfTokens),
 		WtErc1155TokenId:			make([]frontend.Variable, config.TmNumOfTokens),
 		WtPublicKeysOut:    		make([]frontend.Variable, config.TmNumOfTokens),
+		WtSaltsIn:					make([]frontend.Variable, config.TmNumOfTokens),
+		WtSaltsOut:					make([]frontend.Variable, config.TmNumOfTokens),
         WtAssetGroupPathElements:   make([][]frontend.Variable, config.TmNumOfTokens),
 		WtAssetGroupPathIndices:    make([]frontend.Variable, config.TmNumOfTokens),
 	}
@@ -334,7 +336,7 @@ func SetupBatchERC1155(config templates.ERC1155NonFungibleCircuitConfig, circuit
 
         circuitBatchERC1155.WtAssetGroupPathElements[i] = make([]frontend.Variable, config.TmAssetGroupMerkleTreeDepth)
     }
-	
+
 	printable:= fmt.Sprintf("Generating Proving Key and Veryfing key for %s",circuitName)
 	fmt.Println(printable)
 	ccs, err := frontend.Compile(ecc.BN254.ScalarField(), r1cs.NewBuilder, &circuitBatchERC1155)
@@ -385,6 +387,8 @@ func SetupBatchErc1155WithAuditor(config templates.ERC1155NonFungibleWithAuditor
 		WtPathIndices:     		 make([]frontend.Variable, config.TmNumOfTokens),
 		WtErc1155TokenIds:		 make([]frontend.Variable, config.TmNumOfTokens),
 		WtPublicKeysOut: 		 make([]frontend.Variable, config.TmNumOfTokens),
+		WtSaltsIn:				 make([]frontend.Variable, config.TmNumOfTokens),
+		WtSaltsOut:				 make([]frontend.Variable, config.TmNumOfTokens),
 
 		WtAssetGroupPathElements: make([][]frontend.Variable, config.TmNumOfTokens),
 		WtAssetGroupPathIndices: make([]frontend.Variable, config.TmNumOfTokens),
@@ -424,19 +428,20 @@ func SetupJoinSplitERC20(config templates.Erc20CircuitConfig, circuitName string
 	
 	fmt.Print("Initializing Setup Process")
 	fmt.Print("\n")
-	circuitERC20:=templates.Erc20Circuit{
-		Config: config,
-		StTreeNumber:    				make([]frontend.Variable, config.TmNInputs),
-		StMerkleRoots:    				make([]frontend.Variable, config.TmNInputs),
-		StNullifiers:  					make([]frontend.Variable, config.TmNInputs),
-		StCommitmentOut:  				make([]frontend.Variable, config.TmMOutputs),
-		WtPrivateKeysIn: 				make([]frontend.Variable, config.TmNInputs),
-		WtValuesIn: 					make([]frontend.Variable, config.TmNInputs),
-		WtPathIndices:					make([]frontend.Variable, config.TmNInputs),
-		WtPathElements:					make([][]frontend.Variable, config.TmNInputs),
-		WtPublicKeysOut:				make([]frontend.Variable, config.TmMOutputs),
-		WtValuesOut:    				make([]frontend.Variable, config.TmMOutputs),
-    
+	circuitERC20 := templates.Erc20Circuit{
+		Config:               config,
+		StTreeNumber:         make([]frontend.Variable, config.TmNInputs),
+		StMerkleRoots:        make([]frontend.Variable, config.TmNInputs),
+		StNullifiers:         make([]frontend.Variable, config.TmNInputs),
+		StCommitmentOut:      make([]frontend.Variable, config.TmMOutputs),
+		WtPrivateKeysIn:      make([]frontend.Variable, config.TmNInputs),
+		WtValuesIn:           make([]frontend.Variable, config.TmNInputs),
+		WtSaltsIn:            make([]frontend.Variable, config.TmNInputs),
+		WtPathIndices:        make([]frontend.Variable, config.TmNInputs),
+		WtPathElements:       make([][]frontend.Variable, config.TmNInputs),
+		WtSpendPublicKeysOut: make([]frontend.Variable, config.TmMOutputs),
+		WtValuesOut:          make([]frontend.Variable, config.TmMOutputs),
+		WtSaltsOut:           make([]frontend.Variable, config.TmMOutputs),
 	}
 
 	for i := range circuitERC20.WtPathElements {
@@ -478,22 +483,22 @@ func SetupJoinSplitERC20WithAuditor(config templates.Erc20WithAuditorConfig, cir
 	encLength := decLength + 1
 
 	
-	circuitERC20WithAuditor:=templates.Erc20WithAuditorCircuit{
-		Config: config,
-		
-		StTreeNumber:    				make([]frontend.Variable, config.TmNInputs),
-		StMerkleRoots:    				make([]frontend.Variable, config.TmNInputs),
-		StNullifiers:  					make([]frontend.Variable, config.TmNInputs),
-		StCommitmentOut:  				make([]frontend.Variable, config.TmMOutputs),
-		WtPrivateKeysIn: 				make([]frontend.Variable, config.TmNInputs),
-		WtValuesIn: 					make([]frontend.Variable, config.TmNInputs),
-		WtPathIndices:					make([]frontend.Variable, config.TmNInputs),
-		WtPathElements:					make([][]frontend.Variable, config.TmNInputs),
-		WtPublicKeysOut:				make([]frontend.Variable, config.TmMOutputs),
-		WtValuesOut:    				make([]frontend.Variable, config.TmMOutputs),
+	circuitERC20WithAuditor := templates.Erc20WithAuditorCircuit{
+		Config:               config,
+		StTreeNumber:         make([]frontend.Variable, config.TmNInputs),
+		StMerkleRoots:        make([]frontend.Variable, config.TmNInputs),
+		StNullifiers:         make([]frontend.Variable, config.TmNInputs),
+		StCommitmentOut:      make([]frontend.Variable, config.TmMOutputs),
+		WtPrivateKeysIn:      make([]frontend.Variable, config.TmNInputs),
+		WtValuesIn:           make([]frontend.Variable, config.TmNInputs),
+		WtSaltsIn:            make([]frontend.Variable, config.TmNInputs),
+		WtPathIndices:        make([]frontend.Variable, config.TmNInputs),
+		WtPathElements:       make([][]frontend.Variable, config.TmNInputs),
+		WtSpendPublicKeysOut: make([]frontend.Variable, config.TmMOutputs),
+		WtValuesOut:          make([]frontend.Variable, config.TmMOutputs),
+		WtSaltsOut:           make([]frontend.Variable, config.TmMOutputs),
 
-		StAuditorEncryptedValues:		make([]frontend.Variable,encLength ),
-    
+		StAuditorEncryptedValues: make([]frontend.Variable, encLength),
 	}
 
 
@@ -537,9 +542,8 @@ func SetupJoinSplitERC20WithBroker(config templates.Erc20BrokerConfig, circuitNa
 		WtPathIndices:				make([]frontend.Variable, config.TmNInputs),
 		WtPublicKeyOut:    			make([]frontend.Variable, config.TmMOutputs),
 		WtValuesOut:    			make([]frontend.Variable, config.TmMOutputs),
-
-		
-    
+		WtSaltsIn:					make([]frontend.Variable, config.TmNInputs),
+		WtSaltsOut:					make([]frontend.Variable, config.TmMOutputs),
 	}
 
 	for i := range circuitERC20WithBroker.WtPathElements {
@@ -584,6 +588,8 @@ func SetupJoinSplitERC1155(config templates.ERC1155FungibleCircuitConfig, circui
 		WtPathIndices:				make([]frontend.Variable, config.TmNInputs),
 		WtPublicKeysOut:    		make([]frontend.Variable, config.TmMOutputs),
 		WtValuesOut:    			make([]frontend.Variable, config.TmMOutputs),
+		WtSaltsIn:					make([]frontend.Variable, config.TmNInputs),
+		WtSaltsOut:					make([]frontend.Variable, config.TmMOutputs),
 		WtAssetGroupPathElements: 	make([]frontend.Variable, config.TmAssetGroupMerkleTree),
 	}
 
@@ -639,6 +645,8 @@ func SetupJoinSplitERC1155Auditor(config templates.ERC1155FungibleWithAuditorCir
 		
 		WtPublicKeysOut:    		make([]frontend.Variable, config.TmMOutputs),
 		WtValuesOut:    			make([]frontend.Variable, config.TmMOutputs),
+		WtSaltsIn:					make([]frontend.Variable, config.TmNInputs),
+		WtSaltsOut:					make([]frontend.Variable, config.TmMOutputs),
 		WtAssetGroupPathElements: 	make([]frontend.Variable, config.TmAssetGroupMerkleTree),
 	}
 
@@ -684,6 +692,8 @@ func SetupJoinSplitERC1155WithBroker(config templates.ERC1155FungibleWithBrokerC
 		WtPathIndices:				make([]frontend.Variable, config.NInputs),
 		WtRecipientPk:    			make([]frontend.Variable, config.MOutputs),
 		WtValuesOut:    			make([]frontend.Variable, config.MOutputs),
+		WtSaltsIn:					make([]frontend.Variable, config.NInputs),
+		WtSaltsOut:					make([]frontend.Variable, config.MOutputs),
 		WtAssetGroupPathElements: 	make([]frontend.Variable, config.AssetGroupMerkleTreeDepth),
 	}
 
@@ -752,7 +762,8 @@ func SetupOwnershipERC721(config templates.Erc721CircuitConfig, circuitName stri
 		WtPathElements:             make([][]frontend.Variable, config.TmNumOfTokens),
 		WtPathIndices:				make([]frontend.Variable, config.TmNumOfTokens),
 		WtPublicKeysOut:			make([]frontend.Variable, config.TmNumOfTokens),
-		
+		WtSaltsIn:					make([]frontend.Variable, config.TmNumOfTokens),
+		WtSaltsOut:					make([]frontend.Variable, config.TmNumOfTokens),
 	}
 	for i := range circuitOwnershipERC721.WtPathElements {
 
@@ -800,7 +811,8 @@ func SetupOwnershipERC721Auditor(config templates.Erc721WithAuditorCircuitConfig
 		WtPathElements:             make([][]frontend.Variable, config.TmNumOfTokens),
 		WtPathIndices:				make([]frontend.Variable, config.TmNumOfTokens),
 		WtPrivateKeysOut:			make([]frontend.Variable, config.TmNumOfTokens),
-		
+		WtSaltsIn:					make([]frontend.Variable, config.TmNumOfTokens),
+		WtSaltsOut:					make([]frontend.Variable, config.TmNumOfTokens),
 	}
 	for i := range circuitOwnershipERC721.WtPathElements {
 
@@ -840,8 +852,9 @@ func SetupOwnershipERC1155Fungible(config templates.ERC1155FungibleCircuitConfig
 
 		WtPublicKeysOut: 				make([]frontend.Variable, config.TmMOutputs),
 		WtValuesOut: 				make([]frontend.Variable, config.TmMOutputs),
+		WtSaltsIn:					make([]frontend.Variable, config.TmNInputs),
+		WtSaltsOut:					make([]frontend.Variable, config.TmMOutputs),
 		WtAssetGroupPathElements: 	make([]frontend.Variable, config.TmAssetGroupMerkleTree),
-
 	}
 
 	for i := range circuitOwnershipERC1155fFungible.WtPathElements {
@@ -893,12 +906,13 @@ func SetupOwnershipERC1155NonFungibleAuditor(config templates.ERC1155NonFungible
 		WtPathIndices:					make([]frontend.Variable, config.TmNumOfTokens),
 		WtErc1155TokenIds:				make([]frontend.Variable, config.TmNumOfTokens),
 		WtPublicKeysOut:				make([]frontend.Variable, config.TmNumOfTokens),
-		
+		WtSaltsIn:						make([]frontend.Variable, config.TmNumOfTokens),
+		WtSaltsOut:						make([]frontend.Variable, config.TmNumOfTokens),
 		WtAssetGroupPathElements: 		make([][]frontend.Variable, config.TmNumOfTokens),
 		WtAssetGroupPathIndices: 		make([]frontend.Variable, config.TmNumOfTokens),
 
 		StAuditorEncryptedValues:       make([]frontend.Variable,encLength),
-	}	
+	}
 
 
 	for i := range circuitOwnershipERC1155NonFungible.WtPathElements {
@@ -949,10 +963,10 @@ func SetupOwnershipERC1155NonFungible(config templates.ERC1155NonFungibleCircuit
 		WtPathIndices:					make([]frontend.Variable, config.TmNumOfTokens),
 		WtErc1155TokenId:				make([]frontend.Variable, config.TmNumOfTokens),
 		WtPublicKeysOut:				make([]frontend.Variable, config.TmNumOfTokens),
-		
+		WtSaltsIn:						make([]frontend.Variable, config.TmNumOfTokens),
+		WtSaltsOut:						make([]frontend.Variable, config.TmNumOfTokens),
 		WtAssetGroupPathElements: 		make([][]frontend.Variable, config.TmNumOfTokens),
 		WtAssetGroupPathIndices: 		make([]frontend.Variable, config.TmNumOfTokens),
-
 	}
 
 

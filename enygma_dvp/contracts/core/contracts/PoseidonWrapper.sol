@@ -6,9 +6,14 @@ pragma solidity ^0.8.0;
 
 import {IEnygmaDvp} from "../interfaces/IEnygmaDvp.sol";
 import {PoseidonT3} from "./Poseidon.sol";
+import {PoseidonT5} from "./Poseidon.sol";
 
 contract PoseidonWrapper {
     function poseidon(uint256[2] memory input) public pure returns (uint256) {
         return PoseidonT3.poseidon(input);
+    }
+
+    function poseidon4(uint256[4] memory input) public pure returns (uint256) {
+        return PoseidonT5.poseidon(input);
     }
 }

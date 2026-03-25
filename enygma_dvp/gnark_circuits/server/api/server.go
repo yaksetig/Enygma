@@ -20,6 +20,7 @@ import (
     "gnark_server/server/circuits/erc1155Fungible"
     "gnark_server/server/circuits/erc1155FungibleAuditor"
     "gnark_server/server/circuits/privateMint"
+    serverutils "gnark_server/server/utils"
 
 
 )
@@ -38,13 +39,15 @@ func NewServer(cfg *config.Config) *gin.Engine {
     r.POST("/proof/auctionPrivateOpening", auctionPrivateOpening.NewHandler(cfg.AuctionPrivateOpeningPk, cfg.AuctionPrivateOpeningVk))
     r.POST("/proof/auctionNotWinning", auctionNotWinning.NewHandler(cfg.AuctionNotOpeningPk, cfg.AuctionNotOpeningVk))
     r.POST("/proof/brokerRegistration", brokerRegistration.NewHandler(cfg.BrokerRegistrationPk, cfg.BrokerRegistrationVk))
-    r.POST("./proof/erc155Fungible",erc1155Fungible.NewHandler(cfg.ERC1155FungiblePk, cfg.ERC1155FungibleVk) )
+    r.POST("/proof/erc155Fungible", erc1155Fungible.NewHandler(cfg.ERC1155FungiblePk, cfg.ERC1155FungibleVk))
     r.POST("/proof/erc1155FungibleWithBroker",  erc1155FungibleWithBroker.NewHandler(cfg.ERC1155FungibleWithBrokerPk, cfg.ERC1155FungibleWithBrokerVk))
     r.POST("/proof/erc1155NonFungible",erc1155NonFungible.NewHandler(cfg.ERC1155NonFungiblePk, cfg.ERC1155NonFungibleVk))
     r.POST("/proof/erc1155NonFungibleAuditor",erc1155NonFungibleAuditor.NewHandler(cfg.ERC1155NonFungibleAuditorPk, cfg.ERC1155NonFungibleAuditorVk))
     r.POST("/proof/legitBroker",legitBroker.NewHandler(cfg.LegitBrokerPk, cfg.LegitBrokerVk))
     r.POST("/proof/erc1155FungibleAuditor", erc1155FungibleAuditor.NewHandler(cfg.ERC1155FungibleAuditorPk, cfg.ERC1155FungibleAuditorVk))
     r.POST("/proof/privateMint", privateMint.NewHandler(cfg.PrivateMintPk, cfg.PrivateMintVk))
+    r.POST("/util/poseidonEncrypt", serverutils.PoseidonEncryptHandler())
+    r.POST("/util/poseidonDecrypt", serverutils.PoseidonDecryptHandler())
     return r
 }
 

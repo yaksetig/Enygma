@@ -1,3 +1,8 @@
+// Package primitives provides cryptographic primitives for the EnygmaDvp protocol.
+//
+// Deprecated: This package is deprecated and will be removed in a future version.
+// Use Erc20Commitment.go instead
+
 package primitives 
 
 import(

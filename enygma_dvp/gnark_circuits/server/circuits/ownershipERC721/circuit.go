@@ -4,16 +4,19 @@ import(
 	"math/big"
 )
 type OwnershipERC721Request struct {
-	StMessage          string                     	`json:"stMessage" binding:"required"`
-	StTreeNumbers     [1]string				      	`json:"stTreeNumbers" binding:"required,len=1"`
-	StMerkleRoots     [1]string                   	`json:"stMerkleRoots" binding:"required,len=1"`
-	StNullifiers      [1]string                   	`json:"stNullifiers" binding:"required,len=1"`
-	StCommitmentOut   [1]string                   	`json:"stCommitmentOut" binding:"required,len=1"`
-	WtPrivateKeysIn   [1]string                  	`json:"wtPrivateKeysIn" binding:"required,len=1"`
-	WtValues          [1]string                  	`json:"wtValues" binding:"required,len=1"`
-	WtPathElements    [1][8]string     		   		`json:"wtPathElements" binding:"required,len=1,dive,len=8"`
-	WtPathIndices     [1]string                  	`json:"wtPathIndices" binding:"required,len=1"`
-	WtPublicKeysOut   [1]string                  	`json:"wtPublicKeysOut" binding:"required,len=1"`
+	StMessage               string      `json:"stMessage" binding:"required"`
+	StTreeNumbers           [1]string   `json:"stTreeNumbers" binding:"required,len=1"`
+	StMerkleRoots           [1]string   `json:"stMerkleRoots" binding:"required,len=1"`
+	StNullifiers            [1]string   `json:"stNullifiers" binding:"required,len=1"`
+	StCommitmentOut         [1]string   `json:"stCommitmentOut" binding:"required,len=1"`
+	WtPrivateKeysIn         [1]string   `json:"wtPrivateKeysIn" binding:"required,len=1"`
+	WtValues                [1]string   `json:"wtValues" binding:"required,len=1"`
+	WtPathElements          [1][8]string `json:"wtPathElements" binding:"required,len=1,dive,len=8"`
+	WtPathIndices           [1]string   `json:"wtPathIndices" binding:"required,len=1"`
+	WtPublicKeysOut         [1]string   `json:"wtPublicKeysOut" binding:"required,len=1"`
+	WtErc721ContractAddress string      `json:"wtErc721ContractAddress" binding:"required"`
+	WtSaltsIn               [1]string   `json:"wtSaltsIn" binding:"required,len=1"`
+	WtSaltsOut              [1]string   `json:"wtSaltsOut" binding:"required,len=1"`
 }
 
 type OwnershipERC721Output struct{

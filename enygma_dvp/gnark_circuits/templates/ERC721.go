@@ -16,19 +16,26 @@ type Erc721CircuitConfig struct{
 
 type Erc721Circuit struct {
 
-	Config   				Erc721CircuitConfig
-	StMessage      			frontend.Variable    `gnark:",public"` 
-	StTreeNumbers      		[]frontend.Variable    `gnark:",public"` 
-	StMerkleRoots     		[]frontend.Variable    `gnark:",public"` 
-	StNullifiers  			[]frontend.Variable  `gnark:",public"`  //NInputs
-	StCommitmentOut   		[]frontend.Variable  `gnark:",public"`  //MOutputs
-	
-	WtPrivateKeysIn   		[]frontend.Variable //NInputs
-	WtValues				[]frontend.Variable //NInputs
-	WtPathElements    		[][] frontend.Variable //NInputs //MerkleTreeDepth 
-	WtPathIndices     		[]frontend.Variable //NInputs
-	WtPublicKeysOut         []frontend.Variable //MOutputs
-	
+	Config Erc721CircuitConfig
+
+	// --- public inputs (statement) ---
+	StMessage       frontend.Variable   `gnark:",public"` // domain-separation tag / operation identifier
+	StTreeNumbers   []frontend.Variable `gnark:",public"` // TmNumOfTokens — tree index for each input note
+	StMerkleRoots   []frontend.Variable `gnark:",public"` // TmNumOfTokens — Merkle root each input note must belong to
+	StNullifiers    []frontend.Variable `gnark:",public"` // TmNumOfTokens — Nullifier(sk_spend, leafIndex), prevents double-spend
+	StCommitmentOut []frontend.Variable `gnark:",public"` // TmNumOfTokens — new output commitments inserted on-chain
+
+	// --- private witnesses: inputs (NFT notes being transferred) ---
+	WtPrivateKeysIn         []frontend.Variable   // TmNumOfTokens — sk_spend, proves ownership of each input note
+	WtValues                []frontend.Variable   // TmNumOfTokens — raw ERC721 tokenId
+	WtSaltsIn               []frontend.Variable   // TmNumOfTokens — saltB from when this note was received
+	WtPathElements          [][]frontend.Variable // TmNumOfTokens x TmMerkleTreeDepth — sibling nodes for Merkle proof
+	WtPathIndices           []frontend.Variable   // TmNumOfTokens — leaf position in the tree
+	WtErc721ContractAddress frontend.Variable     // ERC721 contract address — binds the commitment to a specific token contract
+
+	// --- private witnesses: outputs (new notes being created) ---
+	WtPublicKeysOut []frontend.Variable // TmNumOfTokens — pk_spend of each recipient
+	WtSaltsOut      []frontend.Variable // TmNumOfTokens — saltB for each output note
 }
 
 
@@ -44,7 +51,7 @@ func (circuit *Erc721Circuit) Define(api frontend.API) error{
 		nullifier := primitives.Nullifier(api,circuit.WtPrivateKeysIn[i],circuit.WtPathIndices[i])
 		api.AssertIsEqual(nullifier,circuit.StNullifiers[i])
 
-		commitment :=primitives.Commitment(api, circuit.WtValues[i],publicKey)
+		commitment := primitives.Erc721Commitment(api, circuit.WtValues[i], publicKey, circuit.WtSaltsIn[i])
 		
 		pathElement := make([]frontend.Variable, circuit.Config.TmMerkleTreeDepth)
 
@@ -60,7 +67,7 @@ func (circuit *Erc721Circuit) Define(api frontend.API) error{
 
 		api.AssertIsEqual(api.Mul(Diff, Enable), 0)
 	
-		commitmentOut :=primitives.Commitment(api, circuit.WtValues[i],circuit.WtPublicKeysOut[i])
+		commitmentOut := primitives.Erc721Commitment(api, circuit.WtValues[i], circuit.WtPublicKeysOut[i], circuit.WtSaltsOut[i])
 		api.AssertIsEqual(commitmentOut, circuit.StCommitmentOut[i])
 		
 	}

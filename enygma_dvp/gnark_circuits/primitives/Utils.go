@@ -63,11 +63,20 @@ func PoseidonPrivateKeyNative(mod *big.Int, inputs []*big.Int, res []*big.Int)er
 	p.SetString("21888242871839275222246405745257275088548364400416034343698204186575808495617", 10)
 
 	privateKey := inputs[0]
-	
+
 	hash, _ := poseidon.Hash([]*big.Int{privateKey})
-	
+
 	hash.Mod(hash, p)
 
+	res[0] = hash
+	return nil
+}
+
+// Erc1155CommitmentNative computes Poseidon(publicKey, salt, amount, tokenId)
+// natively using the iden3 library, matching the unified V2 commitment formula.
+// inputs: [publicKey, salt, amount, tokenId]
+func Erc1155CommitmentNative(mod *big.Int, inputs []*big.Int, res []*big.Int) error {
+	hash, _ := poseidon.Hash([]*big.Int{inputs[0], inputs[1], inputs[2], inputs[3]})
 	res[0] = hash
 	return nil
 }

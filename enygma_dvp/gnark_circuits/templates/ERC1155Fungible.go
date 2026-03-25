@@ -34,6 +34,7 @@ type Erc1155FungibleCircuit struct {
 	
 	WtPrivateKeysIn		     []frontend.Variable //NInputs
 	WtValuesIn    		 	 []frontend.Variable //NInputs
+	WtSaltsIn				 []frontend.Variable //NInputs
 	WtPathElements   		 [][]frontend.Variable //NInputs//MerkleTreeDepth
 	WtPathIndices     		 []frontend.Variable //NInputs
 	WtErc1155ContractAddress frontend.Variable
@@ -41,6 +42,7 @@ type Erc1155FungibleCircuit struct {
 
 	WtPublicKeysOut			 []frontend.Variable //MOutputs
 	WtValuesOut              []frontend.Variable //MOutputs
+	WtSaltsOut				 []frontend.Variable //MOutputs
 
 	WtAssetGroupPathElements []frontend.Variable //AssetGroupMerkleTree
 	WtAssetGroupPathIndices  frontend.Variable
@@ -71,14 +73,12 @@ func (circuit *Erc1155FungibleCircuit) Define(api frontend.API) error{
 		isValid1 := cmp.IsLessOrEqual(api, 0,circuit.WtValuesIn[i])
 		api.AssertIsEqual(isValid1, 1)
 
-		erc1155uniqueId := primitives.Erc1155UniqueId2(api, circuit.WtErc1155ContractAddress,circuit.WtErc1155TokenId,circuit.WtValuesIn[i])
-
 		publicKey := primitives.PublicKeyNative(api,circuit.WtPrivateKeysIn[i])
 
 		nullifier := primitives.Nullifier(api,circuit.WtPrivateKeysIn[i], circuit.WtPathIndices[i])
 		api.AssertIsEqual(nullifier, circuit.StNullifiers[i])
 
-		commitment  := primitives.CommitmentNative(api,erc1155uniqueId,publicKey)
+		commitment := primitives.Erc1155Commitment(api, circuit.WtErc1155TokenId, circuit.WtValuesIn[i], publicKey, circuit.WtSaltsIn[i])
 
 		pathElementVar := make([]frontend.Variable, circuit.Config.TmMerkleTreeDepth)
 		for j:=0 ; j<  circuit.Config.TmMerkleTreeDepth;j++{
@@ -103,9 +103,7 @@ func (circuit *Erc1155FungibleCircuit) Define(api frontend.API) error{
 		isValid3 := cmp.IsLessOrEqual(api, 0,circuit.WtValuesOut[i])
 		api.AssertIsEqual(isValid3, 1)
 
-		erc1155uniqueId2 := primitives.Erc1155UniqueId(api, circuit.WtErc1155ContractAddress,circuit.WtErc1155TokenId,circuit.WtValuesOut[i])
-	
-		commitment  := primitives.Commitment(api,erc1155uniqueId2,circuit.WtPublicKeysOut[i])
+		commitment := primitives.Erc1155Commitment(api, circuit.WtErc1155TokenId, circuit.WtValuesOut[i], circuit.WtPublicKeysOut[i], circuit.WtSaltsOut[i])
 
 		api.AssertIsEqual(commitment, circuit.StCommitmentOut[i])
 

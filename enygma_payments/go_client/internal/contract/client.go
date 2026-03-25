@@ -113,7 +113,7 @@ func (c *Client) SendTransaction(
 
 	auth.Nonce = big.NewInt(int64(nonce))
 	auth.Value = big.NewInt(0)
-	auth.GasLimit = uint64(400000000)
+	auth.GasLimit = uint64(16000000)
 	auth.GasPrice = gasPrice
 
 	// Convert proof to contract format
@@ -144,12 +144,18 @@ func (c *Client) SendTransaction(
 
 func (c *Client) convertProof(resp *types.Response) enygma.IEnygmaProof {
 	var proofArray [8]*big.Int
+	for i := range proofArray {
+		proofArray[i] = big.NewInt(0)
+	}
 	for i := 0; i < 8 && i < len(resp.Proof); i++ {
 		proofArray[i] = resp.Proof[i]
 	}
 
-	var publicSignalArray [62]*big.Int
-	for i := 0; i < 62 && i < len(resp.PublicSignal); i++ {
+	var publicSignalArray [50]*big.Int
+	for i := range publicSignalArray {
+		publicSignalArray[i] = big.NewInt(0)
+	}
+	for i := 0; i < 50 && i < len(resp.PublicSignal); i++ {
 		publicSignalArray[i] = resp.PublicSignal[i]
 	}
 

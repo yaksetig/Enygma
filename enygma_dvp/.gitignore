@@ -3,7 +3,7 @@
 #  Verification key and proving key from gnark circuit
 /gnark_circuits/scripts/keys
 
-/circuits/circomlib
+/legacy/circuits/circomlib
 
 # Verifier.sols
 /gnark_circuits/scripts/verifier
@@ -11,7 +11,7 @@
 /node_modules/
 
 /artifacts/
-/build/
+/legacy/build/
 /cache/
 
 

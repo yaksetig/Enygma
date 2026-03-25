@@ -15,77 +15,85 @@ type Erc20CircuitConfig struct {
 
 type Erc20Circuit struct {
 
-	Config    				Erc20CircuitConfig
-	StMessage      			frontend.Variable   `gnark:",public"` 
-	StTreeNumber      		[]frontend.Variable  `gnark:",public"`  // nInputsERC20
-	StMerkleRoots     		[]frontend.Variable  `gnark:",public"` // nInputsERC20
-	StNullifiers  			[]frontend.Variable  `gnark:",public"` // nInputsERC20
-	StCommitmentOut   		[]frontend.Variable  `gnark:",public"` //MOutputs
-	
-	WtPrivateKeysIn   		[]frontend.Variable  // nInputsERC20
-	WtValuesIn				[]frontend.Variable   // nInputsERC20
-	WtPathElements    		[][] frontend.Variable // nInputsERC20 //MerkleTreeDepthERC20
-	WtPathIndices     		[]frontend.Variable // nInputsERC20
-	WtErc20ContractAddress    frontend.Variable
-	
-	WtPublicKeysOut         []frontend.Variable //MOutputs
-	WtValuesOut				[]frontend.Variable //MOutputs
+	Config Erc20CircuitConfig
+
+	// --- public inputs (statement) ---
+	StMessage        frontend.Variable   `gnark:",public"`
+	StTreeNumber     []frontend.Variable `gnark:",public"` // nInputsERC20
+	StMerkleRoots    []frontend.Variable `gnark:",public"` // nInputsERC20
+	StNullifiers     []frontend.Variable `gnark:",public"` // nInputsERC20
+	StCommitmentOut  []frontend.Variable `gnark:",public"` // MOutputs
+
+	// --- private witnesses: inputs (coins being spent) ---
+	WtPrivateKeysIn []frontend.Variable   // nInputsERC20 — sk_spend, proves ownership
+	WtValuesIn      []frontend.Variable   // nInputsERC20
+	WtSaltsIn       []frontend.Variable   // nInputsERC20 — saltB from when this note was received
+	WtPathElements  [][]frontend.Variable // nInputsERC20 x MerkleTreeDepth
+	WtPathIndices   []frontend.Variable   // nInputsERC20
+
+	// Shared across all inputs and outputs (single token per proof)
+	WtTokenId frontend.Variable
+
+	// --- private witnesses: outputs (new notes being created) ---
+	WtSpendPublicKeysOut []frontend.Variable // MOutputs — pk_spend of each recipient
+	WtValuesOut          []frontend.Variable // MOutputs
+	WtSaltsOut           []frontend.Variable // MOutputs — saltB from KEM for each output
 }
 
 
 
-func (circuit *Erc20Circuit) Define(api frontend.API) error{
-	
-	inputsTotals:=frontend.Variable(0)
-	outputsTotals:=frontend.Variable(0)
+func (circuit *Erc20Circuit) Define(api frontend.API) error {
 
-	//verify input notes
-	for i:=0; i< circuit.Config.TmNInputs;i++{
+	inputsTotals := frontend.Variable(0)
+	outputsTotals := frontend.Variable(0)
+
+	// --- verify input notes ---
+	for i := 0; i < circuit.Config.TmNInputs; i++ {
 		isValid0 := cmp.IsLess(api, circuit.WtValuesIn[i], circuit.Config.TmRange)
 		api.AssertIsEqual(isValid0, 1)
 
-		isValid1 := cmp.IsLessOrEqual(api, 0,circuit.WtValuesIn[i] )
+		isValid1 := cmp.IsLessOrEqual(api, 0, circuit.WtValuesIn[i])
 		api.AssertIsEqual(isValid1, 1)
 
-		uniqueId  := primitives.UniqueId(api,circuit.WtErc20ContractAddress,circuit.WtValuesIn[i])
+		// Derive pk_spend from sk_spend inside the circuit
+		pkSpendIn := primitives.PublicKey(api, circuit.WtPrivateKeysIn[i])
 
-		publicKey := primitives.PublicKey(api, circuit.WtPrivateKeysIn[i])
-		
-		nullifier := primitives.Nullifier(api,circuit.WtPrivateKeysIn[i],circuit.WtPathIndices[i])
-		
-		api.AssertIsEqual(nullifier,circuit.StNullifiers[i])
+		nullifier := primitives.Nullifier(api, circuit.WtPrivateKeysIn[i], circuit.WtPathIndices[i])
+		api.AssertIsEqual(nullifier, circuit.StNullifiers[i])
 
-		commitment :=primitives.Commitment(api, uniqueId,publicKey)
+		// V2 commitment: Poseidon(pk_spend, saltB, amount, tokenId)
+		commitment := primitives.Erc20CommitmentV2(api, pkSpendIn, circuit.WtSaltsIn[i], circuit.WtValuesIn[i], circuit.WtTokenId)
 
 		pathElement := make([]frontend.Variable, circuit.Config.TmMerkleTreeDepth)
-	
-		for j:=0 ; j< circuit.Config.TmMerkleTreeDepth;j++{
+		for j := 0; j < circuit.Config.TmMerkleTreeDepth; j++ {
 			pathElement[j] = circuit.WtPathElements[i][j]
 		}
-		root := primitives.MerkleProof(api, commitment,circuit.WtPathIndices[i],pathElement)
+		root := primitives.MerkleProof(api, commitment, circuit.WtPathIndices[i], pathElement)
 
-		isZero := api.IsZero(circuit.WtValuesIn[i]) // ValueIn[i] ?0 =  1:0
-		Enable := api.Mul(1,api.Sub(1,isZero))  
-		Diff   := api.Sub(circuit.StMerkleRoots[i], root)
+		// Skip Merkle check for dummy (zero-value) inputs
+		isZero := api.IsZero(circuit.WtValuesIn[i])
+		enable := api.Sub(1, isZero)
+		diff := api.Sub(circuit.StMerkleRoots[i], root)
+		api.AssertIsEqual(api.Mul(diff, enable), 0)
 
-		api.AssertIsEqual(api.Mul(Diff, Enable), 0)
-
-		inputsTotals = api.Add( inputsTotals , circuit.WtValuesIn[i])
+		inputsTotals = api.Add(inputsTotals, circuit.WtValuesIn[i])
 	}
 
-	//Verifying Outputs
-	for i:=0; i< circuit.Config.TmMOutputs;i++{
+	// --- verify output notes ---
+	for i := 0; i < circuit.Config.TmMOutputs; i++ {
 		isValid0 := cmp.IsLess(api, circuit.WtValuesOut[i], circuit.Config.TmRange)
 		api.AssertIsEqual(isValid0, 1)
 
-		isValid1 := cmp.IsLessOrEqual(api, 0,circuit.WtValuesOut[i] )
+		isValid1 := cmp.IsLessOrEqual(api, 0, circuit.WtValuesOut[i])
 		api.AssertIsEqual(isValid1, 1)
 
-		uniqueId  := primitives.UniqueId(api,circuit.WtErc20ContractAddress,circuit.WtValuesOut[i])
-		commitment :=primitives.Commitment(api, uniqueId,circuit.WtPublicKeysOut[i])
+		// V2 commitment: Poseidon(pk_spendRecipient, saltB, amount, tokenId)
+		// pk_spendRecipient is provided by the sender (Bob's public spend key)
+		// saltB is the KEM-derived salt — matches what is inside ciphertextII on-chain
+		commitment := primitives.Erc20CommitmentV2(api, circuit.WtSpendPublicKeysOut[i], circuit.WtSaltsOut[i], circuit.WtValuesOut[i], circuit.WtTokenId)
 		api.AssertIsEqual(commitment, circuit.StCommitmentOut[i])
 
-		outputsTotals = api.Add( outputsTotals , circuit.WtValuesOut[i])
+		outputsTotals = api.Add(outputsTotals, circuit.WtValuesOut[i])
 	}
 
 	api.AssertIsEqual(outputsTotals, inputsTotals)

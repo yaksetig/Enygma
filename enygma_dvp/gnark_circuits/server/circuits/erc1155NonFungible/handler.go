@@ -55,10 +55,12 @@ func NewHandler(pkPath, vkPath string) gin.HandlerFunc {
 			StAssetGroupMerkleRoot: 	make([]frontend.Variable, ownership_erc1155_Non_Fungible_config.TmNumOfTokens),
 			WtPrivateKeysIn: 			make([]frontend.Variable, ownership_erc1155_Non_Fungible_config.TmNumOfTokens),
 			WtValues: 					make([]frontend.Variable, ownership_erc1155_Non_Fungible_config.TmNumOfTokens),
+			WtSaltsIn:					make([]frontend.Variable, ownership_erc1155_Non_Fungible_config.TmNumOfTokens),
 			WtPathElements:				make([][]frontend.Variable, ownership_erc1155_Non_Fungible_config.TmNumOfTokens),
 			WtPathIndices:				make([]frontend.Variable, ownership_erc1155_Non_Fungible_config.TmNumOfTokens),
 			WtErc1155TokenId:			make([]frontend.Variable, ownership_erc1155_Non_Fungible_config.TmNumOfTokens),
 			WtPublicKeysOut:    		make([]frontend.Variable, ownership_erc1155_Non_Fungible_config.TmNumOfTokens),
+			WtSaltsOut:					make([]frontend.Variable, ownership_erc1155_Non_Fungible_config.TmNumOfTokens),
 			WtAssetGroupPathElements:   make([][]frontend.Variable, ownership_erc1155_Non_Fungible_config.TmNumOfTokens),
 			WtAssetGroupPathIndices:    make([]frontend.Variable, ownership_erc1155_Non_Fungible_config.TmNumOfTokens),
 		}
@@ -83,10 +85,12 @@ func NewHandler(pkPath, vkPath string) gin.HandlerFunc {
 			StAssetGroupMerkleRoot: 	make([]frontend.Variable, ownership_erc1155_Non_Fungible_config.TmNumOfTokens),
 			WtPrivateKeysIn: 			make([]frontend.Variable, ownership_erc1155_Non_Fungible_config.TmNumOfTokens),
 			WtValues: 					make([]frontend.Variable, ownership_erc1155_Non_Fungible_config.TmNumOfTokens),
+			WtSaltsIn:					make([]frontend.Variable, ownership_erc1155_Non_Fungible_config.TmNumOfTokens),
 			WtPathElements:				make([][]frontend.Variable, ownership_erc1155_Non_Fungible_config.TmNumOfTokens),
 			WtPathIndices:				make([]frontend.Variable, ownership_erc1155_Non_Fungible_config.TmNumOfTokens),
 			WtErc1155TokenId:			make([]frontend.Variable, ownership_erc1155_Non_Fungible_config.TmNumOfTokens),
 			WtPublicKeysOut:    		make([]frontend.Variable, ownership_erc1155_Non_Fungible_config.TmNumOfTokens),
+			WtSaltsOut:					make([]frontend.Variable, ownership_erc1155_Non_Fungible_config.TmNumOfTokens),
 			WtAssetGroupPathElements:   make([][]frontend.Variable, ownership_erc1155_Non_Fungible_config.TmNumOfTokens),
 			WtAssetGroupPathIndices:    make([]frontend.Variable, ownership_erc1155_Non_Fungible_config.TmNumOfTokens),
 		}
@@ -115,9 +119,11 @@ func NewHandler(pkPath, vkPath string) gin.HandlerFunc {
 			witness.StAssetGroupMerkleRoot[i] = frontend.Variable(request.StAssetGroupMerkleRoot[i])
 			witness.WtPrivateKeysIn[i] = frontend.Variable(request.WtPrivateKeysIn[i])
 			witness.WtValues[i] = frontend.Variable(request.WtValues[i])
+			witness.WtSaltsIn[i] = frontend.Variable(request.WtSaltsIn[i])
 			witness.WtPathIndices[i] = frontend.Variable(request.WtPathIndices[i])
 			witness.WtErc1155TokenId[i] = frontend.Variable(request.WtErc1155TokenId[i])
 			witness.WtPublicKeysOut[i] = frontend.Variable(request.WtPublicKeysOut[i])
+			witness.WtSaltsOut[i] = frontend.Variable(request.WtSaltsOut[i])
 			witness.WtAssetGroupPathIndices[i] = frontend.Variable(request.WtAssetGroupPathIndices[i])
 			for j:=0 ; j < ownership_erc1155_Non_Fungible_config.TmMerkleTreeDepth; j++{
 				witness.WtPathElements[i][j] = frontend.Variable(request.WtPathElements[i][j])
@@ -135,6 +141,7 @@ func NewHandler(pkPath, vkPath string) gin.HandlerFunc {
 		solver.RegisterHint(primitives.ERC155UniqueIdNative)
 		solver.RegisterHint(primitives.PoseidonNative)
 		solver.RegisterHint(primitives.PoseidonPrivateKeyNative)
+		solver.RegisterHint(primitives.Erc1155CommitmentNative)
 
 		ccs, err := frontend.Compile(ecc.BN254.ScalarField(), r1cs.NewBuilder, &circuitNonFungibleERC1155)
 
