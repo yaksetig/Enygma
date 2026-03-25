@@ -33,7 +33,7 @@ import (
 //
 //	Step 1 — deposit: Alice deposits NFT tokenId=99 (value=1).
 //	Step 2 — transfer: Alice proves ownership and transfers to Bob.
-func TestV2Erc1155NonFungibleOnChain_DepositTransfer(t *testing.T) {
+func TestV2Erc1155NonFungibleOnChain_DepositTransferV2(t *testing.T) {
 	if !chainAvailable() {
 		t.Skip("Hardhat node not running on localhost:8545 — skipping on-chain test")
 	}

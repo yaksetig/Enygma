@@ -12,7 +12,7 @@ references.
 |---|------|-------|---------|--------|
 | [01](./flows/01_deposit.md) | Deposit | ERC20 | None | ✅ |
 | [02](./flows/02_private_mint.md) | Private Mint | ERC20 | privateMint | ✅ |
-| 03 | Transfer (JoinSplit) | ERC20 | joinSplitERC20 | 🔜 |
+| [03](./flows/03_transfer_erc20.md) | Transfer (JoinSplit) | ERC20 | joinSplitERC20 | ✅ |
 | 04 | Withdraw | ERC20 | joinSplitERC20 | 🔜 |
 | 05 | Transfer | ERC721 | ownershipERC721 | 🔜 |
 | 06 | Atomic DVP Swap | ERC721 ↔ ERC20 | ownershipERC721 + joinSplitERC20 | 🔜 |
