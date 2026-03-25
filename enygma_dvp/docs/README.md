@@ -11,17 +11,18 @@ references.
 | # | Flow | Asset | Circuit | Status |
 |---|------|-------|---------|--------|
 | [01](./flows/01_deposit.md) | Deposit | ERC20 | None | ✅ |
-| 02 | Transfer (JoinSplit) | ERC20 | joinSplitERC20 | 🔜 |
-| 03 | Withdraw | ERC20 | joinSplitERC20 | 🔜 |
-| 04 | Transfer | ERC721 | ownershipERC721 | 🔜 |
-| 05 | Atomic DVP Swap | ERC721 ↔ ERC20 | ownershipERC721 + joinSplitERC20 | 🔜 |
-| 06 | Transfer (JoinSplit) | ERC1155 Fungible | erc1155Fungible | 🔜 |
-| 07 | Transfer | ERC1155 Non-Fungible | erc1155NonFungible | 🔜 |
-| 08 | Transfer with Broker | ERC1155 Fungible | erc1155FungibleWithBroker | 🔜 |
-| 09 | Transfer with Auditor | ERC1155 Fungible | erc1155FungibleAuditor | 🔜 |
-| 10 | Transfer with Auditor | ERC1155 Non-Fungible | erc1155NonFungibleAuditor | 🔜 |
-| 11 | Sealed-Bid Auction | ERC721 | auctionInit + auctionBid + ... | 🔜 |
-| 12 | Broker Registration | — | brokerRegistration | 🔜 |
+| [02](./flows/02_private_mint.md) | Private Mint | ERC20 | privateMint | ✅ |
+| 03 | Transfer (JoinSplit) | ERC20 | joinSplitERC20 | 🔜 |
+| 04 | Withdraw | ERC20 | joinSplitERC20 | 🔜 |
+| 05 | Transfer | ERC721 | ownershipERC721 | 🔜 |
+| 06 | Atomic DVP Swap | ERC721 ↔ ERC20 | ownershipERC721 + joinSplitERC20 | 🔜 |
+| 07 | Transfer (JoinSplit) | ERC1155 Fungible | erc1155Fungible | 🔜 |
+| 08 | Transfer | ERC1155 Non-Fungible | erc1155NonFungible | 🔜 |
+| 09 | Transfer with Broker | ERC1155 Fungible | erc1155FungibleWithBroker | 🔜 |
+| 10 | Transfer with Auditor | ERC1155 Fungible | erc1155FungibleAuditor | 🔜 |
+| 11 | Transfer with Auditor | ERC1155 Non-Fungible | erc1155NonFungibleAuditor | 🔜 |
+| 12 | Sealed-Bid Auction | ERC721 | auctionInit + auctionBid + ... | 🔜 |
+| 13 | Broker Registration | — | brokerRegistration | 🔜 |
 
 ---
 
