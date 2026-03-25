@@ -18,18 +18,6 @@ withdrawal_commitment = Poseidon4(uint160(recipient), 0, amount, tokenId)
 
 ---
 
-## Key difference from transfer
-
-|                  | `transferV2` (Flow 03)                    | `withdrawV2` (Flow 04)                          |
-| ---------------- | ----------------------------------------- | ----------------------------------------------- |
-| Output note 0    | Bob's note — encrypted with ML-KEM        | Withdrawal — `Poseidon4(recipient, 0, amt, id)` |
-| Salt for output  | `SaltBToField(saltB)` from Encapsulate    | Fixed `0` (public, no KEM needed)               |
-| Token movement   | None — vault balance unchanged            | Yes — vault sends ERC20 to `recipient`          |
-| Events emitted   | `EncryptedNote` × 2, `Nullifier` × nIn   | `Nullifier` × nIn (no EncryptedNote)            |
-| Recipient scans  | Bob decapsulates ctI to find his note     | Not needed — recipient receives real tokens     |
-
----
-
 ## Circuit
 
 **File:** `gnark_circuits/templates/ERC20.go`
@@ -69,11 +57,11 @@ prover (fixed `salt=0` for output 0), not by a separate circuit.
 
 ## Participants
 
-| Participant  | Role                                                                               |
-| ------------ | ---------------------------------------------------------------------------------- |
-| Alice        | Note holder — spends her note, triggers the withdrawal to the recipient address    |
-| Gnark Server | Generates the Groth16 JoinSplit proof for the withdrawal                           |
-| EnygmaDvp    | Verifies the proof, nullifies Alice's note, transfers ERC20 tokens to recipient    |
+| Participant  | Role                                                                            |
+| ------------ | ------------------------------------------------------------------------------- |
+| Alice        | Note holder — spends her note, triggers the withdrawal to the recipient address |
+| Gnark Server | Generates the Groth16 JoinSplit proof for the withdrawal                        |
+| EnygmaDvp    | Verifies the proof, nullifies Alice's note, transfers ERC20 tokens to recipient |
 
 ---
 
@@ -91,7 +79,7 @@ sequenceDiagram
         Alice->>Alice: GetNullifier(sk_alice, leafIndex=1)
         Note over Alice: nullifier = Poseidon2(sk_alice, 1) = 9182736450...
 
-        Alice->>Alice: Erc20CommitmentV2(uint160(recipient), 0, amount=50, tokenId=0)
+        Alice->>Alice: cmt(uint160(recipient), 0, amount=50, tokenId=0)
         Note over Alice: withdrawal_cmt = 5647382910...
         Note over Alice: salt=0 (public — no KEM needed)
     end
@@ -251,13 +239,13 @@ receives actual ERC20 tokens, not another private note.
 
 ## Key references
 
-| Symbol                      | File                                                       | Line |
-| --------------------------- | ---------------------------------------------------------- | ---- |
-| `Erc20WithdrawProof`        | `src/core/prover_erc.go`                                   | 377  |
-| `Erc20CommitmentV2`         | `src/core/utils.go`                                        | 563  |
-| `GetNullifier`              | `src/core/utils.go`                                        | —    |
-| `PostProof`                 | `src/core/prover_gnark.go`                                 | 48   |
-| `Erc20Circuit.Define`       | `gnark_circuits/templates/ERC20.go`                        | 45   |
-| `NewHandler` (joinSplit)    | `gnark_circuits/server/circuits/joinSplitERC20/handler.go` | 25   |
-| `withdrawV2`                | `contracts/core/contracts/vaults/Erc20CoinVault.sol`       | —    |
-| `ContractStatement`         | `src/core/prover_auction.go`                               | —    |
+| Symbol                   | File                                                       | Line |
+| ------------------------ | ---------------------------------------------------------- | ---- |
+| `Erc20WithdrawProof`     | `src/core/prover_erc.go`                                   | 377  |
+| `Erc20CommitmentV2`      | `src/core/utils.go`                                        | 563  |
+| `GetNullifier`           | `src/core/utils.go`                                        | —    |
+| `PostProof`              | `src/core/prover_gnark.go`                                 | 48   |
+| `Erc20Circuit.Define`    | `gnark_circuits/templates/ERC20.go`                        | 45   |
+| `NewHandler` (joinSplit) | `gnark_circuits/server/circuits/joinSplitERC20/handler.go` | 25   |
+| `withdrawV2`             | `contracts/core/contracts/vaults/Erc20CoinVault.sol`       | —    |
+| `ContractStatement`      | `src/core/prover_auction.go`                               | —    |
