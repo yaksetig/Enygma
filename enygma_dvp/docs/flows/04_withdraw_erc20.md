@@ -2,7 +2,7 @@
 
 ## Overview
 
-Withdrawal lets Bob redeem a private note back into real ERC20 tokens sent to an on-chain
+Withdrawal lets Alice redeem a private note back into real ERC20 tokens sent to an on-chain
 recipient address. It is the reverse of deposit: real tokens leave the vault and the input
 note is nullified.
 
@@ -20,13 +20,13 @@ withdrawal_commitment = Poseidon4(uint160(recipient), 0, amount, tokenId)
 
 ## Key difference from transfer
 
-|                  | `transferV2` (Flow 03)                  | `withdrawV2` (Flow 04)                         |
-| ---------------- | --------------------------------------- | ---------------------------------------------- |
-| Output note 0    | Bob's note — encrypted with ML-KEM      | Withdrawal — `Poseidon4(recipient, 0, amt, id)` |
-| Salt for output  | `SaltBToField(saltB)` from Encapsulate  | Fixed `0` (public, no KEM needed)              |
-| Token movement   | None — vault balance unchanged          | Yes — vault sends ERC20 to `recipient`         |
-| Events emitted   | `EncryptedNote` × 2, `Nullifier` × nIn | `Nullifier` × nIn (no EncryptedNote)           |
-| Recipient scans  | Bob decapsulates ctI to find his note   | Not needed — recipient receives real tokens    |
+|                  | `transferV2` (Flow 03)                    | `withdrawV2` (Flow 04)                          |
+| ---------------- | ----------------------------------------- | ----------------------------------------------- |
+| Output note 0    | Bob's note — encrypted with ML-KEM        | Withdrawal — `Poseidon4(recipient, 0, amt, id)` |
+| Salt for output  | `SaltBToField(saltB)` from Encapsulate    | Fixed `0` (public, no KEM needed)               |
+| Token movement   | None — vault balance unchanged            | Yes — vault sends ERC20 to `recipient`          |
+| Events emitted   | `EncryptedNote` × 2, `Nullifier` × nIn   | `Nullifier` × nIn (no EncryptedNote)            |
+| Recipient scans  | Bob decapsulates ctI to find his note     | Not needed — recipient receives real tokens     |
 
 ---
 
@@ -39,41 +39,41 @@ prover (fixed `salt=0` for output 0), not by a separate circuit.
 
 ### Public inputs (statement)
 
-| Index | Name                 | Value                                              |
-| ----- | -------------------- | -------------------------------------------------- |
-| 0     | `StMessage`          | Arbitrary (e.g. `1`)                               |
-| 1     | `StTreeNumber[0]`    | Tree number for Bob's input note                   |
-| 2     | `StMerkleRoots[0]`   | Merkle root proving Bob's note is in the tree      |
-| 3     | `StNullifiers[0]`    | `Poseidon2(sk_bob, leafIndex)`                     |
-| 4     | `StTreeNumber[1]`    | `0` (dummy)                                        |
-| 5     | `StMerkleRoots[1]`   | `0` (dummy)                                        |
-| 6     | `StNullifiers[1]`    | `0` (dummy)                                        |
+| Index | Name                 | Value                                               |
+| ----- | -------------------- | --------------------------------------------------- |
+| 0     | `StMessage`          | Arbitrary (e.g. `1`)                                |
+| 1     | `StTreeNumber[0]`    | Tree number for Alice's input note                  |
+| 2     | `StMerkleRoots[0]`   | Merkle root proving Alice's note is in the tree     |
+| 3     | `StNullifiers[0]`    | `Poseidon2(sk_alice, leafIndex)`                    |
+| 4     | `StTreeNumber[1]`    | `0` (dummy)                                         |
+| 5     | `StMerkleRoots[1]`   | `0` (dummy)                                         |
+| 6     | `StNullifiers[1]`    | `0` (dummy)                                         |
 | 7     | `StCommitmentOut[0]` | `Poseidon4(uint160(recipient), 0, amount, tokenId)` |
-| 8     | `StCommitmentOut[1]` | Dummy zero-value commitment                        |
+| 8     | `StCommitmentOut[1]` | Dummy zero-value commitment                         |
 
 ### Private witnesses
 
-| Name                   | Value                                                      |
-| ---------------------- | ---------------------------------------------------------- |
-| `WtPrivateKeysIn[0]`   | `sk_bob` (spend key of the withdrawer)                     |
-| `WtValuesIn[0]`        | Amount in Bob's note                                       |
-| `WtSaltsIn[0]`         | `saltBField` from when Bob received the note               |
-| `WtPathElements[0][j]` | Merkle sibling hashes for Bob's leaf                       |
-| `WtPathIndices[0]`     | Leaf index of Bob's note                                   |
-| `WtTokenId`            | ERC20 token identifier                                     |
-| `WtSpendPublicKeysOut` | `[uint160(recipient), dummySpendPk]`                       |
-| `WtValuesOut`          | `[amount, 0]`                                              |
-| `WtSaltsOut`           | `[0, 0]` — fixed zero salt for public withdrawal output    |
+| Name                   | Value                                                   |
+| ---------------------- | ------------------------------------------------------- |
+| `WtPrivateKeysIn[0]`   | `sk_alice` (spend key of the withdrawer)                |
+| `WtValuesIn[0]`        | Amount in Alice's note                                  |
+| `WtSaltsIn[0]`         | `saltBField` from when Alice received the note          |
+| `WtPathElements[0][j]` | Merkle sibling hashes for Alice's leaf                  |
+| `WtPathIndices[0]`     | Leaf index of Alice's note                              |
+| `WtTokenId`            | ERC20 token identifier                                  |
+| `WtSpendPublicKeysOut` | `[uint160(recipient), dummySpendPk]`                    |
+| `WtValuesOut`          | `[amount, 0]`                                           |
+| `WtSaltsOut`           | `[0, 0]` — fixed zero salt for public withdrawal output |
 
 ---
 
 ## Participants
 
-| Participant  | Role                                                                             |
-| ------------ | -------------------------------------------------------------------------------- |
-| Bob          | Note holder — spends his note, triggers the withdrawal to the recipient address  |
-| Gnark Server | Generates the Groth16 JoinSplit proof for the withdrawal                         |
-| EnygmaDvp    | Verifies the proof, nullifies Bob's note, transfers ERC20 tokens to recipient    |
+| Participant  | Role                                                                               |
+| ------------ | ---------------------------------------------------------------------------------- |
+| Alice        | Note holder — spends her note, triggers the withdrawal to the recipient address    |
+| Gnark Server | Generates the Groth16 JoinSplit proof for the withdrawal                           |
+| EnygmaDvp    | Verifies the proof, nullifies Alice's note, transfers ERC20 tokens to recipient    |
 
 ---
 
@@ -81,41 +81,41 @@ prover (fixed `salt=0` for output 0), not by a separate circuit.
 
 ```mermaid
 sequenceDiagram
-    participant Bob
+    participant Alice
     participant Gnark as Gnark Server
     participant DVP as EnygmaDvp
 
     rect rgb(220, 235, 255)
-        Note over Bob: Step 1 — Prepare withdrawal off-chain
+        Note over Alice: Step 1 — Prepare withdrawal off-chain
 
-        Bob->>Bob: GetNullifier(sk_bob, leafIndex=1)
-        Note over Bob: nullifier = Poseidon2(sk_bob, 1) = 9182736450...
+        Alice->>Alice: GetNullifier(sk_alice, leafIndex=1)
+        Note over Alice: nullifier = Poseidon2(sk_alice, 1) = 9182736450...
 
-        Bob->>Bob: Erc20CommitmentV2(uint160(recipient), 0, amount=50, tokenId=0)
-        Note over Bob: withdrawal_cmt = 5647382910...
-        Note over Bob: salt=0 (public — no KEM needed)
+        Alice->>Alice: Erc20CommitmentV2(uint160(recipient), 0, amount=50, tokenId=0)
+        Note over Alice: withdrawal_cmt = 5647382910...
+        Note over Alice: salt=0 (public — no KEM needed)
     end
 
     rect rgb(220, 255, 220)
-        Note over Bob,Gnark: Step 2 — Generate ZK proof
+        Note over Alice,Gnark: Step 2 — Generate ZK proof
 
-        Bob->>Gnark: POST /proof/joinSplitERC20
+        Alice->>Gnark: POST /proof/joinSplitERC20
         Note over Gnark: public: msg=1, tree0=0, root0=8273..., null0=9182..., tree1=0, root1=0, null1=0, cmt0=5647..., cmt1=dummy
-        Note over Gnark: private: sk_bob, value_in=50, salt_in=saltBField, path, tokenId=0, recipient, dummy, val_out=[50,0], salt_out=[0,0]
-        Note over Gnark: assert Poseidon4(pk_bob, saltBField, 50, 0) == commitment_in
+        Note over Gnark: private: sk_alice, value_in=50, salt_in=saltBField, path, tokenId=0, recipient, dummy, val_out=[50,0], salt_out=[0,0]
+        Note over Gnark: assert Poseidon4(pk_alice, saltBField, 50, 0) == commitment_in
         Note over Gnark: assert MerkleProof(commitment_in, path) == root0
-        Note over Gnark: assert Poseidon2(sk_bob, 1) == 9182...
+        Note over Gnark: assert Poseidon2(sk_alice, 1) == 9182...
         Note over Gnark: assert Poseidon4(uint160(recipient), 0, 50, 0) == 5647...
         Note over Gnark: assert 50 == 50 + 0
 
-        Gnark-->>Bob: proof = [Ax,Ay,Bx1,Bx0,By1,By0,Cx,Cy]
-        Gnark-->>Bob: statement = [1, 0, 8273..., 9182..., 0, 0, 0, 5647..., dummy]
+        Gnark-->>Alice: proof = [Ax,Ay,Bx1,Bx0,By1,By0,Cx,Cy]
+        Gnark-->>Alice: statement = [1, 0, 8273..., 9182..., 0, 0, 0, 5647..., dummy]
     end
 
     rect rgb(255, 240, 220)
-        Note over Bob,DVP: Step 3 — Submit on-chain
+        Note over Alice,DVP: Step 3 — Submit on-chain
 
-        Bob->>DVP: withdrawV2([amount=50, tokenId=0], recipientAddr, receipt)
+        Alice->>DVP: withdrawV2([amount=50, tokenId=0], recipientAddr, receipt)
         Note over DVP: IVerifier.verifyProof(VK_ID_ERC20_JOINSPLIT, proof, statement)
         Note over DVP: isValidRoot(tree0, root0) ✓
         Note over DVP: isValidNullifier(tree0, null0) ✓
@@ -123,7 +123,7 @@ sequenceDiagram
         Note over DVP: setNullifier(tree0, 9182...)
         Note over DVP: ERC20.transfer(recipient, 50)
 
-        DVP-->>Bob: emit Nullifier(vaultId, tree0, 9182...)
+        DVP-->>Alice: emit Nullifier(vaultId, tree0, 9182...)
     end
 ```
 
@@ -135,11 +135,11 @@ sequenceDiagram
 
 **`Erc20WithdrawProof()` — `src/core/prover_erc.go:377`**
 
-**1.1 — Compute nullifier for Bob's input note**
+**1.1 — Compute nullifier for Alice's input note**
 
 ```
-GetNullifier(sk_bob, leafIndex)                src/core/utils.go
-  poseidon.Hash([sk_bob, leafIndex])
+GetNullifier(sk_alice, leafIndex)                src/core/utils.go
+  poseidon.Hash([sk_alice, leafIndex])
   → nullifier = 9182736450...
 ```
 
@@ -179,7 +179,7 @@ POST http://localhost:8081/proof/joinSplitERC20
   "StMerkleRoots":        ["8273...", "0"],
   "StNullifiers":         ["9182...", "0"],
   "StCommitmentOut":      ["5647...", "dummy_cmt"],
-  "WtPrivateKeysIn":      ["sk_bob", "0"],
+  "WtPrivateKeysIn":      ["sk_alice", "0"],
   "WtValuesIn":           ["50", "0"],
   "WtSaltsIn":            ["saltBField", "0"],
   "WtPathElements":       [[...8 siblings...], [...zeros...]],
@@ -245,7 +245,7 @@ receives actual ERC20 tokens, not another private note.
 - **No `EncryptedNote` event** — the output is public; no scanning needed.
 - **No KEM** — `salt=0` for the withdrawal output; no `Encapsulate` / `Decapsulate`.
 - **No change note** — the dummy second output has zero value and is unspendable.
-  If Bob wants partial withdrawal he must transfer first, then withdraw.
+  If Alice wants partial withdrawal she must transfer first, then withdraw.
 
 ---
 
