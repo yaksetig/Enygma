@@ -29,12 +29,14 @@ type ERC1155NonFungibleAuditorRequest struct {
 
 	WtPrivateKeysIn      		[1]string 		`json:"wtPrivateKeysIn" binding:"required,len=1""`
 	WtValues      				[1]string 		`json:"wtValues" binding:"required,len=1""`
+	WtSaltsIn                  [1]string      `json:"wtSaltsIn" binding:"required,len=1"`
 	WtPathElements				[1][8]string 	`json:"wtPathElements" binding:"required,len=1,dive,len=8"`
 	WtPathIndices               [1]string 		`json:"wtPathIndices" binding:"required,len=1""`
 	WtErc1155TokenIds            [1]string 		`json:"wtErc1155TokenIds" binding:"required,len=1""`
 	WtErc1155ContractAddress	string 			`json:"wtErc1155ContractAddress" binding:"required"`
 
 	WtPublicKeysOut      		[1]string 		`json:"wtPublicKeysOut" binding:"required,len=1""`
+	WtSaltsOut                 [1]string      `json:"wtSaltsOut" binding:"required,len=1"`
 
 	WtAssetGroupPathElements	[1][8]string 	`json:"wtAssetGroupPathElements" binding:"required,len=1,dive,len=8"`
 	WtAssetGroupPathIndices     [1]string 		`json:"wtAssetGroupPathIndices" binding:"required,len=1""`

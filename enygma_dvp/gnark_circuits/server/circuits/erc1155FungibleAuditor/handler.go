@@ -61,14 +61,16 @@ func NewHandler(pkPath, vkPath string) gin.HandlerFunc {
 			StMerkleRoots:    			make([]frontend.Variable, erc1155_auditor_join_split.TmNInputs),
 			StNullifiers:  				make([]frontend.Variable, erc1155_auditor_join_split.TmNInputs),
 			StCommitmentOut:  			make([]frontend.Variable, erc1155_auditor_join_split.TmMOutputs),
-		
+
 			WtPrivateKeysIn: 			make([]frontend.Variable, erc1155_auditor_join_split.TmNInputs),
 			WtValuesIn:					make([]frontend.Variable, erc1155_auditor_join_split.TmNInputs),
+			WtSaltsIn:					make([]frontend.Variable, erc1155_auditor_join_split.TmNInputs),
 			WtPathElements:				make([][]frontend.Variable, erc1155_auditor_join_split.TmNInputs),
-			
+
 			WtPathIndices:				make([]frontend.Variable, erc1155_auditor_join_split.TmNInputs),
 			WtPublicKeysOut:    		make([]frontend.Variable, erc1155_auditor_join_split.TmMOutputs),
 			WtValuesOut:    			make([]frontend.Variable, erc1155_auditor_join_split.TmMOutputs),
+			WtSaltsOut:					make([]frontend.Variable, erc1155_auditor_join_split.TmMOutputs),
 			WtAssetGroupPathElements: 	make([]frontend.Variable, erc1155_auditor_join_split.TmAssetGroupMerkleTree),
 
 			StAuditorEncryptedValues: make([]frontend.Variable, encLength),
@@ -87,14 +89,16 @@ func NewHandler(pkPath, vkPath string) gin.HandlerFunc {
 			StMerkleRoots:    			make([]frontend.Variable, erc1155_auditor_join_split.TmNInputs),
 			StNullifiers:  				make([]frontend.Variable, erc1155_auditor_join_split.TmNInputs),
 			StCommitmentOut:  			make([]frontend.Variable, erc1155_auditor_join_split.TmMOutputs),
-		
+
 			WtPrivateKeysIn: 			make([]frontend.Variable, erc1155_auditor_join_split.TmNInputs),
 			WtValuesIn:					make([]frontend.Variable, erc1155_auditor_join_split.TmNInputs),
+			WtSaltsIn:					make([]frontend.Variable, erc1155_auditor_join_split.TmNInputs),
 			WtPathElements:				make([][]frontend.Variable, erc1155_auditor_join_split.TmNInputs),
-			
+
 			WtPathIndices:				make([]frontend.Variable, erc1155_auditor_join_split.TmNInputs),
 			WtPublicKeysOut:    		make([]frontend.Variable, erc1155_auditor_join_split.TmMOutputs),
 			WtValuesOut:    			make([]frontend.Variable, erc1155_auditor_join_split.TmMOutputs),
+			WtSaltsOut:					make([]frontend.Variable, erc1155_auditor_join_split.TmMOutputs),
 			WtAssetGroupPathElements: 	make([]frontend.Variable, erc1155_auditor_join_split.TmAssetGroupMerkleTree),
 
 			StAuditorEncryptedValues: make([]frontend.Variable, encLength),
@@ -122,6 +126,7 @@ func NewHandler(pkPath, vkPath string) gin.HandlerFunc {
 
 			witness.WtPrivateKeysIn[i] = frontend.Variable(request.WtPrivateKeysIn[i])
 			witness.WtValuesIn[i] = frontend.Variable(request.WtValuesIn[i])
+			witness.WtSaltsIn[i] = frontend.Variable(request.WtSaltsIn[i])
 			witness.WtPathIndices[i] = frontend.Variable(request.WtPathIndices[i])
 			
 	
@@ -132,9 +137,9 @@ func NewHandler(pkPath, vkPath string) gin.HandlerFunc {
 
 		for i:=0; i<erc1155_auditor_join_split.TmMOutputs;i++{
 			witness.StCommitmentOut[i] = frontend.Variable(request.StCommitmentOut[i])
-			witness.WtPublicKeysOut[i] = frontend.Variable(request.WtPublicKeysOut[i])	
-			witness.WtValuesOut[i] = frontend.Variable(request.WtValuesOut[i])		
-
+			witness.WtPublicKeysOut[i] = frontend.Variable(request.WtPublicKeysOut[i])
+			witness.WtValuesOut[i] = frontend.Variable(request.WtValuesOut[i])
+			witness.WtSaltsOut[i] = frontend.Variable(request.WtSaltsOut[i])
 		}
 
 		for i:=0; i<erc1155_auditor_join_split.TmAssetGroupMerkleTree;i++{
@@ -156,6 +161,7 @@ func NewHandler(pkPath, vkPath string) gin.HandlerFunc {
 		solver.RegisterHint(primitives.ERC155UniqueIdNative)
 		solver.RegisterHint(primitives.PoseidonNative)
 		solver.RegisterHint(primitives.PoseidonPrivateKeyNative)
+		solver.RegisterHint(primitives.Erc1155CommitmentNative)
 
 
 		ccs, err := frontend.Compile(ecc.BN254.ScalarField(), r1cs.NewBuilder, &circuitJoinSplitERC1155Auditor)

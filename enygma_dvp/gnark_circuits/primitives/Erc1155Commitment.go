@@ -2,11 +2,14 @@ package primitives
 
 import (
 	"github.com/consensys/gnark/frontend"
-	pos "gnark_server/poseidon"
 )
 
-func Erc1155Commitment(api frontend.API, contractAddress, tokenId, amount, publicKey, salt frontend.Variable) frontend.Variable {
-	commit := pos.Poseidon(api, []frontend.Variable{contractAddress, tokenId, amount, publicKey, salt})
-	out, _ := api.NewHint(ModHint, 2, commit)
-	return out[0]
+// Erc1155Commitment computes the ERC1155 commitment using the unified V2 formula:
+//
+//	C = Poseidon(pk_spend, salt, amount, tokenId)
+//
+// contractAddress is no longer part of the commitment; it is handled separately
+// via Erc1155UniqueId2 in the asset-group Merkle proof.
+func Erc1155Commitment(api frontend.API, tokenId, amount, publicKey, salt frontend.Variable) frontend.Variable {
+	return Erc20CommitmentV2(api, publicKey, salt, amount, tokenId)
 }

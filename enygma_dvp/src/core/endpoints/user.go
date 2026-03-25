@@ -534,6 +534,7 @@ func WithdrawERC1155(
 			[]*big.Int{wtSaltIn},
 			[]*big.Int{amount},
 			[]core.KeyPair{outKey},
+			[][]byte{nil}, // withdrawal: no recipient view key needed (output is public)
 			merkleDepth,
 			[]*core.MerkleProof{merkleProof},
 			[]*big.Int{stTreeNumber},
@@ -549,6 +550,7 @@ func WithdrawERC1155(
 			withdrawKey,
 			wtSaltIn,
 			outKey,
+			nil, // withdrawal: no recipient view key needed (output is public)
 			merkleDepth,
 			merkleProof,
 			stTreeNumber,
@@ -615,6 +617,7 @@ func WithdrawErc721(
 		withdrawKey,
 		wtSaltIn,
 		outKey,
+		nil, // withdrawal: no recipient view key needed (output is public)
 		merkleDepth,
 		merkleProof,
 		stTreeNumber,
@@ -881,6 +884,7 @@ func GenerateOwnershipProof(
 		keyIn,
 		wtSaltIn,
 		keyOut,
+		nil, // legacy wrapper: caller must use direct API for non-interactive delivery
 		merkleDepth,
 		merkleProof,
 		stTreeNumber,
@@ -919,6 +923,7 @@ func GenerateSingleErc1155Proof(
 			[]*big.Int{wtSaltIn},
 			[]*big.Int{amountOrOne},
 			[]core.KeyPair{keyOut},
+			[][]byte{nil}, // legacy wrapper: caller must use direct API for non-interactive delivery
 			merkleDepth,
 			[]*core.MerkleProof{merkleProof},
 			[]*big.Int{stTreeNumber},
@@ -935,6 +940,7 @@ func GenerateSingleErc1155Proof(
 		keyIn,
 		wtSaltIn,
 		keyOut,
+		nil, // legacy wrapper: caller must use direct API for non-interactive delivery
 		merkleDepth,
 		merkleProof,
 		stTreeNumber,
@@ -966,6 +972,8 @@ func GenerateErc1155JoinSplitProof(
 	assetGroupTreeNumber *big.Int,
 	assetGroupMerkleProof *core.MerkleProof,
 ) (*core.ProofResult, error) {
+	// Build nil encap key slice — legacy wrapper, caller must use direct API for non-interactive delivery
+	nilEncapKeys := make([][]byte, len(keysOut))
 	return gnarkClient.Erc1155FungibleJoinSplitProof(
 		stMessage,
 		wtValuesIn,
@@ -973,6 +981,7 @@ func GenerateErc1155JoinSplitProof(
 		wtSaltsIn,
 		wtValuesOut,
 		keysOut,
+		nilEncapKeys,
 		merkleDepth,
 		merkleProofs,
 		stTreeNumbers,

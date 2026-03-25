@@ -325,8 +325,7 @@ contract Erc1155CoinVault is AbstractCoinVault, ERC1155Holder {
             3 *
             receipt.numberOfInputs +
             receipt.numberOfOutputs;
-        // uint256 expectedBrokerSize = 5 + 3 * receipt.numberOfInputs + receipt.numberOfOutputs;
-        // size broker-enabled statement: 3 + 3 * numberOfInputs + numberOfOutputs + 4
+        uint256 expectedBrokerSize = 5 + 3 * receipt.numberOfInputs + receipt.numberOfOutputs;
 
         uint256 expectedFungibleAuditorSize = expectedNormalSize +
             5 +
@@ -363,22 +362,17 @@ contract Erc1155CoinVault is AbstractCoinVault, ERC1155Holder {
             }
         } else if (receipt.statement.length == expectedBatchSize) {
             receiptType = 2;
-        }
-        // else if(receipt.statement.length == expectedBrokerSize){
-        //     receiptType = 3;
+        } else if (receipt.statement.length == expectedBrokerSize) {
+            receiptType = 3;
 
-        //     // TODO:: when adding new broker circuits,
-        //     // you need to add the numberOfInputs and outputs here
-        //     if(receipt.numberOfInputs != 2){
-        //         revert InvalidNumberOfInputs();
-        //     }
+            if (receipt.numberOfInputs != 2) {
+                revert InvalidNumberOfInputs();
+            }
 
-        //     if(receipt.numberOfOutputs != 3){
-        //         revert InvalidNumberOfOutputs();
-        //     }
-
-        // }
-        else if (receipt.statement.length == expectedFungibleAuditorSize) {
+            if (receipt.numberOfOutputs != 3) {
+                revert InvalidNumberOfOutputs();
+            }
+        } else if (receipt.statement.length == expectedFungibleAuditorSize) {
             receiptType = 4;
         } else if (receipt.statement.length == expectedNonFungibleAuditorSize) {
             receiptType = 5;

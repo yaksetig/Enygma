@@ -243,6 +243,74 @@ func SaltBToField(saltB []byte) *big.Int {
 
 // --- AEAD payload encryption ---
 
+// GenerateRandomValue generates cryptographically random bytes of the given size.
+// It is a thin wrapper around crypto/rand.Read.
+func GenerateRandomValue(size int) ([]byte, error) {
+	b := make([]byte, size)
+	if _, err := rand.Read(b); err != nil {
+		return nil, fmt.Errorf("failed to generate random bytes: %w", err)
+	}
+	return b, nil
+}
+
+// EncryptSwapPayload encrypts the ZkDvp swap payload (tokenId || amount || saltStar)
+// using ChaCha20-Poly1305 keyed by saltB (the ML-KEM shared secret).
+//
+//   - tokenId, amount  — details of the asset Alice will receive (output commitment C')
+//   - saltStar         — the random salt used in C' = Poseidon(aliceSpendPk, SaltBToField(saltStar), amount, tokenId)
+//
+// Bob decrypts this to verify that C' is well-formed before completing the swap.
+// Layout on wire: [ 12-byte nonce | ciphertext | 16-byte Poly1305 tag ]
+func EncryptSwapPayload(saltB []byte, tokenId, amount *big.Int, saltStar []byte) ([]byte, error) {
+	aead, err := chacha20poly1305.New(saltB)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create AEAD cipher: %w", err)
+	}
+
+	// plaintext = tokenId (32 bytes) || amount (32 bytes) || saltStar (len(saltStar) bytes)
+	plaintext := make([]byte, 64+len(saltStar))
+	tokenId.FillBytes(plaintext[:32])
+	amount.FillBytes(plaintext[32:64])
+	copy(plaintext[64:], saltStar)
+
+	nonce := make([]byte, aead.NonceSize()) // 12 bytes
+	if _, err := rand.Read(nonce); err != nil {
+		return nil, fmt.Errorf("failed to generate nonce: %w", err)
+	}
+
+	return aead.Seal(nonce, nonce, plaintext, nil), nil
+}
+
+// DecryptSwapPayload decrypts a ZkDvp swap ciphertext produced by EncryptSwapPayload.
+// Returns tokenId, amount, and saltStar. A non-nil error means the payload is not
+// addressed to this key (authentication failure or wrong key).
+func DecryptSwapPayload(saltB, ciphertextII []byte) (tokenId, amount *big.Int, saltStar []byte, err error) {
+	aead, err := chacha20poly1305.New(saltB)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to create AEAD cipher: %w", err)
+	}
+
+	nonceSize := aead.NonceSize()
+	if len(ciphertextII) < nonceSize {
+		return nil, nil, nil, fmt.Errorf("ciphertext too short")
+	}
+
+	nonce, ct := ciphertextII[:nonceSize], ciphertextII[nonceSize:]
+	plaintext, err := aead.Open(nil, nonce, ct, nil)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("decryption failed: payload not addressed to this key")
+	}
+
+	if len(plaintext) < 64 {
+		return nil, nil, nil, fmt.Errorf("unexpected plaintext length: %d", len(plaintext))
+	}
+
+	tokenId = new(big.Int).SetBytes(plaintext[:32])
+	amount = new(big.Int).SetBytes(plaintext[32:64])
+	saltStar = plaintext[64:]
+	return tokenId, amount, saltStar, nil
+}
+
 // EncryptPayload authenticates and encrypts tokenId||amount using the 32-byte
 // saltB from ML-KEM as the ChaCha20-Poly1305 key (ciphertextII).
 // Layout on wire: [ 12-byte nonce | ciphertext | 16-byte Poly1305 tag ]
@@ -359,14 +427,69 @@ func BabyDecrypt(c1, c2 *babyjub.Point, privateKey *big.Int, allowedRange *big.I
 
 // BabyKeyPair generates a BabyJubJub key pair
 func BabyKeyPair() (privateKey *big.Int, publicKey *babyjub.Point, err error) {
-	privateKey, err = RandomInField()
-	if err != nil {
-		return nil, nil, err
+	for {
+		privateKey, err = RandomInField()
+		if err != nil {
+			return nil, nil, err
+		}
+		privateKey.Mod(privateKey, babyjub.SubOrder)
+		if privateKey.Sign() != 0 {
+			break
+		}
 	}
-	privateKey.Mod(privateKey, babyjub.SubOrder)
-
 	publicKey = mulPointEscalar(babyjub.B8, privateKey)
 	return privateKey, publicKey, nil
+}
+
+// AuditorKeyPair holds a BabyJubJub key pair used for auditor encryption.
+// The public key (X, Y) is passed to the circuit as StAuditorPublickey.
+// The private key is used off-chain to decrypt auditor-encrypted values.
+type AuditorKeyPair struct {
+	PrivateKey *big.Int
+	PublicKeyX *big.Int
+	PublicKeyY *big.Int
+}
+
+// NewAuditorKeyPair generates a fresh BabyJubJub key pair for auditor encryption.
+func NewAuditorKeyPair() (*AuditorKeyPair, error) {
+	sk, pk, err := BabyKeyPair()
+	if err != nil {
+		return nil, err
+	}
+	return &AuditorKeyPair{
+		PrivateKey: sk,
+		PublicKeyX: pk.X,
+		PublicKeyY: pk.Y,
+	}, nil
+}
+
+// RandomAuditorScalar returns a random scalar in (0, BASE_POINT_ORDER) for use
+// as the auditor's random blinding factor (WtAuditorRandom in the circuit).
+func RandomAuditorScalar() (*big.Int, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return nil, fmt.Errorf("failed to generate random bytes: %w", err)
+	}
+	r := new(big.Int).SetBytes(b)
+	r.Mod(r, BASE_POINT_ORDER)
+	// Ensure non-zero (circuit requires random > 0)
+	if r.Sign() == 0 {
+		r.SetInt64(1)
+	}
+	return r, nil
+}
+
+// AuditorEncKey computes the shared encryption key for Poseidon encryption:
+//
+//	authKey = mulPointEscalar(auditorPublicKey, random)
+//
+// Returns (authKey.X, authKey.Y) — used as the key for NativePoseidonEncrypt / PoseidonDecrypt.
+// StAuditorAuthKey in the circuit is informational; the circuit re-derives it from
+// StAuditorPublickey and WtAuditorRandom.
+func AuditorEncKey(pubKeyX, pubKeyY, random *big.Int) (*big.Int, *big.Int) {
+	pk := &babyjub.Point{X: pubKeyX, Y: pubKeyY}
+	auth := mulPointEscalar(pk, random)
+	return auth.X, auth.Y
 }
 
 // --- Poseidon encryption (maci-crypto compatible) ---
@@ -446,9 +569,13 @@ func Erc721UniqueId(contractAddress, tokenId *big.Int) (*big.Int, error) {
 	return poseidon.Hash([]*big.Int{contractAddress, tokenId})
 }
 
-// Erc721Commitment computes a single-hash ERC721 commitment
-func Erc721Commitment(contractAddress, tokenId, publicKey, salt *big.Int) (*big.Int, error) {
-	return poseidon.Hash([]*big.Int{contractAddress, tokenId, publicKey, salt})
+// Erc721Commitment computes the ERC721 commitment using the unified V2 formula:
+//
+//	C = Poseidon(pk_spend, salt, 1, tokenId)
+//
+// The amount is always 1 for non-fungible tokens.
+func Erc721Commitment(tokenId, publicKey, salt *big.Int) (*big.Int, error) {
+	return Erc20CommitmentV2(publicKey, salt, big.NewInt(1), tokenId)
 }
 
 // Erc1155UniqueId computes the unique ID for an ERC-1155 token commitment
@@ -460,9 +587,14 @@ func Erc1155UniqueId(contractAddress, tokenId, amount *big.Int) (*big.Int, error
 	return poseidon.Hash([]*big.Int{uid1, amount})
 }
 
-// Erc1155Commitment computes a single-hash ERC1155 commitment
-func Erc1155Commitment(contractAddress, tokenId, amount, publicKey, salt *big.Int) (*big.Int, error) {
-	return poseidon.Hash([]*big.Int{contractAddress, tokenId, amount, publicKey, salt})
+// Erc1155Commitment computes the ERC1155 commitment using the unified V2 formula:
+//
+//	C = Poseidon(pk_spend, salt, amount, tokenId)
+//
+// contractAddress is no longer part of the commitment; it is handled separately
+// via the asset-group Merkle proof.
+func Erc1155Commitment(tokenId, amount, publicKey, salt *big.Int) (*big.Int, error) {
+	return Erc20CommitmentV2(publicKey, salt, amount, tokenId)
 }
 
 // --- Hash functions ---

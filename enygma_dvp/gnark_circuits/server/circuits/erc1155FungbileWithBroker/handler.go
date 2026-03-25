@@ -56,14 +56,16 @@ func NewHandler(pkPath, vkPath string) gin.HandlerFunc {
 			StMerkleRoots:    			make([]frontend.Variable, erc1155_join_split_with_broker.NInputs),
 			StNullifiers:  				make([]frontend.Variable, erc1155_join_split_with_broker.NInputs),
 			StCommitmentOut:  			make([]frontend.Variable, erc1155_join_split_with_broker.MOutputs),
-		
+
 			WtPrivateKeys: 				make([]frontend.Variable, erc1155_join_split_with_broker.NInputs),
 			WtValuesIn:					make([]frontend.Variable, erc1155_join_split_with_broker.NInputs),
+			WtSaltsIn:					make([]frontend.Variable, erc1155_join_split_with_broker.NInputs),
 			WtPathElements:				make([][]frontend.Variable, erc1155_join_split_with_broker.NInputs),
-			
+
 			WtPathIndices:				make([]frontend.Variable, erc1155_join_split_with_broker.NInputs),
 			WtRecipientPk:    			make([]frontend.Variable, erc1155_join_split_with_broker.MOutputs),
 			WtValuesOut:    			make([]frontend.Variable, erc1155_join_split_with_broker.MOutputs),
+			WtSaltsOut:					make([]frontend.Variable, erc1155_join_split_with_broker.MOutputs),
 			WtAssetGroupPathElements: 	make([]frontend.Variable, erc1155_join_split_with_broker.AssetGroupMerkleTreeDepth),
 		}
 
@@ -80,14 +82,16 @@ func NewHandler(pkPath, vkPath string) gin.HandlerFunc {
 			StMerkleRoots:    			make([]frontend.Variable, erc1155_join_split_with_broker.NInputs),
 			StNullifiers:  				make([]frontend.Variable, erc1155_join_split_with_broker.NInputs),
 			StCommitmentOut:  			make([]frontend.Variable, erc1155_join_split_with_broker.MOutputs),
-		
+
 			WtPrivateKeys: 				make([]frontend.Variable, erc1155_join_split_with_broker.NInputs),
 			WtValuesIn:					make([]frontend.Variable, erc1155_join_split_with_broker.NInputs),
+			WtSaltsIn:					make([]frontend.Variable, erc1155_join_split_with_broker.NInputs),
 			WtPathElements:				make([][]frontend.Variable, erc1155_join_split_with_broker.NInputs),
-			
+
 			WtPathIndices:				make([]frontend.Variable, erc1155_join_split_with_broker.NInputs),
 			WtRecipientPk:    			make([]frontend.Variable, erc1155_join_split_with_broker.MOutputs),
 			WtValuesOut:    			make([]frontend.Variable, erc1155_join_split_with_broker.MOutputs),
+			WtSaltsOut:					make([]frontend.Variable, erc1155_join_split_with_broker.MOutputs),
 			WtAssetGroupPathElements: 	make([]frontend.Variable, erc1155_join_split_with_broker.AssetGroupMerkleTreeDepth),
 		}
 
@@ -113,6 +117,7 @@ func NewHandler(pkPath, vkPath string) gin.HandlerFunc {
 
 			witness.WtPrivateKeys[i] = frontend.Variable(request.WtPrivateKeys[i])
 			witness.WtValuesIn[i] = frontend.Variable(request.WtValuesIn[i])
+			witness.WtSaltsIn[i] = frontend.Variable(request.WtSaltsIn[i])
 			witness.WtPathIndices[i] = frontend.Variable(request.WtPathIndices[i])
 			
 	
@@ -123,9 +128,9 @@ func NewHandler(pkPath, vkPath string) gin.HandlerFunc {
 
 		for i:=0; i<erc1155_join_split_with_broker.MOutputs;i++{
 			witness.StCommitmentOut[i] = frontend.Variable(request.StCommitmentOut[i])
-			witness.WtRecipientPk[i] = frontend.Variable(request.WtRecipientPk[i])	
-			witness.WtValuesOut[i] = frontend.Variable(request.WtValuesOut[i])		
-
+			witness.WtRecipientPk[i] = frontend.Variable(request.WtRecipientPk[i])
+			witness.WtValuesOut[i] = frontend.Variable(request.WtValuesOut[i])
+			witness.WtSaltsOut[i] = frontend.Variable(request.WtSaltsOut[i])
 		}
 
 		for i:=0; i<erc1155_join_split_with_broker.AssetGroupMerkleTreeDepth;i++{
@@ -138,6 +143,7 @@ func NewHandler(pkPath, vkPath string) gin.HandlerFunc {
 		solver.RegisterHint(primitives.ModHint)
 		solver.RegisterHint(primitives.ERC155UniqueIdNative)
 		solver.RegisterHint(primitives.PoseidonNative)
+		solver.RegisterHint(primitives.Erc1155CommitmentNative)
 
 		ccs, err := frontend.Compile(ecc.BN254.ScalarField(), r1cs.NewBuilder, &circuitJoinSplitERC1155WithBroker)
 

@@ -70,7 +70,7 @@ func (circuit *ERC1155NonFungibleCircuit) Define(api frontend.API) error{
 	
 		api.AssertIsEqual(api.Mul(Diff2, Enable), 0)
 		
-		commitment := primitives.Erc1155Commitment(api, circuit.WtErc1155ContractAddress, circuit.WtErc1155TokenId[i], circuit.WtValues[i], publicKey, circuit.WtSaltsIn[i])
+		commitment := primitives.Erc1155Commitment(api, circuit.WtErc1155TokenId[i], circuit.WtValues[i], publicKey, circuit.WtSaltsIn[i])
 
 		merklePathElement := make([]frontend.Variable,circuit.Config.TmMerkleTreeDepth)
 		for j:=0 ; j< circuit.Config.TmMerkleTreeDepth;j++{
@@ -82,7 +82,7 @@ func (circuit *ERC1155NonFungibleCircuit) Define(api frontend.API) error{
 
 		api.AssertIsEqual(api.Mul(Diff3, Enable), 0)
 
-		commitment2 := primitives.Erc1155Commitment(api, circuit.WtErc1155ContractAddress, circuit.WtErc1155TokenId[i], circuit.WtValues[i], circuit.WtPublicKeysOut[i], circuit.WtSaltsOut[i])
+		commitment2 := primitives.Erc1155Commitment(api, circuit.WtErc1155TokenId[i], circuit.WtValues[i], circuit.WtPublicKeysOut[i], circuit.WtSaltsOut[i])
 
 		Diff4  := api.Sub(circuit.StCommitmentOut[i], commitment2)
 		

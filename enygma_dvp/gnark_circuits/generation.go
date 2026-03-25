@@ -18,6 +18,7 @@ func GenerationVkPk (){
 	solver.RegisterHint(primitives.ERC155UniqueIdNative)
 	solver.RegisterHint(primitives.PoseidonNative)
 	solver.RegisterHint(primitives.PoseidonPrivateKeyNative)
+	solver.RegisterHint(primitives.Erc1155CommitmentNative)
 
 
 	

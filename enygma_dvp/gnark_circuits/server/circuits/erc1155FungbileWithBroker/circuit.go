@@ -30,6 +30,9 @@ type ERC1155FungibleWithBrokerRequest struct {
 
 	WtAssetGroupPathElements      [8]string 			`json:"wtAssetGroupPathElements" binding:"required,len=8""`
 	WtAssetGroupPathIndices       		   string      `json:"wtAssetGroupPathIndices" binding:"required"`
+
+	WtSaltsIn  [2]string `json:"wtSaltsIn" binding:"required,len=2"`
+	WtSaltsOut [3]string `json:"wtSaltsOut" binding:"required,len=3"`
 }
 
 type ERC1155FungibleWithBrokerOutput struct{

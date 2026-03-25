@@ -23,6 +23,7 @@ type ERC1155FungibleAuditorRequest struct {
 
 	WtPrivateKeysIn      [2]string 		    `json:"wtPrivateKeysIn" binding:"required,len=2""`
 	WtValuesIn      	 [2]string 			`json:"wtValuesIn" binding:"required,len=2""`
+	WtSaltsIn           [2]string          `json:"wtSaltsIn" binding:"required,len=2"`
 	WtPathElements       [2][8]string 		`json:"wtPathElements" binding:"required,len=2,dive,len=8"`
 	WtPathIndices      	 [2]string 			`json:"wtPathIndices" binding:"required,len=2""`
 
@@ -31,6 +32,7 @@ type ERC1155FungibleAuditorRequest struct {
 
 	WtPublicKeysOut      [2]string 			`json:"wtPublicKeysOut" binding:"required,len=2""`
 	WtValuesOut      	 [2]string 			`json:"wtValuesOut" binding:"required,len=2""`
+	WtSaltsOut          [2]string          `json:"wtSaltsOut" binding:"required,len=2"`
 
 	WtAssetGroupPathElements      [8]string 			`json:"wtAssetGroupPathElements" binding:"required,len=8""`
 	WtAssetGroupPathIndices       		   string      `json:"wtAssetGroupPathIndices" binding:"required"`

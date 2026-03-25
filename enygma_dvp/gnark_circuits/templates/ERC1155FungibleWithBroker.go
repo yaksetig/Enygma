@@ -85,7 +85,7 @@ func (circuit *Erc1155FungibleWithBrokerCircuit) Define(api frontend.API) error{
 		nullifier := primitives.Nullifier(api,circuit.WtPrivateKeys[i], circuit.WtPathIndices[i])
 		api.AssertIsEqual(nullifier, circuit.StNullifiers[i])
 
-		commitment := primitives.Erc1155Commitment(api, circuit.WtErc1155ContractAddress, circuit.WtErc1155TokenId, circuit.WtValuesIn[i], publicKey, circuit.WtSaltsIn[i])
+		commitment := primitives.Erc1155Commitment(api, circuit.WtErc1155TokenId, circuit.WtValuesIn[i], publicKey, circuit.WtSaltsIn[i])
 
 		pathElementVar := make([]frontend.Variable, circuit.Config.MerkleTreeDepth)
 		for j:=0 ; j< circuit.Config.MerkleTreeDepth;j++{
@@ -121,7 +121,7 @@ func (circuit *Erc1155FungibleWithBrokerCircuit) Define(api frontend.API) error{
 		isValid3 := cmp.IsLessOrEqual(api, 0,circuit.WtValuesOut[i])
 		api.AssertIsEqual(isValid3, 1)
 
-		commitment := primitives.Erc1155Commitment(api, circuit.WtErc1155ContractAddress, circuit.WtErc1155TokenId, circuit.WtValuesOut[i], circuit.WtRecipientPk[i], circuit.WtSaltsOut[i])
+		commitment := primitives.Erc1155Commitment(api, circuit.WtErc1155TokenId, circuit.WtValuesOut[i], circuit.WtRecipientPk[i], circuit.WtSaltsOut[i])
 
 		api.AssertIsEqual(commitment, circuit.StCommitmentOut[i])
 

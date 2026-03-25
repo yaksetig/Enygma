@@ -87,7 +87,7 @@ func (c *GnarkClient) GnarkProver(circuitInput map[string]interface{}, zkeyPath 
 		resp, err := c.Erc1155NonFungibleProof(circuitInput)
 		return resp, nil, err
 	case strings.Contains(zkeyPath, "JoinSplitErc1155WithAuditor"):
-		resp, err := c.Erc1155FungibleAuditorProof(circuitInput)
+		resp, err := c.Erc1155FungibleAuditorMapProof(circuitInput)
 		return resp, nil, err
 	case strings.Contains(zkeyPath, "JoinSplitErc1155"):
 		resp, err := c.Erc1155FungibleProof(circuitInput)
@@ -204,8 +204,8 @@ func (c *GnarkClient) Erc1155FungibleProof(inputs map[string]interface{}) (*Proo
 	return &ProofResponse{Status: 200, Message: "ok"}, nil
 }
 
-// Erc1155FungibleAuditorProof generates an ERC1155 fungible proof with auditor fields.
-func (c *GnarkClient) Erc1155FungibleAuditorProof(inputs map[string]interface{}) (*ProofResponse, error) {
+// Erc1155FungibleAuditorMapProof generates an ERC1155 fungible proof with auditor fields (map-based).
+func (c *GnarkClient) Erc1155FungibleAuditorMapProof(inputs map[string]interface{}) (*ProofResponse, error) {
 	pathElements := toInterfaceSlice(inputs["wt_pathElements"])
 	split1, split2 := splitIntoTwo(pathElements, 8)
 

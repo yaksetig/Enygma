@@ -545,6 +545,7 @@ func TestErc1155FungibleWithBrokerV1Proof_Success(t *testing.T) {
 		[]*big.Int{big.NewInt(50), big.NewInt(50)},       // saltsIn
 		[]*big.Int{big.NewInt(150), big.NewInt(150)},     // valuesOut
 		keysOut,
+		[][]byte{nil, nil},                                // recipientViewEncapKeys (nil → random salt fallback)
 		merkleDepth,
 		[]*big.Int{big.NewInt(0), big.NewInt(0)},         // treeNumbers
 		[]*core.MerkleProof{makeMerkleProof(merkleDepth), makeMerkleProof(merkleDepth)},

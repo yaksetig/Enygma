@@ -305,9 +305,8 @@ func TestV2Erc20OnChain_DepositTransferWithdraw(t *testing.T) {
 		t.Errorf("EncryptedNote event not found in depositV2 receipt")
 	}
 
-	// Build local Merkle tree — mirrors the on-chain vault tree
-	mt := core.NewMerkleTree(merkleDepth)
-	mt.InsertLeaf(aliceCommitment)
+	// Build Merkle tree from all on-chain vault commitment events (matches on-chain state).
+	mt := loadVaultMerkleTree(t, client, vaultAddr, merkleDepth)
 	aliceProof, err := mt.GenerateProof(aliceCommitment)
 	if err != nil {
 		t.Fatalf("GenerateProof for Alice: %v", err)
@@ -392,11 +391,8 @@ func TestV2Erc20OnChain_DepositTransferWithdraw(t *testing.T) {
 		t.Errorf("EncryptedNote event not found in transferV2 receipt")
 	}
 
-	// Insert BOTH output commitments into the local tree (mirrors on-chain insertLeaves).
-	// Statement indices 7 and 8 (interleaved layout) are the two output commitments.
-	mt.InsertLeaf(bobCommitmentOnChain)
-	dummyTransferCommitment := joinSplitResult.Statement[8]
-	mt.InsertLeaf(dummyTransferCommitment)
+	// Reload the tree from on-chain state after transfer (two new leaves were inserted).
+	mt = loadVaultMerkleTree(t, client, vaultAddr, merkleDepth)
 
 	// ─────────────────────────────────────────────────────────────────────────
 	// Step 3: Bob scans events and verifies his note

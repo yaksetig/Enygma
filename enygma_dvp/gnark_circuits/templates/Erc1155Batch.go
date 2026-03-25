@@ -48,7 +48,7 @@ func (circuit *Erc1155BatchCircuit) Define(api frontend.API) error{
 		Diff   := api.Sub(nullifier, circuit.StNullifiers[i])
 		api.AssertIsEqual(api.Mul(Diff, Enable), 0)
 
-		commitment := primitives.Erc1155Commitment(api, circuit.WtErc1155ContractAddress, circuit.WtErc1155TokenIds[i], circuit.WtValues[i], publicKey, circuit.WtSaltsIn[i])
+		commitment := primitives.Erc1155Commitment(api, circuit.WtErc1155TokenIds[i], circuit.WtValues[i], publicKey, circuit.WtSaltsIn[i])
 
 		var pathElement []frontend.Variable
 		for j:=0 ; j< circuit.Config.TmMerkleTreeDepth;j++{
@@ -59,7 +59,7 @@ func (circuit *Erc1155BatchCircuit) Define(api frontend.API) error{
 		Diff2   := api.Sub(root, circuit.StMerkleRoots[i])
 		api.AssertIsEqual(api.Mul(Diff2, Enable), 0)
 
-		commitment2 := primitives.Erc1155Commitment(api, circuit.WtErc1155ContractAddress, circuit.WtErc1155TokenIds[i], circuit.WtValues[i], circuit.WtOutPublicKeys[i], circuit.WtSaltsOut[i])
+		commitment2 := primitives.Erc1155Commitment(api, circuit.WtErc1155TokenIds[i], circuit.WtValues[i], circuit.WtOutPublicKeys[i], circuit.WtSaltsOut[i])
 
 		Diff3   := api.Sub(commitment2, circuit.StCommitmentOut[i])
 		api.AssertIsEqual(api.Mul(Diff3, Enable), 0)

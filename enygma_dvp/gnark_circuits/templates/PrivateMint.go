@@ -12,16 +12,17 @@ type PrivateMintConfig struct{
 }
 
 type PrivateMintCircuit struct {
-	Commitment      	     	 frontend.Variable  `gnark:",public"` 
-	ContractAddress				 frontend.Variable  `gnark:",public"`
-	TokenId						 frontend.Variable  `gnark:",public"` 
-	CipherText				     frontend.Variable  `gnark:",public"`
 
-	Salt				 		 frontend.Variable 
-	Amount						 frontend.Variable
-	PublicKey				     frontend.Variable
-	
-	
+	// --- public inputs (statement) ---
+	Commitment      frontend.Variable `gnark:",public"` // Poseidon(pk_spend, salt, amount, tokenId) — inserted into the Merkle tree on-chain
+	ContractAddress frontend.Variable `gnark:",public"` // address of the EnygmaDvp contract — binds the proof to a specific deployment
+	TokenId         frontend.Variable `gnark:",public"` // ERC20 token being minted
+	CipherText      frontend.Variable `gnark:",public"` // Poseidon(pk_spend, salt) — note tag so Alice can find her mint when scanning
+
+	// --- private witnesses ---
+	Salt      frontend.Variable // saltB — random blinding factor for the commitment and note tag
+	Amount    frontend.Variable // amount of tokens being privately minted
+	PublicKey frontend.Variable // pk_spend of the recipient (Alice's spend public key)
 }
 
 
