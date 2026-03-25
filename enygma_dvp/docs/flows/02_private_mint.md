@@ -65,14 +65,31 @@ The circuit proves that the commitment and cipherText are consistent with the sa
 
 ## Participants
 
-| Participant         | Role                                                                                         |
-| ------------------- | -------------------------------------------------------------------------------------------- |
-| Issuer              | Privileged caller — holds `DEFAULT_OWNER_ROLE`, generates the proof and submits on-chain     |
-| Alice               | Recipient — her `pk_spend` is embedded in the commitment; she will scan to discover the note |
-| Gnark Server        | Generates the Groth16 proof for the `PrivateMintCircuit`                                     |
-| EnygmaDvp           | Entry point — verifies the proof via `PrivateMintVerifier`, inserts the commitment           |
-| PrivateMintVerifier | Standalone Solidity verifier with hardcoded VK constants (not the generic `IVerifier`)       |
-| Erc20CoinVault      | Receives the commitment via `registerCoins`, inserts the Merkle leaf                         |
+| Participant  | Role                                                                                         |
+| ------------ | -------------------------------------------------------------------------------------------- |
+| Issuer       | Privileged caller — holds `DEFAULT_OWNER_ROLE`, generates the proof and submits on-chain     |
+| Alice        | Recipient — her `pk_spend` is embedded in the commitment; she will scan to discover the note |
+| Gnark Server | Generates the Groth16 proof for the `PrivateMintCircuit`                                     |
+| EnygmaDvp    | Entry point — verifies the proof via `PrivateMintVerifier`, inserts the commitment           |
+
+---
+
+## Pre-mint agreement
+
+Before the private mint can start, Alice and the Issuer must agree on the following values
+out-of-band (e.g. via a secure channel, KYC process, or API call):
+
+| Value | Who provides | Why it is needed |
+|---|---|---|
+| `pk_alice` | Alice → Issuer | Embedded in the commitment; only the holder of the matching `sk_alice` can spend the note |
+| `amount` | Issuer → Alice | How many tokens the note will represent |
+| `tokenId` | Issuer → Alice | Which ERC20 token (usually `0` for a single-token vault) |
+| `salt` | Issuer → Alice | Random blinding factor; Alice needs it as `WtSaltsIn` to spend later |
+| `vaultId` | Issuer → Alice | Which vault the commitment will be inserted into |
+
+Alice must share her `pk_spend` with the Issuer before the flow begins.
+The Issuer must share `amount`, `tokenId`, `salt`, and `vaultId` with Alice after the mint
+so she can reconstruct and spend the note.
 
 ---
 
@@ -80,24 +97,23 @@ The circuit proves that the commitment and cipherText are consistent with the sa
 
 ```mermaid
 sequenceDiagram
+    participant Alice
     participant Issuer
     participant Gnark as Gnark Server
     participant DVP as EnygmaDvp
-    participant Verifier as PrivateMintVerifier
-    participant Vault as Erc20CoinVault
-    participant Tree as Merkle Tree
-    participant Alice
 
-    Note over Issuer: amount = 100
-    Note over Issuer: tokenId = 0
-    Note over Issuer: pk_alice = 9284716503...
-    Note over Issuer: No token transfer occurs
+    rect rgb(255, 250, 210)
+        Note over Alice,Issuer: Pre-mint agreement (off-chain, secure channel)
+
+        Alice->>Issuer: pk_alice = 9284716503...
+        Issuer->>Alice: amount = 100
+        Issuer->>Alice: tokenId = 0
+        Issuer->>Alice: salt = 6628193047...
+        Issuer->>Alice: vaultId = 1
+    end
 
     rect rgb(220, 235, 255)
         Note over Issuer: Step 1 — Prepare commitment off-chain
-
-        Issuer->>Issuer: RandomInField()
-        Note over Issuer: salt = 6628193047...
 
         Issuer->>Issuer: Erc20CommitmentV2(pk_alice, salt, 100, tokenId=0)
         Note over Issuer: poseidon.Hash(9284716503, 6628193047, 100, 0)
@@ -113,8 +129,6 @@ sequenceDiagram
         Issuer->>Gnark: POST /proof/privateMint
         Note over Gnark: public:  commitment=7193..., contractAddress=0xabc..., tokenId=0, cipherText=4827...
         Note over Gnark: private: salt=6628..., amount=100, publicKey=9284...
-
-        Note over Gnark: frontend.Compile circuit
         Note over Gnark: assert Poseidon4(pk, salt, 100, 0) == commitment
         Note over Gnark: assert Poseidon2(pk, salt) == cipherText
         Note over Gnark: groth16.Prove + local verify
@@ -124,32 +138,23 @@ sequenceDiagram
     end
 
     rect rgb(255, 240, 220)
-        Note over Issuer,Tree: Step 3 — Submit on-chain
+        Note over Issuer,DVP: Step 3 — Submit on-chain
 
         Issuer->>DVP: privateMint(vaultId=1, commitment=7193..., proof)
         Note over DVP: onlyRole DEFAULT_OWNER_ROLE check
+        Note over DVP: IPrivateMintVerifier.verifyProof(proof, publicSignal)
+        Note over DVP: registerCoins([7193...]) into vault Merkle tree
 
-        DVP->>Verifier: verifyProof(proof[8], publicSignal[4])
-        Note over Verifier: hardcoded VK constants
-        Verifier-->>DVP: ok
-
-        DVP->>DVP: cipherText = publicSignal[3] = 4827...
-
-        DVP->>Vault: registerCoins([7193...])
-        Vault->>Tree: insertLeaves([7193...])
-        Tree-->>Vault: leafIndex = 0
-
-        DVP-->>Issuer: emit PrivateMint(vaultId=1, commitment=7193..., cipherText=4827...)
+        DVP-->>Alice: emit PrivateMint(vaultId=1, commitment=7193..., cipherText=4827...)
     end
 
     rect rgb(240, 220, 255)
-        Note over Alice: Step 4 — Alice scans for her note
+        Note over Alice: Step 4 — Alice confirms her note
 
-        Alice->>Alice: watch PrivateMint events on-chain
-        Alice->>Alice: poseidon.Hash(pk_alice, candidate_salt)
-        Alice->>Alice: compare result against cipherText = 4827...
-        Note over Alice: match found — note is mine
-        Note over Alice: commitment = 7193..., amount = 100, salt = 6628...
+        Alice->>Alice: poseidon.Hash(pk_alice, salt=6628...)
+        Alice->>Alice: compare result against cipherText=4827... from event
+        Note over Alice: match confirmed — note is mine
+        Note over Alice: ready to spend: commitment=7193..., salt=6628..., amount=100
     end
 ```
 
