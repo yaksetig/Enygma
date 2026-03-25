@@ -13,6 +13,8 @@
 /artifacts/
 /legacy/build/
 /cache/
+/build
+/.claude
 
 
 #go client
