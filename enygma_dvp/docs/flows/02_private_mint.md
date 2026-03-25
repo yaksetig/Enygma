@@ -11,8 +11,6 @@ Unlike `deposit` (Flow 01), which is open to any user and requires transferring 
 
 - **Restricted** — gated by `DEFAULT_OWNER_ROLE` on the `EnygmaDvp` contract.
 - **Proven** — a Groth16 ZK proof is required to guarantee the commitment is well-formed.
-- **Tokenless** — no ERC20 `transferFrom` occurs; the Issuer attests off-chain that the backing
-  tokens exist.
 
 The result is a single note owned by the recipient (e.g. Alice), identical to one created by a
 regular deposit, and fully spendable in any future `transferV2`.
@@ -21,14 +19,14 @@ regular deposit, and fully spendable in any future `transferV2`.
 
 ## Key difference from deposit
 
-| | `depositV2` (Flow 01) | `privateMint` (Flow 02) |
-|---|---|---|
-| Who calls | Any user | Issuer only (`DEFAULT_OWNER_ROLE`) |
-| Token transfer | Yes — `ERC20.transferFrom` | No |
-| ZK proof | No | Yes — `PrivateMintCircuit` |
-| Verifier | None | `PrivateMintVerifier` (standalone) |
-| Tree insertion | `insertLeaves` | `registerCoins` |
-| Event emitted | `Commitment` + `EncryptedNote` | `PrivateMint(vaultId, commitment, cipherText)` |
+|                | `depositV2` (Flow 01)          | `privateMint` (Flow 02)                        |
+| -------------- | ------------------------------ | ---------------------------------------------- |
+| Who calls      | Any user                       | Issuer only (`DEFAULT_OWNER_ROLE`)             |
+| Token transfer | Yes — `ERC20.transferFrom`     | No                                             |
+| ZK proof       | No                             | Yes — `PrivateMintCircuit`                     |
+| Verifier       | None                           | `PrivateMintVerifier` (standalone)             |
+| Tree insertion | `insertLeaves`                 | `registerCoins`                                |
+| Event emitted  | `Commitment` + `EncryptedNote` | `PrivateMint(vaultId, commitment, cipherText)` |
 
 ---
 
@@ -38,20 +36,20 @@ regular deposit, and fully spendable in any future `transferV2`.
 
 ### Public inputs (statement)
 
-| Index | Name | Value |
-|---|---|---|
-| 0 | `Commitment` | `Poseidon4(pk_spend, salt, amount, tokenId)` |
-| 1 | `ContractAddress` | EnygmaDvp deployment address — binds proof to this chain |
-| 2 | `TokenId` | ERC20 token identifier |
-| 3 | `CipherText` | `Poseidon2(pk_spend, salt)` — note tag for scanning |
+| Index | Name              | Value                                                    |
+| ----- | ----------------- | -------------------------------------------------------- |
+| 0     | `Commitment`      | `Poseidon4(pk_spend, salt, amount, tokenId)`             |
+| 1     | `ContractAddress` | EnygmaDvp deployment address — binds proof to this chain |
+| 2     | `TokenId`         | ERC20 token identifier                                   |
+| 3     | `CipherText`      | `Poseidon2(pk_spend, salt)` — note tag for scanning      |
 
 ### Private witnesses
 
-| Name | Value |
-|---|---|
-| `Salt` | Random field element chosen by the Issuer |
-| `Amount` | Number of tokens being minted into the note |
-| `PublicKey` | `pk_spend` of the recipient |
+| Name        | Value                                       |
+| ----------- | ------------------------------------------- |
+| `Salt`      | Random field element chosen by the Issuer   |
+| `Amount`    | Number of tokens being minted into the note |
+| `PublicKey` | `pk_spend` of the recipient                 |
 
 ### Constraints (in-circuit)
 
@@ -67,14 +65,14 @@ The circuit proves that the commitment and cipherText are consistent with the sa
 
 ## Participants
 
-| Participant | Role |
-|---|---|
-| Issuer | Privileged caller — holds `DEFAULT_OWNER_ROLE`, generates the proof and submits on-chain |
-| Alice | Recipient — her `pk_spend` is embedded in the commitment; she will scan to discover the note |
-| Gnark Server | Generates the Groth16 proof for the `PrivateMintCircuit` |
-| EnygmaDvp | Entry point — verifies the proof via `PrivateMintVerifier`, inserts the commitment |
-| PrivateMintVerifier | Standalone Solidity verifier with hardcoded VK constants (not the generic `IVerifier`) |
-| Erc20CoinVault | Receives the commitment via `registerCoins`, inserts the Merkle leaf |
+| Participant         | Role                                                                                         |
+| ------------------- | -------------------------------------------------------------------------------------------- |
+| Issuer              | Privileged caller — holds `DEFAULT_OWNER_ROLE`, generates the proof and submits on-chain     |
+| Alice               | Recipient — her `pk_spend` is embedded in the commitment; she will scan to discover the note |
+| Gnark Server        | Generates the Groth16 proof for the `PrivateMintCircuit`                                     |
+| EnygmaDvp           | Entry point — verifies the proof via `PrivateMintVerifier`, inserts the commitment           |
+| PrivateMintVerifier | Standalone Solidity verifier with hardcoded VK constants (not the generic `IVerifier`)       |
+| Erc20CoinVault      | Receives the commitment via `registerCoins`, inserts the Merkle leaf                         |
 
 ---
 
@@ -227,6 +225,7 @@ groth16.Prove(ccs, pk, witnessFull)                             handler.go:70
 ```
 
 The circuit checks two constraints:
+
 ```
 Poseidon4(pk_alice, salt, 100, 0) == 7193827465...   ← commitment is correct
 Poseidon2(pk_alice, salt)         == 4827361059...   ← cipherText is correct
@@ -313,12 +312,12 @@ poseidon.Hash([pk_alice, candidate_salt])
 Alice must already know her `salt` (shared by the Issuer out-of-band) or must try
 candidate salts. Once confirmed, she stores:
 
-| Value | Source | Used for |
-|---|---|---|
-| `commitment` | Event `PrivateMint.commitment` | Merkle proof lookup |
-| `salt` | Delivered by Issuer out-of-band | `WtSaltsIn` in next proof |
-| `leafIndex` | From `registerCoins` / tree state | Merkle path generation |
-| `amount` | Delivered by Issuer out-of-band | `WtValuesIn` in next proof |
+| Value        | Source                            | Used for                   |
+| ------------ | --------------------------------- | -------------------------- |
+| `commitment` | Event `PrivateMint.commitment`    | Merkle proof lookup        |
+| `salt`       | Delivered by Issuer out-of-band   | `WtSaltsIn` in next proof  |
+| `leafIndex`  | From `registerCoins` / tree state | Merkle path generation     |
+| `amount`     | Delivered by Issuer out-of-band   | `WtValuesIn` in next proof |
 
 ---
 
@@ -335,17 +334,17 @@ candidate salts. Once confirmed, she stores:
 
 ## Key references
 
-| Symbol | File | Line |
-|---|---|---|
-| `Erc20PrivateMintProof` | `src/core/prover_erc.go` | 1353 |
-| `Erc20CommitmentV2` | `src/core/utils.go` | 563 |
-| `RandomInField` | `src/core/utils.go` | — |
-| `PostProof` | `src/core/prover_gnark.go` | 48 |
-| `PrivateMintCircuit.Define` | `gnark_circuits/templates/PrivateMint.go` | 29 |
-| `NewHandler` | `gnark_circuits/server/circuits/privateMint/handler.go` | 25 |
-| `groth16.Prove` | `gnark_circuits/server/circuits/privateMint/handler.go` | 70 |
-| `EnygmaDvp.privateMint` | `contracts/core/contracts/EnygmaDvp.sol` | 914 |
-| `IPrivateMintVerifier.verifyProof` | `contracts/core/contracts/EnygmaDvp.sol` | 927 |
-| `emit PrivateMint` | `contracts/core/contracts/EnygmaDvp.sol` | 936 |
-| `registerCoins` | `contracts/core/contracts/EnygmaDvp.sol` | 941 |
-| `Erc20PrivateMintResult` | `src/core/prover_erc.go` | 1325 |
+| Symbol                             | File                                                    | Line |
+| ---------------------------------- | ------------------------------------------------------- | ---- |
+| `Erc20PrivateMintProof`            | `src/core/prover_erc.go`                                | 1353 |
+| `Erc20CommitmentV2`                | `src/core/utils.go`                                     | 563  |
+| `RandomInField`                    | `src/core/utils.go`                                     | —    |
+| `PostProof`                        | `src/core/prover_gnark.go`                              | 48   |
+| `PrivateMintCircuit.Define`        | `gnark_circuits/templates/PrivateMint.go`               | 29   |
+| `NewHandler`                       | `gnark_circuits/server/circuits/privateMint/handler.go` | 25   |
+| `groth16.Prove`                    | `gnark_circuits/server/circuits/privateMint/handler.go` | 70   |
+| `EnygmaDvp.privateMint`            | `contracts/core/contracts/EnygmaDvp.sol`                | 914  |
+| `IPrivateMintVerifier.verifyProof` | `contracts/core/contracts/EnygmaDvp.sol`                | 927  |
+| `emit PrivateMint`                 | `contracts/core/contracts/EnygmaDvp.sol`                | 936  |
+| `registerCoins`                    | `contracts/core/contracts/EnygmaDvp.sol`                | 941  |
+| `Erc20PrivateMintResult`           | `src/core/prover_erc.go`                                | 1325 |
