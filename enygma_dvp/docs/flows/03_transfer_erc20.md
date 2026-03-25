@@ -99,7 +99,7 @@ balance:
 sequenceDiagram
     participant Alice
     participant Gnark as Gnark Server
-    participant Vault as Erc20CoinVault
+    participant Vault as EnygmaDvp
     participant Bob
 
     rect rgb(220, 235, 255)
