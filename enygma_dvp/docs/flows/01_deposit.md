@@ -13,12 +13,10 @@ her balance without revealing it publicly.
 
 ## Participants
 
-| Participant    | Role                                                             |
-| -------------- | ---------------------------------------------------------------- |
-| Alice          | Depositor — owns the ERC20 tokens and the resulting private note |
-| ERC20 Contract | Holds the real tokens; transfers them to the vault               |
-| Erc20CoinVault | Accepts the commitment, inserts the Merkle leaf, emits events    |
-| Merkle Tree    | On-chain incremental tree; every leaf is a commitment            |
+| Participant | Role                                                                                              |
+| ----------- | ------------------------------------------------------------------------------------------------- |
+| Alice       | Depositor — owns the ERC20 tokens and the resulting private note                                  |
+| EnygmaDvp   | Accepts the deposit, pulls tokens into the vault, inserts the Merkle leaf, and emits events       |
 
 ---
 
@@ -27,9 +25,7 @@ her balance without revealing it publicly.
 ```mermaid
 sequenceDiagram
     participant Alice
-    participant ERC20 as ERC20 Token Contract
-    participant Vault as Erc20CoinVault
-    participant Tree as Merkle Tree
+    participant DVP as EnygmaDvp
 
     Note over Alice: amount = 50
     Note over Alice: tokenId = 0
@@ -49,31 +45,26 @@ sequenceDiagram
         Note over Alice: returns ctII = 0x3f2a...7b44
 
         Alice->>Alice: poseidon(pk_alice, saltBField, 50, tokenId=0)
-        Note over Alice: commitment = poseidon(9284716503, 4401928374, 50, 0) = 3847261905...
-
+        Note over Alice: commitment = 3847261905...
     end
 
     rect rgb(220, 255, 220)
-        Note over Alice,ERC20: Step 2 — Approve vault to pull tokens
+        Note over Alice,DVP: Step 2 — Approve vault to pull tokens
 
-        Alice->>ERC20: approve(vaultAddr, amount=50)
-        ERC20-->>Alice: ok
+        Alice->>DVP: erc20.approve(vaultAddr, amount=50)
+        DVP-->>Alice: ok
     end
 
     rect rgb(255, 240, 220)
-        Note over Alice,Tree: Step 3 — Deposit
+        Note over Alice,DVP: Step 3 — Deposit
 
-        Alice->>Vault: depositV2([amount=50, commitment=3847261905...], ctI, ctII)
+        Alice->>DVP: depositV2([amount=50, commitment=3847261905...], ctI, ctII)
+        Note over DVP: transferFrom(alice, vault, 50)
+        Note over DVP: vault now holds 50 real tokens
+        Note over DVP: insertLeaves([3847261905...]) → leafIndex = 0
 
-        Vault->>ERC20: transferFrom(alice, vault, 50)
-        ERC20-->>Vault: ok
-        Note over Vault: vault now holds 50 real tokens
-
-        Vault->>Tree: insertLeaves([3847261905...])
-        Tree-->>Vault: leafIndex = 0
-
-        Vault-->>Alice: emit Commitment(vaultId=1, 3847261905...)
-        Vault-->>Alice: emit EncryptedNote(vaultId=1, 3847261905..., ctI, ctII)
+        DVP-->>Alice: emit Commitment(vaultId=1, 3847261905...)
+        DVP-->>Alice: emit EncryptedNote(vaultId=1, 3847261905..., ctI, ctII)
     end
 
     rect rgb(240, 220, 255)
