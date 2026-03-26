@@ -79,7 +79,7 @@ sequenceDiagram
         Alice->>Alice: GetNullifier(sk_alice, leafIndex=1)
         Note over Alice: nullifier = Poseidon2(sk_alice, 1) = 9182736450...
 
-        Alice->>Alice: cmt(uint160(recipient), 0, amount=50, tokenId=0)
+        Alice->>Alice: Erc20CommitmentV2(uint160(recipient), 0, amount=50, tokenId=0)
         Note over Alice: withdrawal_cmt = 5647382910...
         Note over Alice: salt=0 (public — no KEM needed)
     end

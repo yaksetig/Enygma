@@ -99,7 +99,7 @@ balance:
 sequenceDiagram
     participant Alice
     participant Gnark as Gnark Server
-    participant Vault as EnygmaDvp
+    participant DVP as EnygmaDvp
     participant Bob
 
     rect rgb(220, 235, 255)
@@ -147,18 +147,18 @@ sequenceDiagram
     end
 
     rect rgb(255, 240, 220)
-        Note over Alice,Vault: Step 3 — Submit on-chain
+        Note over Alice,DVP: Step 3 — Submit on-chain
 
-        Alice->>Vault: transferV2(receipt, [ctI_bob, ctI_change], [ctII_bob, ctII_change])
-        Note over Vault: IVerifier.verifyProof(VK_ID_ERC20_JOINSPLIT, proof, statement)
-        Note over Vault: isValidRoot(tree0, root0) check passes
-        Note over Vault: isValidNullifier(tree0, null0) check passes
-        Note over Vault: insertLeaves([8472..., 1938...])
-        Note over Vault: setNullifier(tree0, 7263...)
+        Alice->>DVP: transferV2(receipt, [ctI_bob, ctI_change], [ctII_bob, ctII_change])
+        Note over DVP: IVerifier.verifyProof(VK_ID_ERC20_JOINSPLIT, proof, statement)
+        Note over DVP: isValidRoot(tree0, root0) check passes
+        Note over DVP: isValidNullifier(tree0, null0) check passes
+        Note over DVP: insertLeaves([8472..., 1938...])
+        Note over DVP: setNullifier(tree0, 7263...)
 
-        Vault-->>Bob: emit EncryptedNote(vaultId, 8472..., ctI_bob, ctII_bob)
-        Vault-->>Alice: emit EncryptedNote(vaultId, 1938..., ctI_change, ctII_change)
-        Vault-->>Alice: emit Nullifier(vaultId, tree0, 7263...)
+        DVP-->>Bob: emit EncryptedNote(vaultId, 8472..., ctI_bob, ctII_bob)
+        DVP-->>Alice: emit EncryptedNote(vaultId, 1938..., ctI_change, ctII_change)
+        DVP-->>Alice: emit Nullifier(vaultId, tree0, 7263...)
     end
 
     rect rgb(240, 220, 255)
