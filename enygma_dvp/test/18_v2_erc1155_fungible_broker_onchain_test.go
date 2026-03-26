@@ -8,7 +8,7 @@ package tests
 // (expectedBrokerSize / receiptType=3 branch un-commented).
 //
 // Run with:
-//   CC=/usr/bin/clang go test -run TestV2Erc1155FungibleBrokerOnChain -v -timeout 300s
+//    go test -run TestV2Erc1155FungibleBrokerOnChain -v -timeout 300s
 
 import (
 	"context"

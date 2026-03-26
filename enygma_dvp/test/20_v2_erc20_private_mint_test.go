@@ -5,14 +5,15 @@ package tests
 // Prerequisites (all must be running/completed before this test):
 //
 //	1. Hardhat node:      npx hardhat node
-//	2. Deploy contracts:  cd scripts && CC=/usr/bin/clang go build -o /tmp/deploy deploy.go enygma.go && cd .. && /tmp/deploy
+//	2. Deploy contracts:  cd scripts &&  go build -o /tmp/deploy deploy.go enygma.go && cd .. && /tmp/deploy
 //	3. Export VKs:        cd gnark_circuits && go run ./cmd/export_vk_init/ ../build
-//	4. Init contracts:    cd scripts && CC=/usr/bin/clang go build -o /tmp/init init.go enygma.go && cd .. && /tmp/init
+//	4. Init contracts:    cd scripts &&  go build -o /tmp/init init.go enygma.go && cd .. && /tmp/init
 //	5. Gnark server:      cd gnark_circuits && go run main.go
 //
 // Run with:
 //
-//	CC=/usr/bin/clang go test -run TestV2Erc20OnChain_PrivateMint -v -timeout 300s
+//	 go test -run TestV2Erc20OnChain_PrivateMint -v -timeout 300s
+
 
 import (
 	"context"
@@ -27,12 +28,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 )
 
-// onchainPrivateMintProof mirrors the IEnygmaDvp.EnygmaPrivateMintProof struct:
-//
-//	struct EnygmaPrivateMintProof {
-//	    uint256[8] proof;
-//	    uint256[4] public_signal;
-//	}
+
 type onchainPrivateMintProof struct {
 	Proof        [8]*big.Int `abi:"proof"`
 	PublicSignal [4]*big.Int `abi:"public_signal"`

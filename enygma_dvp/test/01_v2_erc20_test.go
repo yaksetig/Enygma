@@ -1,8 +1,6 @@
 package tests
 
-// End-to-end V2 ERC20 test: Deposit → Transfer → Withdraw.
-// Requires the gnark server running on localhost:8081.
-// Run with: go test -run TestV2Erc20_DepositTransferWithdraw -v
+
 
 import (
 	"math/big"

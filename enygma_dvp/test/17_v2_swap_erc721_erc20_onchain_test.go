@@ -17,7 +17,7 @@ package tests
 //
 // Run with:
 //
-//	CC=/usr/bin/clang go test -run TestV2Swap_Erc721ForErc20_OnChain -v -timeout 600s
+//	 go test -run TestV2Swap_Erc721ForErc20_OnChain -v -timeout 600s
 
 import (
 	"context"

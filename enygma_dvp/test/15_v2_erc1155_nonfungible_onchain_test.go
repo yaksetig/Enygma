@@ -6,7 +6,7 @@ package tests
 // Prerequisites: same as other on-chain tests (Hardhat node, gnark server, deploy+init).
 //
 // Run with:
-//   CC=/usr/bin/clang go test -run TestV2Erc1155NonFungibleOnChain -v -timeout 300s
+//    go test -run TestV2Erc1155NonFungibleOnChain -v -timeout 300s
 
 import (
 	"context"
