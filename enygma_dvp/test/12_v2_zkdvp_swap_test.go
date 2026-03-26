@@ -281,10 +281,8 @@ func TestV2ZkDvp_Swap(t *testing.T) {
 	client := core.NewGnarkClient("http://localhost:8081")
 
 	// Alice's ZK proof: she spends her USDT note → CommitmentB for Bob.
-	// ZkDvpInitiateSwap uses the same pre-computed saltB so CommitmentB is consistent.
-	stMessage := big.NewInt(0) // swap-specific message (e.g. Poseidon(swap terms))
+	// StMessage is automatically set to CommitmentA (C') for cross-commitment linking.
 	aliceResult, err := client.ZkDvpInitiateSwap(
-		stMessage,
 		core.KeyPair{PrivateKey: aliceSpend.PrivateKey, PublicKey: aliceSpend.PublicKey},
 		aliceSaltField,
 		amountUSDT,
@@ -316,7 +314,7 @@ func TestV2ZkDvp_Swap(t *testing.T) {
 	}
 
 	bobResult, err := client.Erc20JoinSplitProof(
-		stMessage,
+		aliceResult.CommitmentB, // stMessage = CommitmentB (cross-commitment linking)
 		[]*big.Int{amountTicket, big.NewInt(0)},
 		[]core.KeyPair{
 			{PrivateKey: bobSpend.PrivateKey, PublicKey: bobSpend.PublicKey},

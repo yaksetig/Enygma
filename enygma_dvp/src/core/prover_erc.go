@@ -212,10 +212,15 @@ type ZkDvpSwapInitResult struct {
 //
 //  1. Calls Encapsulate(bobViewEncapKey) to derive (saltB, ciphertextI).
 //  2. Computes CommitmentB = Poseidon(bobSpendPk, SaltBToField(saltB), amountIn, tokenIdIn).
-//  3. Generates saltStar and computes CommitmentA = Poseidon(aliceSpendPk, SaltBToField(saltStar), amountOut, tokenIdOut).
+//  3. Generates saltStar and computes CommitmentA = C' = Poseidon(aliceSpendPk, SaltBToField(saltStar), amountOut, tokenIdOut).
 //  4. Encrypts (tokenIdOut || amountOut || saltStar) with saltB → ciphertextII.
 //  5. Computes Alice's nullifier.
-//  6. If gnarkClient is non-nil, generates the JoinSplit ZK proof for Alice's input note.
+//  6. Generates the JoinSplit ZK proof for Alice's input note with StMessage = CommitmentA (C').
+//
+// The StMessage is set to CommitmentA so that the on-chain cross-commitment check passes:
+//
+//	stMessage(Alice) = C'         must equal firstOutput(Bob) = C'
+//	stMessage(Bob)   = CommitmentB must equal firstOutput(Alice) = CommitmentB
 //
 // Parameters:
 //   - aliceKey     — Alice's spend key pair (input note ownership)
@@ -229,7 +234,6 @@ type ZkDvpSwapInitResult struct {
 //   - merkleProof  — Merkle proof for Alice's input note (nil = dummy/no proof)
 //   - stTreeNumber — tree number for Alice's input note
 func (c *GnarkClient) ZkDvpInitiateSwap(
-	stMessage *big.Int,
 	aliceKey KeyPair,
 	aliceSaltIn *big.Int,
 	amountIn *big.Int,
@@ -322,7 +326,7 @@ func (c *GnarkClient) ZkDvpInitiateSwap(
 	pathElementChunks := chunkBigIntSlice(allPathElements, merkleDepth)
 
 	payload := map[string]interface{}{
-		"StMessage":            stMessage.String(),
+		"StMessage":            commitmentA.String(),
 		"StTreeNumber":         []string{stTreeNumber.String(), "0"},
 		"StMerkleRoots":        []string{merkleRoot.String(), "0"},
 		"StNullifiers":         []string{nullifier.String(), dummyNullifier.String()},

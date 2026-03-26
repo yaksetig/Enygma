@@ -1,56 +1,69 @@
-# Flow 06 — Atomic DVP Swap (ERC721 ↔ ERC20)
+# Flow 06 — ZkDvP Atomic Swap (ERC20 ↔ ERC20)
 
 ## Overview
 
-The atomic DVP swap lets Alice sell an NFT to Bob in exchange for ERC20 tokens — without
+The ZkDvP swap lets Alice exchange one type of token (e.g., 5 USDT with `tokenId=10`) for Bob's
+different token type (e.g., 1 concert ticket with `tokenId=25`), all within the same vault — without
 any trusted intermediary and without either party having to trust the other to act first.
 
-Both parties generate their proofs **independently and in any order**. The contract only
-settles when it receives both proofs carrying the same `swapId`, enforcing atomicity:
-either the full exchange happens, or nothing does.
-
-The `swapId` is the only public linking value between the two proofs:
+Both assets use the standard ERC20 JoinSplit commitment formula with different `tokenId` values:
 
 ```
-// temporary solution
-swapId = Poseidon4(contractAddr721, tokenId, contractAddr20, paymentAmount)
+commitment = Poseidon4(pk_spend, saltBField, amount, tokenId)
 ```
 
-Both parties compute this from the agreed swap terms. It is embedded as `stMessage` in
-both proofs and verified on-chain.
+The protocol is **asymmetric and two-phase**:
+
+- **Phase 1 (Alice initiates)**: Alice generates a ZK proof spending her USDT note and submits it
+  on-chain as a pending swap, pre-committing to both outputs.
+- **Phase 2 (Bob completes)**: Bob scans the on-chain event, verifies the pre-committed outputs,
+  generates his own ZK proof, and triggers atomic settlement.
+
+---
+
+## Atomicity — Cross-commitment linking
+
+Atomicity is enforced by **cross-commitment linking**, not a shared `swapId`:
+
+```
+stMessage(Alice) = C'            (Alice's expected concert ticket commitment)
+firstOutput(Alice) = CommitmentB  (Alice's USDT payment for Bob)
+stMessage(Bob)   = CommitmentB   (links Bob's proof back to Alice's pending proof)
+firstOutput(Bob) = C'            (Bob delivers exactly the ticket commitment Alice pre-committed to)
+```
+
+The on-chain `_settleOnGroupPair` verifies:
+
+```
+receipt_alice.statement[0] == receipt_bob.statement[7]   // stMsg(Alice) == firstOut(Bob)
+receipt_bob.statement[0]   == receipt_alice.statement[7] // stMsg(Bob)   == firstOut(Alice)
+```
+
+A party cannot alter the outputs after the other party's proof is submitted — any mismatch reverts.
 
 ---
 
 ## Non-interactivity
 
-After a one-time public-key exchange, neither party waits for the other:
+After a one-time public-key exchange, Alice initiates without waiting for Bob:
 
 | Party | Needs from the other party                  | Can proceed without knowing       |
 | ----- | ------------------------------------------- | --------------------------------- |
-| Alice | `pk_bob` (spend), `encapKey_bob` (view)     | Bob's ERC20 proof or payment note |
-| Bob   | `pk_alice` (spend), `encapKey_alice` (view) | Alice's ERC721 proof or NFT note  |
+| Alice | `pk_bob` (spend), `encapKey_bob` (view)     | Bob's proof or ticket note        |
+| Bob   | `pk_alice` (spend), `encapKey_alice` (view) | Alice's proof or USDT note        |
 
----
-
-## Atomicity
-
-```
-swapId = Poseidon4(contractAddr721, tokenId, contractAddr20, paymentAmount)
-```
-
-Both proofs encode `swapId` as `StMessage`. The DVP contract verifies both proofs share
-the same `swapId` before settling. A partial submission is rejected.
+Bob responds asynchronously after seeing the `PendingProofAddedToVault` event on-chain.
 
 ---
 
 ## Participants
 
-| Participant  | Role                                                                   |
-| ------------ | ---------------------------------------------------------------------- |
-| Alice        | NFT seller — spends her ERC721 note, receives ERC20 payment from Bob   |
-| Bob          | NFT buyer — spends his ERC20 note, receives the ERC721 note from Alice |
-| Gnark Server | Generates both Groth16 proofs (ERC721 ownership + ERC20 JoinSplit)     |
-| EnygmaDvp    | Verifies both proofs atomically and settles the swap                   |
+| Participant  | Role                                                                                          |
+| ------------ | --------------------------------------------------------------------------------------------- |
+| Alice        | Initiator — spends her USDT note, pre-commits to receiving the concert ticket                 |
+| Bob          | Completer — verifies Alice's pre-commitments, spends his ticket note, triggers settlement     |
+| Gnark Server | Generates both Groth16 JoinSplit proofs (ERC20 circuit, different tokenIds)                  |
+| EnygmaDvp    | Stores Alice's proof as PENDING, settles atomically when Bob's matching proof arrives         |
 
 ---
 
@@ -66,85 +79,85 @@ sequenceDiagram
     rect rgb(220, 235, 255)
         Note over Alice,Bob: Step 1 — Agree on swap terms (off-chain)
 
-        Alice->>Bob: pk_alice, encapKey_alice
-        Bob->>Alice: pk_bob, encapKey_bob
-
-        Alice->>Alice: swapId = Poseidon4(addr721, tokenId=9999, addr20, amount=50)
-        Bob->>Bob: swapId = Poseidon4(addr721, tokenId=9999, addr20, amount=50)
-        Note over Alice,Bob: swapId = 7384920165... (same, computed independently)
+        Alice->>Bob: pk_alice, encapKey_alice (view)
+        Bob->>Alice: pk_bob, encapKey_bob (view)
+        Note over Alice,Bob: Alice sends 5 USDT (tokenId=10) ↔ Bob sends 1 ticket (tokenId=25)
     end
 
     rect rgb(220, 255, 220)
-        Note over Alice,Gnark: Step 2 — Alice's proof (ERC721 ownership)
+        Note over Alice,Gnark: Step 2 — Alice initiates the swap (Phase 1)
 
         Alice->>Alice: Encapsulate(encapKey_bob)
-        Note over Alice: saltB_bob = 0x4f2a...
-        Note over Alice: ctI_bob   = 0x9d3e...
-        Alice->>Alice: Erc721Commitment(tokenId=9999, pk_bob, saltBField_bob)
-        Note over Alice: cmt_nft_bob = 3748291065...
+        Note over Alice: saltB = 0x4f2a..., ctI = 0x9d3e...
+        Alice->>Alice: CommitmentB = Poseidon4(pk_bob, SaltBToField(saltB), 5, 10)
+        Note over Alice: CommitmentB = 9102837465... (USDT for Bob)
 
-        Alice->>Gnark: POST /proof/ownershipERC721
-        Note over Gnark: stMessage = swapId = 7384920165...
-        Note over Gnark: assert Poseidon4(pk_alice, saltIn, 1, 9999) == cmt_nft_alice
-        Note over Gnark: assert MerkleProof(cmt_nft_alice, path) == root721
-        Note over Gnark: assert Poseidon4(pk_bob, saltBField_bob, 1, 9999) == cmt_nft_bob
+        Alice->>Alice: saltStar = random
+        Alice->>Alice: C' = Poseidon4(pk_alice, SaltBToField(saltStar), 1, 25)
+        Note over Alice: C' = 4829301756... (ticket for Alice)
 
-        Gnark-->>Alice: proof721 = [Ax,Ay,Bx1,Bx0,By1,By0,Cx,Cy]
-        Gnark-->>Alice: stmt721 = [swapId, tree0, root721, null_alice, cmt_nft_bob]
-    end
+        Alice->>Alice: ctII = EncryptSwapPayload(saltB, tokenId=25, amount=1, saltStar)
 
-    rect rgb(220, 255, 220)
-        Note over Bob,Gnark: Step 3 — Bob's proof (ERC20 JoinSplit)
+        Alice->>Gnark: POST /proof/joinSplitERC20
+        Note over Gnark: StMessage = C' = 4829301756...
+        Note over Gnark: assert Poseidon4(pk_alice, saltIn, 5, 10) == cmt_usdt_alice
+        Note over Gnark: assert MerkleProof(cmt_usdt_alice, path) == root
+        Note over Gnark: assert Poseidon4(pk_bob, saltBField, 5, 10) == CommitmentB
+        Note over Gnark: assert 5 == 5 + 0
 
-        Bob->>Bob: Encapsulate(encapKey_alice)
-        Note over Bob: saltB_alice = 0x7c1d...
-        Note over Bob: ctI_alice   = 0xa2f5...
-        Bob->>Bob: Erc20CommitmentV2(pk_alice, saltBField_alice, amount=50, tokenId=0)
-        Note over Bob: cmt_payment_alice = 9102837465...
+        Gnark-->>Alice: proof = [Ax,Ay,Bx1,Bx0,By1,By0,Cx,Cy]
+        Gnark-->>Alice: stmt = [C', tree0, root, null_alice, 0, 0, 0, CommitmentB, dummy]
 
-        Bob->>Gnark: POST /proof/joinSplitERC20
-        Note over Gnark: stMessage = swapId = 7384920165...
-        Note over Gnark: assert Poseidon4(pk_bob, saltIn, 50, 0) == cmt_erc20_bob
-        Note over Gnark: assert MerkleProof(cmt_erc20_bob, path) == root20
-        Note over Gnark: assert Poseidon4(pk_alice, saltBField_alice, 50, 0) == cmt_payment_alice
-        Note over Gnark: assert 50 == 50 + 0
-
-        Gnark-->>Bob: proof20 = [Ax,Ay,Bx1,Bx0,By1,By0,Cx,Cy]
-        Gnark-->>Bob: stmt20 = [swapId, tree0, root20, null_bob, 0, 0, 0, cmt_payment_alice, cmt_dummy]
+        Alice->>DVP: submitPartialSettlement(receipt_alice, vaultId=0, groupId=FUNGIBLES)
+        Note over DVP: stored: _pendingTx[CommitmentB] = {targetId: C', vault: 0}
+        DVP-->>Alice: emit PendingProofAddedToVault(vault=0, group=0, C', receipt)
     end
 
     rect rgb(255, 240, 220)
-        Note over Alice,DVP: Step 4 — Atomic settlement on-chain
+        Note over Bob,DVP: Step 3 — Bob completes the swap (Phase 2)
 
-        Alice->>DVP: settleSwap(receipt721, receipt20, [ctI_bob], [ctII_bob], [ctI_alice], [ctII_alice])
-        Note over DVP: stmt721[0] == stmt20[0] == swapId ✓
-        Note over DVP: IVerifier.verifyProof(VK_ERC721, proof721, stmt721) ✓
-        Note over DVP: IVerifier.verifyProof(VK_ERC20, proof20, stmt20) ✓
-        Note over DVP: isValidRoot(tree721, root721) ✓
-        Note over DVP: isValidRoot(tree20, root20) ✓
-        Note over DVP: setNullifier(tree721, null_alice)
-        Note over DVP: setNullifier(tree20, null_bob)
-        Note over DVP: insertLeaves([cmt_nft_bob])
-        Note over DVP: insertLeaves([cmt_payment_alice, cmt_dummy])
+        Bob->>Bob: saltB' = Decapsulate(decapKey_bob, ctI)
+        Bob->>Bob: (tokenId=25, amount=1, saltStar) = DecryptSwapPayload(saltB', ctII)
+        Bob->>Bob: assert Poseidon4(pk_bob, SaltBToField(saltB'), 5, 10) == CommitmentB ✓
+        Bob->>Bob: assert Poseidon4(pk_alice, SaltBToField(saltStar), 1, 25) == C' ✓
 
-        DVP-->>Bob: emit EncryptedNote(vault721, cmt_nft_bob, ctI_bob, ctII_bob)
-        DVP-->>Alice: emit EncryptedNote(vault20, cmt_payment_alice, ctI_alice, ctII_alice)
-        DVP-->>Alice: emit Nullifier(vault721, tree721, null_alice)
-        DVP-->>Bob: emit Nullifier(vault20, tree20, null_bob)
+        Bob->>Gnark: POST /proof/joinSplitERC20
+        Note over Gnark: StMessage = CommitmentB = 9102837465...
+        Note over Gnark: assert Poseidon4(pk_bob, saltBob, 1, 25) == cmt_ticket_bob
+        Note over Gnark: assert MerkleProof(cmt_ticket_bob, path) == root
+        Note over Gnark: assert Poseidon4(pk_alice, SaltBToField(saltStar), 1, 25) == C'
+        Note over Gnark: assert 1 == 1 + 0
+
+        Gnark-->>Bob: proof = [Ax,Ay,Bx1,Bx0,By1,By0,Cx,Cy]
+        Gnark-->>Bob: stmt = [CommitmentB, tree0, root, null_bob, 0, 0, 0, C', dummy]
+
+        Bob->>DVP: submitPartialSettlement(receipt_bob, vaultId=0, groupId=FUNGIBLES)
+        Note over DVP: lookup: _pendingTx[CommitmentB].targetId = C' == receipt_bob.firstOut ✓
+        Note over DVP: exchangeOnGroupPair(receipt_alice, receipt_bob, vault0, vault0)
+        Note over DVP: assert stmt_alice[0]=C' == stmt_bob[7]=C' ✓
+        Note over DVP: assert stmt_bob[0]=CommitmentB == stmt_alice[7]=CommitmentB ✓
+        Note over DVP: setNullifier(tree0, null_alice)
+        Note over DVP: setNullifier(tree0, null_bob)
+        Note over DVP: insertLeaves([CommitmentB, dummy])
+        Note over DVP: insertLeaves([C', dummy])
+
+        DVP-->>Bob: emit Commitment(vault=0, tree0, CommitmentB)
+        DVP-->>Alice: emit Commitment(vault=0, tree0, C')
+        DVP-->>Alice: emit Nullifier(vault=0, tree0, null_alice)
+        DVP-->>Bob: emit Nullifier(vault=0, tree0, null_bob)
     end
 
     rect rgb(240, 220, 255)
-        Note over Alice,Bob: Step 5 — Scan for received notes
+        Note over Alice,Bob: Step 4 — Scan for received notes
 
-        Bob->>Bob: ScanForErc721Notes(decapKey_bob, pk_bob, events)
-        Note over Bob: Decapsulate(decapKey_bob, ctI_bob) → saltB_bob
-        Note over Bob: DecryptPayload(saltB_bob, ctII_bob) → contractAddr721, tokenId=9999
-        Note over Bob: Erc721Commitment(9999, pk_bob, saltBField_bob) == cmt_nft_bob ✓
+        Bob->>Bob: ScanForErc20Notes(decapKey_bob, pk_bob, events)
+        Note over Bob: Decapsulate(decapKey_bob, ctI) → saltB
+        Note over Bob: DecryptPayload(saltB, ctII_deposit) → tokenId=10, amount=5
+        Note over Bob: Poseidon4(pk_bob, saltBField, 5, 10) == CommitmentB ✓
 
-        Alice->>Alice: ScanForErc20Notes(decapKey_alice, pk_alice, events)
-        Note over Alice: Decapsulate(decapKey_alice, ctI_alice) → saltB_alice
-        Note over Alice: DecryptPayload(saltB_alice, ctII_alice) → tokenId=0, amount=50
-        Note over Alice: Erc20CommitmentV2(pk_alice, saltBField_alice, 50, 0) == cmt_payment_alice ✓
+        Note over Alice: Alice already knows saltStar (she generated it)
+        Note over Alice: Poseidon4(pk_alice, SaltBToField(saltStar), 1, 25) == C' ✓
+        Note over Alice: Alice spends C' using saltStarField as WtSaltsIn
     end
 ```
 
@@ -152,17 +165,20 @@ sequenceDiagram
 
 ## Key references
 
-| Symbol                 | File                                     | Line |
-| ---------------------- | ---------------------------------------- | ---- |
-| `Erc721OwnershipProof` | `src/core/prover_erc.go`                 | 512  |
-| `Erc20JoinSplitProof`  | `src/core/prover_erc.go`                 | —    |
-| `Erc721Commitment`     | `src/core/utils.go`                      | 577  |
-| `Erc20CommitmentV2`    | `src/core/utils.go`                      | 563  |
-| `GetNullifier`         | `src/core/utils.go`                      | —    |
-| `Encapsulate`          | `src/core/utils.go`                      | 216  |
-| `ScanForErc721Notes`   | `src/core/scan.go`                       | —    |
-| `ScanForErc20Notes`    | `src/core/scan.go`                       | —    |
-| `Erc721Circuit.Define` | `gnark_circuits/templates/ERC721.go`     | —    |
-| `Erc20Circuit.Define`  | `gnark_circuits/templates/ERC20.go`      | —    |
-| `settleSwap`           | `contracts/core/contracts/EnygmaDvp.sol` | —    |
-| Integration test       | `test/06_v2_swap_erc721_erc20_test.go`   | —    |
+| Symbol                    | File                                                         | Line |
+| ------------------------- | ------------------------------------------------------------ | ---- |
+| `ZkDvpInitiateSwap`       | `src/core/prover_erc.go`                                     | 231  |
+| `Erc20JoinSplitProofFromSalts` | `src/core/prover_erc.go`                                | 680  |
+| `ScanForZkDvpSwap`        | `src/core/scan.go`                                           | 237  |
+| `EncryptSwapPayload`      | `src/core/utils.go`                                          | 264  |
+| `DecryptSwapPayload`      | `src/core/utils.go`                                          | —    |
+| `Erc20CommitmentV2`       | `src/core/utils.go`                                          | 563  |
+| `GetNullifier`            | `src/core/utils.go`                                          | —    |
+| `Encapsulate`             | `src/core/utils.go`                                          | 216  |
+| `SaltBToField`            | `src/core/utils.go`                                          | 239  |
+| `submitPartialSettlement` | `contracts/core/contracts/EnygmaDvp.sol`                     | 598  |
+| `_settleOnGroupPair`      | `contracts/core/contracts/EnygmaDvp.sol`                     | 798  |
+| `exchangeOnGroupPair`     | `contracts/core/contracts/EnygmaDvp.sol`                     | 773  |
+| `Erc20Circuit.Define`     | `gnark_circuits/templates/ERC20.go`                          | —    |
+| Unit test                 | `test/06_v2_swap_erc721_erc20_test.go`                       | —    |
+| Full ZkDvp test           | `test/12_v2_zkdvp_swap_test.go`                              | —    |
