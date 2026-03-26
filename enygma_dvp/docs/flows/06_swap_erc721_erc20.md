@@ -12,6 +12,7 @@ either the full exchange happens, or nothing does.
 The `swapId` is the only public linking value between the two proofs:
 
 ```
+// temporary solution
 swapId = Poseidon4(contractAddr721, tokenId, contractAddr20, paymentAmount)
 ```
 
@@ -24,10 +25,10 @@ both proofs and verified on-chain.
 
 After a one-time public-key exchange, neither party waits for the other:
 
-| Party | Needs from the other party          | Can proceed without knowing         |
-| ----- | ------------------------------------ | ------------------------------------ |
-| Alice | `pk_bob` (spend), `encapKey_bob` (view) | Bob's ERC20 proof or payment note |
-| Bob   | `pk_alice` (spend), `encapKey_alice` (view) | Alice's ERC721 proof or NFT note |
+| Party | Needs from the other party                  | Can proceed without knowing       |
+| ----- | ------------------------------------------- | --------------------------------- |
+| Alice | `pk_bob` (spend), `encapKey_bob` (view)     | Bob's ERC20 proof or payment note |
+| Bob   | `pk_alice` (spend), `encapKey_alice` (view) | Alice's ERC721 proof or NFT note  |
 
 ---
 
@@ -44,12 +45,12 @@ the same `swapId` before settling. A partial submission is rejected.
 
 ## Participants
 
-| Participant  | Role                                                                       |
-| ------------ | -------------------------------------------------------------------------- |
-| Alice        | NFT seller — spends her ERC721 note, receives ERC20 payment from Bob      |
-| Bob          | NFT buyer — spends his ERC20 note, receives the ERC721 note from Alice    |
-| Gnark Server | Generates both Groth16 proofs (ERC721 ownership + ERC20 JoinSplit)        |
-| EnygmaDvp    | Verifies both proofs atomically and settles the swap                      |
+| Participant  | Role                                                                   |
+| ------------ | ---------------------------------------------------------------------- |
+| Alice        | NFT seller — spends her ERC721 note, receives ERC20 payment from Bob   |
+| Bob          | NFT buyer — spends his ERC20 note, receives the ERC721 note from Alice |
+| Gnark Server | Generates both Groth16 proofs (ERC721 ownership + ERC20 JoinSplit)     |
+| EnygmaDvp    | Verifies both proofs atomically and settles the swap                   |
 
 ---
 
@@ -151,17 +152,17 @@ sequenceDiagram
 
 ## Key references
 
-| Symbol                  | File                                                        | Line |
-| ----------------------- | ----------------------------------------------------------- | ---- |
-| `Erc721OwnershipProof`  | `src/core/prover_erc.go`                                    | 512  |
-| `Erc20JoinSplitProof`   | `src/core/prover_erc.go`                                    | —    |
-| `Erc721Commitment`      | `src/core/utils.go`                                         | 577  |
-| `Erc20CommitmentV2`     | `src/core/utils.go`                                         | 563  |
-| `GetNullifier`          | `src/core/utils.go`                                         | —    |
-| `Encapsulate`           | `src/core/utils.go`                                         | 216  |
-| `ScanForErc721Notes`    | `src/core/scan.go`                                          | —    |
-| `ScanForErc20Notes`     | `src/core/scan.go`                                          | —    |
-| `Erc721Circuit.Define`  | `gnark_circuits/templates/ERC721.go`                        | —    |
-| `Erc20Circuit.Define`   | `gnark_circuits/templates/ERC20.go`                         | —    |
-| `settleSwap`            | `contracts/core/contracts/EnygmaDvp.sol`                    | —    |
-| Integration test        | `test/06_v2_swap_erc721_erc20_test.go`                      | —    |
+| Symbol                 | File                                     | Line |
+| ---------------------- | ---------------------------------------- | ---- |
+| `Erc721OwnershipProof` | `src/core/prover_erc.go`                 | 512  |
+| `Erc20JoinSplitProof`  | `src/core/prover_erc.go`                 | —    |
+| `Erc721Commitment`     | `src/core/utils.go`                      | 577  |
+| `Erc20CommitmentV2`    | `src/core/utils.go`                      | 563  |
+| `GetNullifier`         | `src/core/utils.go`                      | —    |
+| `Encapsulate`          | `src/core/utils.go`                      | 216  |
+| `ScanForErc721Notes`   | `src/core/scan.go`                       | —    |
+| `ScanForErc20Notes`    | `src/core/scan.go`                       | —    |
+| `Erc721Circuit.Define` | `gnark_circuits/templates/ERC721.go`     | —    |
+| `Erc20Circuit.Define`  | `gnark_circuits/templates/ERC20.go`      | —    |
+| `settleSwap`           | `contracts/core/contracts/EnygmaDvp.sol` | —    |
+| Integration test       | `test/06_v2_swap_erc721_erc20_test.go`   | —    |
