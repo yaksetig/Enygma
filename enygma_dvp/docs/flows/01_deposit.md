@@ -48,8 +48,8 @@ sequenceDiagram
         Alice->>Alice: EncryptPayload(saltB, tokenId=0, amount=50)
         Note over Alice: returns ctII = 0x3f2a...7b44
 
-        Alice->>Alice: Erc20CommitmentV2(pk_alice, saltBField, 50, tokenId=0)
-        Note over Alice: poseidon.Hash(9284716503, 4401928374, 50, 0)
+        Alice->>Alice: poseidon(pk_alice, saltBField, 50, tokenId=0)
+        Note over Alice: poseidon(9284716503, 4401928374, 50, 0)
         Note over Alice: commitment = 3847261905...
     end
 
