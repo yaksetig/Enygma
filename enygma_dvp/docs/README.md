@@ -15,7 +15,7 @@ references.
 | [03](./flows/03_transfer_erc20.md) | Transfer (JoinSplit) | ERC20 | joinSplitERC20 | ✅ |
 | [04](./flows/04_withdraw_erc20.md) | Withdraw | ERC20 | joinSplitERC20 | ✅ |
 | [05](./flows/05_transfer_erc721.md) | Transfer | ERC721 | ownershipERC721 | ✅ |
-| 06 | Atomic DVP Swap | ERC721 ↔ ERC20 | ownershipERC721 + joinSplitERC20 | 🔜 |
+| [06](./flows/06_swap_erc721_erc20.md) | Atomic DVP Swap | ERC721 ↔ ERC20 | ownershipERC721 + joinSplitERC20 | ✅ |
 | 07 | Transfer (JoinSplit) | ERC1155 Fungible | erc1155Fungible | 🔜 |
 | 08 | Transfer | ERC1155 Non-Fungible | erc1155NonFungible | 🔜 |
 | 09 | Transfer with Broker | ERC1155 Fungible | erc1155FungibleWithBroker | 🔜 |
