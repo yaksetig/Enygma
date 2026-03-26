@@ -8,16 +8,16 @@ references.
 
 ## Flows
 
-| # | Flow | Asset | Circuit | Status |
-|---|------|-------|---------|--------|
-| [01](./flows/01_deposit.md) | Deposit | ERC20 | None | ✅ |
-| [02](./flows/02_private_mint.md) | Private Mint | ERC20 | privateMint | ✅ |
-| [03](./flows/03_transfer_erc20.md) | Transfer (JoinSplit) | ERC20 | joinSplitERC20 | ✅ |
-| [04](./flows/04_withdraw_erc20.md) | Withdraw | ERC20 | joinSplitERC20 | ✅ |
-| [05](./flows/05_transfer_erc721.md) | Transfer | ERC721 | ownershipERC721 | ✅ |
-| [06](./flows/06_swap_erc721_erc20.md) | Atomic DVP Swap | ERC721 ↔ ERC20 | ownershipERC721 + joinSplitERC20 | ✅ |
-| [07](./flows/07_transfer_erc1155_fungible.md) | Transfer (JoinSplit) | ERC1155 Fungible | erc1155Fungible | ✅ |
-| [08](./flows/08_transfer_erc1155_nonfungible.md) | Transfer | ERC1155 Non-Fungible | erc1155NonFungible | ✅ |
+| #                                                | Flow                 | Asset                | Circuit                          | Status |
+| ------------------------------------------------ | -------------------- | -------------------- | -------------------------------- | ------ |
+| [01](./flows/01_deposit.md)                      | Deposit              | ERC20                | None                             | ✅     |
+| [02](./flows/02_private_mint.md)                 | Private Mint         | ERC20                | privateMint                      | ✅     |
+| [03](./flows/03_transfer_erc20.md)               | Transfer (JoinSplit) | ERC20                | joinSplitERC20                   | ✅     |
+| [04](./flows/04_withdraw_erc20.md)               | Withdraw             | ERC20                | joinSplitERC20                   | ✅     |
+| [05](./flows/05_transfer_erc721.md)              | Transfer             | ERC721               | ownershipERC721                  | ✅     |
+| [06](./flows/06_swap_erc721_erc20.md)            | Atomic DVP Swap      | ERC721 ↔ ERC20       | ownershipERC721 + joinSplitERC20 | ✅     |
+| [07](./flows/07_transfer_erc1155_fungible.md)    | Transfer (JoinSplit) | ERC1155 Fungible     | erc1155Fungible                  | ✅     |
+| [08](./flows/08_transfer_erc1155_nonfungible.md) | Transfer             | ERC1155 Non-Fungible | erc1155NonFungible               | ✅     |
 
 ---
 
@@ -25,15 +25,15 @@ references.
 
 All flows share the same cryptographic building blocks:
 
-| Primitive | Purpose | Implementation |
-|---|---|---|
-| **Poseidon hash** | Commitment and nullifier computation | `src/core/utils.go` |
-| **ML-KEM-768** | Non-interactive note delivery (encapsulate / decapsulate) | `src/core/utils.go:216` |
-| **ChaCha20-Poly1305** | Encrypt tokenId and amount inside `ctII` | `src/core/utils.go:317` |
-| **Groth16** | ZK proof generation and verification | `gnark_circuits/server/circuits/` |
-| **Incremental Merkle tree** | On-chain membership proofs (depth 8) | `contracts/core/` |
+| Primitive                   | Purpose                                                   | Implementation                    |
+| --------------------------- | --------------------------------------------------------- | --------------------------------- |
+| **Poseidon hash**           | Commitment and nullifier computation                      | `src/core/utils.go`               |
+| **ML-KEM-768**              | Non-interactive note delivery (encapsulate / decapsulate) | `src/core/utils.go:216`           |
+| **ChaCha20-Poly1305**       | Encrypt tokenId and amount inside `ctII`                  | `src/core/utils.go:317`           |
+| **Groth16**                 | ZK proof generation and verification                      | `gnark_circuits/server/circuits/` |
+| **Incremental Merkle tree** | On-chain membership proofs (depth 8)                      | `contracts/core/`                 |
 
-### Commitment formula (ERC20)
+### Commitment formula (Any token type)
 
 ```
 commitment = Poseidon4(pk_spend, saltBField, amount, tokenId)
