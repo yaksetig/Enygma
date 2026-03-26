@@ -18,11 +18,7 @@ references.
 | [06](./flows/06_swap_erc721_erc20.md) | Atomic DVP Swap | ERC721 ↔ ERC20 | ownershipERC721 + joinSplitERC20 | ✅ |
 | [07](./flows/07_transfer_erc1155_fungible.md) | Transfer (JoinSplit) | ERC1155 Fungible | erc1155Fungible | ✅ |
 | 08 | Transfer | ERC1155 Non-Fungible | erc1155NonFungible | 🔜 |
-| 09 | Transfer with Broker | ERC1155 Fungible | erc1155FungibleWithBroker | 🔜 |
-| 10 | Transfer with Auditor | ERC1155 Fungible | erc1155FungibleAuditor | 🔜 |
-| 11 | Transfer with Auditor | ERC1155 Non-Fungible | erc1155NonFungibleAuditor | 🔜 |
-| 12 | Sealed-Bid Auction | ERC721 | auctionInit + auctionBid + ... | 🔜 |
-| 13 | Broker Registration | — | brokerRegistration | 🔜 |
+| 09 | Sealed-Bid Auction | ERC721 | auctionInit + auctionBid + ... | 🔜 |
 
 ---
 
