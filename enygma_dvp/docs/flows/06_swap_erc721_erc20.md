@@ -18,14 +18,53 @@ The protocol is **asymmetric and two-phase**:
 ## Commitment formulas
 
 ```
-Alice's USDT note:  Poseidon4(pk_alice, saltA, amount, tokenId=0)       // ERC20 JoinSplit
-Bob's ticket note:  Poseidon4(pk_bob,   saltB, 1, tokenId=25)           // ERC721 Ownership
-C' (Alice receives): Poseidon4(pk_alice, saltStar, 1, tokenId=25)       // ≡ Erc721Commitment
+Alice's USDT note:   Poseidon4(pk_alice, SaltBToField(saltA),    amount, tokenId=0)   // ERC20 JoinSplit
+Bob's ticket note:   Poseidon4(pk_bob,   SaltBToField(saltB),    1,      tokenId=25)  // ERC721 Ownership
+C' (Alice receives): Poseidon4(pk_alice, SaltBToField(salt*),    1,      tokenId=25)  // ≡ Erc721Commitment
+CommitmentB:         Poseidon4(pk_bob,   SaltBToField(saltB),    amount, tokenId=0)   // Alice's USDT for Bob
 ```
 
 Note: `Erc721Commitment(tokenId, pk, salt) = Poseidon4(pk, salt, 1, tokenId)` — same formula
 as `Erc20CommitmentV2(pk, salt, 1, tokenId)`. Alice uses this equivalence to pre-compute C'
 inside her ERC20 JoinSplit proof.
+
+`SaltBToField(salt)` reduces raw salt bytes mod the SNARK scalar field, producing the field element
+used inside ZK circuits. See `src/core/utils.go:239`.
+
+---
+
+## Cryptographic construction (Alice, Phase 1)
+
+Alice constructs the swap payload using ML-KEM key encapsulation and ChaCha20-Poly1305 AEAD:
+
+```
+// 1. Key encapsulation — derive shared secret for note delivery to Bob
+(saltB, ctI) = Encapsulate(encapKey_bob)
+    saltB : []byte   — raw ML-KEM shared secret (used as AEAD key and commitment salt)
+    ctI   : []byte   — KEM ciphertext sent to Bob on-chain
+
+// 2. Commitment for Alice's USDT payment to Bob
+CommitmentB = Poseidon4(pk_bob, SaltBToField(saltB), amount=5, tokenId=0)
+
+// 3. Random output salt — same byte-length as saltB
+salt* = GenerateRandomValue(len(saltB))
+
+// 4. Alice's expected ERC721 ticket commitment (pre-computed, used as StMessage in proof)
+C' = Poseidon4(pk_alice, SaltBToField(salt*), amount=1, tokenId=25)
+   = Erc721Commitment(tokenId=25, pk_alice, SaltBToField(salt*))
+
+// 5. Encrypted swap payload — delivers (tokenId, amount, salt*) to Bob
+m    = tokenId(32 bytes) || amount(32 bytes) || salt*(raw bytes)
+k    = saltB                                // raw ML-KEM shared secret as AEAD key
+ctII = ChaCha20-Poly1305(k, m)             // sent on-chain alongside ctI
+```
+
+**salt\* duality**: `salt*` appears in two forms:
+- **Raw bytes** inside `m` (payload) — so Bob can recover it and call `SaltBToField` himself
+- **`SaltBToField(salt*)`** inside `C'` — field element for use in the ZK circuit
+
+Bob recovers `salt*` by: `Decapsulate(decapKey_bob, ctI) → saltB`, then `DecryptSwapPayload(saltB, ctII) → (tokenId, amount, salt*)`.
+Bob then verifies: `Poseidon4(pk_alice, SaltBToField(salt*), 1, tokenId) == C'`.
 
 ---
 
