@@ -63,6 +63,38 @@ flowchart TD
 Note: We intend to update the ZK module to use a quantum-secure ZK scheme, which will make the entire system quantum-secure (as opposed to quantum-private). We also intend to leverage the ability of having [Single-Server Private Outsourcing of zk-SNARKs
 ](https://eprint.iacr.org/2025/2113) to allow clients to submit ZK proofs to the Private Network Hub component of the system without incurring in unnecessary hardware costs. 
 
+## Repository Structure
+
+```
+enygma_dvp/
+├── contracts/          Solidity smart contracts (Hardhat project)
+├── artifacts/          Hardhat compilation outputs — DO NOT overwrite PoseidonT3/T5 (see Poseidon.sol)
+├── build/              Deployment receipts (receipts.json) + gnark VK exports consumed by init.go
+├── src/                Go core library (provers, crypto, Merkle tree, scan helpers)
+├── gnark_circuits/     ZK proof server — REST API wrapping gnark Groth16 circuits
+├── scripts/            Go deployment and initialization scripts (deploy.go, init.go)
+├── test/               Go integration tests (requires Hardhat node + gnark server)
+├── docs/               Flow documentation and Mermaid diagrams
+├── node_modules/       Node.js packages for Hardhat and circomlibjs (do not delete)
+└── hardhat.config.js   Hardhat configuration (network, compiler settings)
+```
+
+### Go module layout
+
+The repository contains four independent Go modules. They do **not** share a single
+`go.work` workspace — each must be built from its own directory.
+
+| Directory | Module name | Depends on |
+|-----------|-------------|------------|
+| `src/` | `enygma_dvp/src_go` | external only |
+| `test/` | `enygma_dvp/test` | `enygma_dvp/src_go` (via `replace => ../src`) |
+| `scripts/` | `enygma_dvp` | `enygma_dvp/src_go` (via `replace => ../src`) |
+| `gnark_circuits/` | `gnark_server` | external only (gnark, no dependency on src/) |
+
+The `_go` suffix in the module name `enygma_dvp/src_go` is intentional — it disambiguates
+the Go module from the Solidity contracts that live under the same repo root. The physical
+folder is `src/`, not `src_go/`.
+
 ## Implementation Details
 TBD
 
