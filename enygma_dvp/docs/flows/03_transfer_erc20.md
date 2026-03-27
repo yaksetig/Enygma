@@ -113,8 +113,8 @@ sequenceDiagram
         Note over Alice: saltBField_bob = 5519283746...
         Alice->>Alice: EncryptPayload(saltB_bob, tokenId=0, amount=50)
         Note over Alice: ctII_bob = 0xa1b2...c3d4
-        Alice->>Alice: poseidon(pk_bob, saltBField_bob, 50, 0)
-        Note over Alice: cmt_bob = 8472619305...
+        Alice->>Alice: cmt_bob = poseidon(pk_bob, saltBField_bob, 50, 0)  = 8472619305...
+
 
         Alice->>Alice: Encapsulate(alice.viewEncapKey)
         Note over Alice: saltB_change = 0x7c2d...b820

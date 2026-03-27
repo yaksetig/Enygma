@@ -10,6 +10,7 @@ Alice spends her input note and produces one output note for Bob.
 Merkle tree changes: Alice's leaf is nullified, Bob's new commitment is inserted.
 
 The circuit enforces:
+
 1. Alice owns the input note (she knows `sk_spend`).
 2. The input nullifier is correctly derived.
 3. The input commitment is a member of the Merkle tree.
@@ -19,15 +20,15 @@ The circuit enforces:
 
 ## Key facts
 
-| Property        | Value                                                         |
-| --------------- | ------------------------------------------------------------- |
-| Circuit         | `ownershipERC721` (1-in / 1-out)                             |
-| ZK proof        | Groth16 on BN254                                              |
-| Commitment      | `Poseidon4(pk_spend, salt, 1, tokenId)` — amount fixed at `1` |
-| Verifier        | Generic `IVerifier` registry                                  |
-| Tree operation  | `insertLeaves` (1 new) + `setNullifier` (1 old)              |
-| Events emitted  | `EncryptedNote` × 1, `Nullifier` × 1                         |
-| Token movement  | None — vault already holds the NFT                            |
+| Property       | Value                                                         |
+| -------------- | ------------------------------------------------------------- |
+| Circuit        | `ownershipERC721` (1-in / 1-out)                              |
+| ZK proof       | Groth16 on BN254                                              |
+| Commitment     | `Poseidon4(pk_spend, salt, 1, tokenId)` — amount fixed at `1` |
+| Verifier       | Generic `IVerifier` registry                                  |
+| Tree operation | `insertLeaves` (1 new) + `setNullifier` (1 old)               |
+| Events emitted | `EncryptedNote` × 1, `Nullifier` × 1                          |
+| Token movement | None — vault already holds the NFT                            |
 
 ---
 
@@ -37,26 +38,26 @@ The circuit enforces:
 
 ### Public inputs (statement)
 
-| Index | Name               | Value                                         |
-| ----- | ------------------ | --------------------------------------------- |
-| 0     | `StMessage`        | Arbitrary public value (e.g. `1` for transfer) |
-| 1     | `StTreeNumbers[0]` | Tree number for Alice's input note            |
-| 2     | `StMerkleRoots[0]` | Merkle root proving Alice's note membership   |
-| 3     | `StNullifiers[0]`  | `Poseidon2(sk_alice, leafIndex)`              |
-| 4     | `StCommitmentOut[0]` | Bob's output commitment                     |
+| Index | Name                 | Value                                          |
+| ----- | -------------------- | ---------------------------------------------- |
+| 0     | `StMessage`          | Arbitrary public value (e.g. `1` for transfer) |
+| 1     | `StTreeNumbers[0]`   | Tree number for Alice's input note             |
+| 2     | `StMerkleRoots[0]`   | Merkle root proving Alice's note membership    |
+| 3     | `StNullifiers[0]`    | `Poseidon2(sk_alice, leafIndex)`               |
+| 4     | `StCommitmentOut[0]` | Bob's output commitment                        |
 
 ### Private witnesses
 
-| Name                    | Value                                                          |
-| ----------------------- | -------------------------------------------------------------- |
-| `WtPrivateKeysIn[0]`    | `sk_alice` — proves ownership of the input note               |
-| `WtValues[0]`           | `tokenId` — ERC721 token identifier                           |
-| `WtSaltsIn[0]`          | `saltBField` from when Alice received the note                 |
-| `WtPathElements[0][j]`  | Merkle sibling hashes for Alice's leaf                         |
-| `WtPathIndices[0]`      | Leaf index of Alice's note                                     |
-| `WtErc721ContractAddress` | ERC721 contract address — binds the note to a specific NFT   |
-| `WtPublicKeysOut[0]`    | `pk_bob` — spend public key of the recipient                  |
-| `WtSaltsOut[0]`         | `saltBField` derived from `Encapsulate(bob.viewEncapKey)`     |
+| Name                      | Value                                                      |
+| ------------------------- | ---------------------------------------------------------- |
+| `WtPrivateKeysIn[0]`      | `sk_alice` — proves ownership of the input note            |
+| `WtValues[0]`             | `tokenId` — ERC721 token identifier                        |
+| `WtSaltsIn[0]`            | `saltBField` from when Alice received the note             |
+| `WtPathElements[0][j]`    | Merkle sibling hashes for Alice's leaf                     |
+| `WtPathIndices[0]`        | Leaf index of Alice's note                                 |
+| `WtErc721ContractAddress` | ERC721 contract address — binds the note to a specific NFT |
+| `WtPublicKeysOut[0]`      | `pk_bob` — spend public key of the recipient               |
+| `WtSaltsOut[0]`           | `saltBField` derived from `Encapsulate(bob.viewEncapKey)`  |
 
 ### Constraints (in-circuit)
 
@@ -72,12 +73,12 @@ StCommitmentOut[0] = Poseidon4(WtPublicKeysOut[0], WtSaltsOut[0], 1, WtValues[0]
 
 ## Participants
 
-| Participant  | Role                                                                            |
-| ------------ | ------------------------------------------------------------------------------- |
-| Alice        | Sender — spends her NFT note and creates Bob's output note                     |
-| Bob          | Recipient — scans `EncryptedNote` to discover the note addressed to him        |
-| Gnark Server | Generates the Groth16 ownership proof                                           |
-| EnygmaDvp    | Verifies the proof, nullifies Alice's note, inserts Bob's commitment            |
+| Participant  | Role                                                                    |
+| ------------ | ----------------------------------------------------------------------- |
+| Alice        | Sender — spends her NFT note and creates Bob's output note              |
+| Bob          | Recipient — scans `EncryptedNote` to discover the note addressed to him |
+| Gnark Server | Generates the Groth16 ownership proof                                   |
+| EnygmaDvp    | Verifies the proof, nullifies Alice's note, inserts Bob's commitment    |
 
 ---
 
@@ -100,7 +101,7 @@ sequenceDiagram
         Note over Alice: saltBField_bob = 7294810362...
         Alice->>Alice: EncryptPayload(saltB_bob, contractAddr, tokenId=42)
         Note over Alice: ctII_bob = 0xb5c6...d7e8
-        Alice->>Alice: Erc721Commitment(tokenId=42, pk_bob, saltBField_bob)
+        Alice->>Alice: commitment = poseidon(tokenId=42, pk_bob, saltBField_bob)
         Note over Alice: cmt_bob = Poseidon4(pk_bob, 7294..., 1, 42) = 3748291065...
 
         Alice->>Alice: GetNullifier(sk_alice, leafIndex=0)
@@ -145,7 +146,7 @@ sequenceDiagram
         Note over Bob: contractAddr, tokenId=42
         Bob->>Bob: SaltBToField(saltB_bob)
         Note over Bob: saltBField = 7294810362...
-        Bob->>Bob: Erc721Commitment(42, pk_bob, saltBField)
+        Bob->>Bob: commitment=poseidon(42, pk_bob, saltBField)
         Note over Bob: 3748... matches event — note is mine
     end
 ```
@@ -307,12 +308,12 @@ ScanForErc721Notes(bob.viewDecapKey, bob.spendPk, events)   src/core/scan.go
 
 Bob stores:
 
-| Value        | Source                       | Used for                    |
-| ------------ | ---------------------------- | --------------------------- |
-| `commitment` | Event `EncryptedNote`        | Merkle proof lookup         |
-| `saltBField` | Decapsulate → SaltBToField   | `WtSaltsIn` in next proof   |
-| `leafIndex`  | From `insertLeaves` / events | Merkle path generation      |
-| `tokenId`    | Decrypted from ctII          | `WtValues` in next proof    |
+| Value        | Source                       | Used for                  |
+| ------------ | ---------------------------- | ------------------------- |
+| `commitment` | Event `EncryptedNote`        | Merkle proof lookup       |
+| `saltBField` | Decapsulate → SaltBToField   | `WtSaltsIn` in next proof |
+| `leafIndex`  | From `insertLeaves` / events | Merkle path generation    |
+| `tokenId`    | Decrypted from ctII          | `WtValues` in next proof  |
 
 ---
 

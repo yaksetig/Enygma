@@ -13,10 +13,10 @@ her balance without revealing it publicly.
 
 ## Participants
 
-| Participant | Role                                                                                              |
-| ----------- | ------------------------------------------------------------------------------------------------- |
-| Alice       | Depositor — owns the ERC20 tokens and the resulting private note                                  |
-| EnygmaDvp   | Accepts the deposit, pulls tokens into the vault, inserts the Merkle leaf, and emits events       |
+| Participant | Role                                                                                        |
+| ----------- | ------------------------------------------------------------------------------------------- |
+| Alice       | Depositor — owns the ERC20 tokens and the resulting private note                            |
+| EnygmaDvp   | Accepts the deposit, pulls tokens into the vault, inserts the Merkle leaf, and emits events |
 
 ---
 
@@ -44,8 +44,8 @@ sequenceDiagram
         Alice->>Alice: EncryptPayload(saltB, tokenId=0, amount=50)
         Note over Alice: returns ctII = 0x3f2a...7b44
 
-        Alice->>Alice: poseidon(pk_alice, saltBField, 50, tokenId=0)
-        Note over Alice: commitment = 3847261905...
+        Alice->>Alice: commitment=poseidon(pk_alice, saltBField, 50, tokenId=0) =3847261905...
+
     end
 
     rect rgb(220, 255, 220)
