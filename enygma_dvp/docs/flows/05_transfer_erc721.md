@@ -101,7 +101,7 @@ sequenceDiagram
         Note over Alice: saltBField_bob = 7294810362...
         Alice->>Alice: EncryptPayload(saltB_bob, contractAddr, tokenId=42)
         Note over Alice: ctII_bob = 0xb5c6...d7e8
-        Alice->>Alice: commitment = poseidon(tokenId=42, pk_bob, saltBField_bob)
+        Alice->>Alice: cmt_bob = Poseidon4(pk_bob,saltBField_bob,amount, tokenId=42)
         Note over Alice: cmt_bob = Poseidon4(pk_bob, 7294..., 1, 42) = 3748291065...
 
         Alice->>Alice: GetNullifier(sk_alice, leafIndex=0)
@@ -140,7 +140,7 @@ sequenceDiagram
     rect rgb(240, 220, 255)
         Note over Bob: Step 4 — Bob scans for his note
 
-        Bob->>Bob: Decapsulate(bob.viewDecapKey, ctI_bob)
+        Bob->>Bob: Decapsulate(bob.viewDecapKey,w ctI_bob)
         Note over Bob: saltB_bob = 0x4f2a...c801
         Bob->>Bob: DecryptPayload(saltB_bob, ctII_bob)
         Note over Bob: contractAddr, tokenId=42

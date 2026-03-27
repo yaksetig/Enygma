@@ -115,9 +115,9 @@ sequenceDiagram
     rect rgb(220, 235, 255)
         Note over Issuer: Step 1 — Prepare commitment off-chain
 
-        Issuer->>Issuer: commitment = poseidon(pk_alice, salt, 100, tokenId=0) = 7193827465...
+        Issuer->>Issuer: cmt = Poseidon4(pk_alice, salt, 100, tokenId=0) = 7193827465...
 
-        Issuer->>Issuer: poseidon(pk_alice, salt)
+        Issuer->>Issuer: Poseidon2(pk_alice, salt)
         Note over Issuer: cipherText = 4827361059...
     end
 

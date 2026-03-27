@@ -44,7 +44,7 @@ sequenceDiagram
         Alice->>Alice: EncryptPayload(saltB, tokenId=0, amount=50)
         Note over Alice: returns ctII = 0x3f2a...7b44
 
-        Alice->>Alice: commitment=poseidon(pk_alice, saltBField, 50, tokenId=0) =3847261905...
+        Alice->>Alice: cmt = poseidon(pk_alice, saltBField, 50, tokenId=0) =3847261905...
 
     end
 

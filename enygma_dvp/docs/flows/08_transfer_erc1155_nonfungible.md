@@ -20,28 +20,28 @@ with two additions that are shared with the ERC1155 fungible flow (Flow 07):
 
 ## Key facts
 
-| Property          | Value                                                           |
-| ----------------- | --------------------------------------------------------------- |
-| Circuit           | `erc1155NonFungible` (1-in / 1-out)                            |
-| ZK proof          | Groth16 on BN254                                               |
-| Commitment        | `Poseidon4(pk_spend, salt, 1, tokenId)` — amount fixed at `1`  |
-| UID               | `Poseidon2(Poseidon2(contractAddr, tokenId), 0)`               |
-| Verifier          | Generic `IVerifier` registry                                   |
-| Tree operation    | `insertLeaves` (1 new) + `setNullifier` (1 old)                |
-| Events emitted    | `EncryptedNote` × 1, `Nullifier` × 1                           |
-| Token movement    | None — vault already holds the ERC1155 token                   |
+| Property       | Value                                                         |
+| -------------- | ------------------------------------------------------------- |
+| Circuit        | `erc1155NonFungible` (1-in / 1-out)                           |
+| ZK proof       | Groth16 on BN254                                              |
+| Commitment     | `Poseidon4(pk_spend, salt, 1, tokenId)` — amount fixed at `1` |
+| UID            | `Poseidon2(Poseidon2(contractAddr, tokenId), 0)`              |
+| Verifier       | Generic `IVerifier` registry                                  |
+| Tree operation | `insertLeaves` (1 new) + `setNullifier` (1 old)               |
+| Events emitted | `EncryptedNote` × 1, `Nullifier` × 1                          |
+| Token movement | None — vault already holds the ERC1155 token                  |
 
 ---
 
 ## Key difference from ERC1155 Fungible (Flow 07)
 
-|                    | ERC1155 Fungible (Flow 07)              | ERC1155 Non-Fungible (Flow 08)         |
-| ------------------ | --------------------------------------- | -------------------------------------- |
-| Circuit            | `erc1155Fungible` (2-in / 2-out)        | `erc1155NonFungible` (1-in / 1-out)   |
-| Amount             | Variable                                | Always `1`                             |
-| Balance check      | `sum(in) == sum(out)` enforced          | No balance constraint (amount = 1)    |
-| Change note        | Yes — second output is change/dummy     | No — full ownership transfers          |
-| Statement length   | 9 elements                              | 7 elements                             |
+|                  | ERC1155 Fungible (Flow 07)          | ERC1155 Non-Fungible (Flow 08)      |
+| ---------------- | ----------------------------------- | ----------------------------------- |
+| Circuit          | `erc1155Fungible` (2-in / 2-out)    | `erc1155NonFungible` (1-in / 1-out) |
+| Amount           | Variable                            | Always `1`                          |
+| Balance check    | `sum(in) == sum(out)` enforced      | No balance constraint (amount = 1)  |
+| Change note      | Yes — second output is change/dummy | No — full ownership transfers       |
+| Statement length | 9 elements                          | 7 elements                          |
 
 ---
 
@@ -61,31 +61,31 @@ nullifier  = Poseidon2(sk_spend, leafIndex)
 
 ### Public inputs (statement)
 
-| Index | Name                      | Value                                           |
-| ----- | ------------------------- | ----------------------------------------------- |
-| 0     | `StMessage`               | Arbitrary public value (e.g. `1` for transfer)  |
-| 1     | `StTreeNumbers[0]`        | Tree number for Alice's input note              |
-| 2     | `StMerkleRoots[0]`        | Merkle root proving Alice's note membership     |
-| 3     | `StNullifiers[0]`         | `Poseidon2(sk_alice, leafIndex)`                |
-| 4     | `StCommitmentOut[0]`      | Bob's output commitment                         |
+| Index | Name                        | Value                                          |
+| ----- | --------------------------- | ---------------------------------------------- |
+| 0     | `StMessage`                 | Arbitrary public value (e.g. `1` for transfer) |
+| 1     | `StTreeNumbers[0]`          | Tree number for Alice's input note             |
+| 2     | `StMerkleRoots[0]`          | Merkle root proving Alice's note membership    |
+| 3     | `StNullifiers[0]`           | `Poseidon2(sk_alice, leafIndex)`               |
+| 4     | `StCommitmentOut[0]`        | Bob's output commitment                        |
 | 5     | `StAssetGroupTreeNumber[0]` | Tree number of the asset group tree            |
 | 6     | `StAssetGroupMerkleRoot[0]` | Merkle root of the asset group tree            |
 
 ### Private witnesses
 
-| Name                         | Value                                                          |
-| ---------------------------- | -------------------------------------------------------------- |
-| `WtPrivateKeysIn[0]`         | `sk_alice` — proves ownership of the input note               |
-| `WtValues[0]`                | `1` — fixed amount for non-fungible tokens                    |
-| `WtSaltsIn[0]`               | `saltBField` from when Alice received the note                 |
-| `WtPathElements[0][j]`       | Merkle sibling hashes for Alice's leaf (token tree)            |
-| `WtPathIndices[0]`           | Leaf index of Alice's note                                     |
-| `WtErc1155TokenId[0]`        | Token type ID                                                  |
-| `WtErc1155ContractAddress`   | ERC1155 contract address — used to compute the UID             |
-| `WtPublicKeysOut[0]`         | `pk_bob` — spend public key of the recipient                  |
-| `WtSaltsOut[0]`              | `saltBField` derived from `Encapsulate(bob.viewEncapKey)`     |
-| `WtAssetGroupPathElements[0]` | Merkle sibling hashes for `uid` in the asset group tree      |
-| `WtAssetGroupPathIndices[0]` | Leaf index of `uid` in the asset group tree                   |
+| Name                          | Value                                                     |
+| ----------------------------- | --------------------------------------------------------- |
+| `WtPrivateKeysIn[0]`          | `sk_alice` — proves ownership of the input note           |
+| `WtValues[0]`                 | `1` — fixed amount for non-fungible tokens                |
+| `WtSaltsIn[0]`                | `saltBField` from when Alice received the note            |
+| `WtPathElements[0][j]`        | Merkle sibling hashes for Alice's leaf (token tree)       |
+| `WtPathIndices[0]`            | Leaf index of Alice's note                                |
+| `WtErc1155TokenId[0]`         | Token type ID                                             |
+| `WtErc1155ContractAddress`    | ERC1155 contract address — used to compute the UID        |
+| `WtPublicKeysOut[0]`          | `pk_bob` — spend public key of the recipient              |
+| `WtSaltsOut[0]`               | `saltBField` derived from `Encapsulate(bob.viewEncapKey)` |
+| `WtAssetGroupPathElements[0]` | Merkle sibling hashes for `uid` in the asset group tree   |
+| `WtAssetGroupPathIndices[0]`  | Leaf index of `uid` in the asset group tree               |
 
 ### Constraints (in-circuit)
 
@@ -103,12 +103,12 @@ MerkleRoot(uid, WtAssetGroupPathElements[0], WtAssetGroupPathIndices[0]) == StAs
 
 ## Participants
 
-| Participant  | Role                                                                              |
-| ------------ | --------------------------------------------------------------------------------- |
-| Alice        | Sender — spends her NFT note and creates Bob's output note                       |
-| Bob          | Recipient — scans `EncryptedNote` to discover the note addressed to him          |
-| Gnark Server | Generates the Groth16 ERC1155 non-fungible ownership proof                       |
-| EnygmaDvp    | Verifies the proof, nullifies Alice's note, inserts Bob's commitment              |
+| Participant  | Role                                                                    |
+| ------------ | ----------------------------------------------------------------------- |
+| Alice        | Sender — spends her NFT note and creates Bob's output note              |
+| Bob          | Recipient — scans `EncryptedNote` to discover the note addressed to him |
+| Gnark Server | Generates the Groth16 ERC1155 non-fungible ownership proof              |
+| EnygmaDvp    | Verifies the proof, nullifies Alice's note, inserts Bob's commitment    |
 
 ---
 
@@ -191,17 +191,17 @@ sequenceDiagram
 
 ## Key references
 
-| Symbol                                | File                                                                  | Line |
-| ------------------------------------- | --------------------------------------------------------------------- | ---- |
-| `Erc1155NonFungibleOwnershipProof`    | `src/core/prover_erc.go`                                              | 898  |
-| `Erc1155Commitment`                   | `src/core/utils.go`                                                   | 596  |
-| `Erc1155UniqueId`                     | `src/core/utils.go`                                                   | 582  |
-| `GetNullifier`                        | `src/core/utils.go`                                                   | —    |
-| `Encapsulate`                         | `src/core/utils.go`                                                   | 216  |
-| `SaltBToField`                        | `src/core/utils.go`                                                   | 239  |
-| `EncryptPayload`                      | `src/core/utils.go`                                                   | 317  |
-| `ScanForErc1155Notes`                 | `src/core/scan.go`                                                    | —    |
-| `Erc1155Circuit.Define` (non-fungible) | `gnark_circuits/templates/ERC1155.go`                                | —    |
-| `NewHandler` (erc1155NonFungible)     | `gnark_circuits/server/circuits/erc1155NonFungible/handler.go`        | —    |
-| `transferV2`                          | `contracts/core/contracts/vaults/Erc1155CoinVault.sol`                | —    |
-| Integration test                      | `test/08_v2_erc1155_nonfungible_test.go`                              | —    |
+| Symbol                                 | File                                                           | Line |
+| -------------------------------------- | -------------------------------------------------------------- | ---- |
+| `Erc1155NonFungibleOwnershipProof`     | `src/core/prover_erc.go`                                       | 898  |
+| `Erc1155Commitment`                    | `src/core/utils.go`                                            | 596  |
+| `Erc1155UniqueId`                      | `src/core/utils.go`                                            | 582  |
+| `GetNullifier`                         | `src/core/utils.go`                                            | —    |
+| `Encapsulate`                          | `src/core/utils.go`                                            | 216  |
+| `SaltBToField`                         | `src/core/utils.go`                                            | 239  |
+| `EncryptPayload`                       | `src/core/utils.go`                                            | 317  |
+| `ScanForErc1155Notes`                  | `src/core/scan.go`                                             | —    |
+| `Erc1155Circuit.Define` (non-fungible) | `gnark_circuits/templates/ERC1155.go`                          | —    |
+| `NewHandler` (erc1155NonFungible)      | `gnark_circuits/server/circuits/erc1155NonFungible/handler.go` | —    |
+| `transferV2`                           | `contracts/core/contracts/vaults/Erc1155CoinVault.sol`         | —    |
+| Integration test                       | `test/08_v2_erc1155_nonfungible_test.go`                       | —    |
