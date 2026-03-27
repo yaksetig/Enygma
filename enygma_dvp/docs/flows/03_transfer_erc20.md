@@ -10,6 +10,7 @@ and produces two output notes: one for Bob (the payment) and one for herself (th
 changes: old leaves are nullified, new leaves are inserted.
 
 The circuit enforces:
+
 1. Alice owns the input notes (she knows the spend keys).
 2. Input nullifiers are correctly derived.
 3. Input commitments are members of the Merkle tree.
@@ -20,14 +21,14 @@ The circuit enforces:
 
 ## Key facts
 
-| Property          | Value                                                      |
-| ----------------- | ---------------------------------------------------------- |
-| Circuit           | `joinSplitERC20` (2-in / 2-out) or `joinSplitERC20_10_2` (10-in / 2-out) |
-| ZK proof          | Groth16 on BN254                                           |
-| Verifier          | Generic `IVerifier` registry (VK_ID_ERC20_JOINSPLIT = 0)  |
-| Tree operation    | `insertLeaves` (2 new) + `setNullifier` (≥1 old)          |
-| Events emitted    | `EncryptedNote` × 2, `Nullifier` × nIn                    |
-| Token movement    | None — vault already holds all tokens                      |
+| Property       | Value                                                                    |
+| -------------- | ------------------------------------------------------------------------ |
+| Circuit        | `joinSplitERC20` (2-in / 2-out) or `joinSplitERC20_10_2` (10-in / 2-out) |
+| ZK proof       | Groth16 on BN254                                                         |
+| Verifier       | Generic `IVerifier` registry (VK_ID_ERC20_JOINSPLIT = 0)                 |
+| Tree operation | `insertLeaves` (2 new) + `setNullifier` (≥1 old)                         |
+| Events emitted | `EncryptedNote` × 2, `Nullifier` × nIn                                   |
+| Token movement | None — vault already holds all tokens                                    |
 
 ---
 
@@ -37,31 +38,31 @@ The circuit enforces:
 
 ### Public inputs (statement) — interleaved layout
 
-| Index         | Name                 | Value                                             |
-| ------------- | -------------------- | ------------------------------------------------- |
-| 0             | `StMessage`          | Arbitrary public value (e.g. `1` for plain transfer) |
-| 1             | `StTreeNumber[0]`    | Tree number for input note 0                      |
-| 2             | `StMerkleRoots[0]`   | Merkle root proving note 0 membership             |
-| 3             | `StNullifiers[0]`    | `Poseidon2(sk_spend_0, leafIndex_0)`              |
-| 4             | `StTreeNumber[1]`    | Tree number for input note 1 (0 if dummy)         |
-| 5             | `StMerkleRoots[1]`   | Merkle root for note 1 (0 if dummy)               |
-| 6             | `StNullifiers[1]`    | Nullifier for note 1 (0 if dummy)                 |
-| 7             | `StCommitmentOut[0]` | Bob's output commitment                           |
-| 8             | `StCommitmentOut[1]` | Alice's change commitment                         |
+| Index | Name                 | Value                                                |
+| ----- | -------------------- | ---------------------------------------------------- |
+| 0     | `StMessage`          | Arbitrary public value (e.g. `1` for plain transfer) |
+| 1     | `StTreeNumber[0]`    | Tree number for input note 0                         |
+| 2     | `StMerkleRoots[0]`   | Merkle root proving note 0 membership                |
+| 3     | `StNullifiers[0]`    | `Poseidon2(sk_spend_0, leafIndex_0)`                 |
+| 4     | `StTreeNumber[1]`    | Tree number for input note 1 (0 if dummy)            |
+| 5     | `StMerkleRoots[1]`   | Merkle root for note 1 (0 if dummy)                  |
+| 6     | `StNullifiers[1]`    | Nullifier for note 1 (0 if dummy)                    |
+| 7     | `StCommitmentOut[0]` | Bob's output commitment                              |
+| 8     | `StCommitmentOut[1]` | Alice's change commitment                            |
 
 ### Private witnesses
 
-| Name                   | Value                                                                  |
-| ---------------------- | ---------------------------------------------------------------------- |
-| `WtPrivateKeysIn[i]`   | `sk_spend` of input note owner (Alice)                                 |
-| `WtValuesIn[i]`        | Amount in each input note (0 for dummy)                                |
-| `WtSaltsIn[i]`         | `saltBField` received when the note was deposited / transferred        |
-| `WtPathElements[i][j]` | Merkle sibling hashes for note i                                       |
-| `WtPathIndices[i]`     | Merkle leaf index for note i                                           |
-| `WtTokenId`            | ERC20 token identifier (shared across all notes)                       |
-| `WtSpendPublicKeysOut` | `pk_spend` of each output recipient (`[pk_bob, pk_alice]`)             |
-| `WtValuesOut[i]`       | Amount in each output note                                             |
-| `WtSaltsOut[i]`        | `saltBField` for each output (derived from `Encapsulate`)              |
+| Name                   | Value                                                           |
+| ---------------------- | --------------------------------------------------------------- |
+| `WtPrivateKeysIn[i]`   | `sk_spend` of input note owner (Alice)                          |
+| `WtValuesIn[i]`        | Amount in each input note (0 for dummy)                         |
+| `WtSaltsIn[i]`         | `saltBField` received when the note was deposited / transferred |
+| `WtPathElements[i][j]` | Merkle sibling hashes for note i                                |
+| `WtPathIndices[i]`     | Merkle leaf index for note i                                    |
+| `WtTokenId`            | ERC20 token identifier (shared across all notes)                |
+| `WtSpendPublicKeysOut` | `pk_spend` of each output recipient (`[pk_bob, pk_alice]`)      |
+| `WtValuesOut[i]`       | Amount in each output note                                      |
+| `WtSaltsOut[i]`        | `saltBField` for each output (derived from `Encapsulate`)       |
 
 ### Constraints (in-circuit)
 
@@ -84,12 +85,12 @@ balance:
 
 ## Participants
 
-| Participant    | Role                                                                         |
-| -------------- | ---------------------------------------------------------------------------- |
-| Alice          | Sender — spends her input note(s), creates Bob's note and her own change     |
+| Participant    | Role                                                                            |
+| -------------- | ------------------------------------------------------------------------------- |
+| Alice          | Sender — spends her input note(s), creates Bob's note and her own change        |
 | Bob            | Recipient — receives an output commitment; scans `EncryptedNote` to discover it |
-| Gnark Server   | Generates the Groth16 JoinSplit proof                                        |
-| Erc20CoinVault | Verifies the proof, nullifies inputs, inserts outputs, emits events          |
+| Gnark Server   | Generates the Groth16 JoinSplit proof                                           |
+| Erc20CoinVault | Verifies the proof, nullifies inputs, inserts outputs, emits events             |
 
 ---
 
@@ -112,7 +113,7 @@ sequenceDiagram
         Note over Alice: saltBField_bob = 5519283746...
         Alice->>Alice: EncryptPayload(saltB_bob, tokenId=0, amount=50)
         Note over Alice: ctII_bob = 0xa1b2...c3d4
-        Alice->>Alice: Erc20CommitmentV2(pk_bob, saltBField_bob, 50, 0)
+        Alice->>Alice: poseidon(pk_bob, saltBField_bob, 50, 0)
         Note over Alice: cmt_bob = 8472619305...
 
         Alice->>Alice: Encapsulate(alice.viewEncapKey)
@@ -122,7 +123,7 @@ sequenceDiagram
         Note over Alice: saltBField_change = 3301928475...
         Alice->>Alice: EncryptPayload(saltB_change, tokenId=0, amount=20)
         Note over Alice: ctII_change = 0xd5e6...f7a8
-        Alice->>Alice: Erc20CommitmentV2(pk_alice, saltBField_change, 20, 0)
+        Alice->>Alice: poseidon(pk_alice, saltBField_change, 20, 0)
         Note over Alice: cmt_change = 1938274650...
 
         Note over Alice: Input note: value=70, salt=4401928374, leafIndex=0
@@ -170,7 +171,7 @@ sequenceDiagram
         Note over Bob: tokenId=0, amount=50
         Bob->>Bob: SaltBToField(saltB_bob)
         Note over Bob: saltBField = 5519283746...
-        Bob->>Bob: Erc20CommitmentV2(pk_bob, saltBField, 50, 0)
+        Bob->>Bob: poseidon(pk_bob, saltBField, 50, 0)
         Note over Bob: commitment matches 8472... — note is mine
     end
 ```
@@ -423,20 +424,20 @@ accordingly. A zero nullifier is never registered on-chain (`setNullifier` is sk
 
 ## Key references
 
-| Symbol                     | File                                                         | Line |
-| -------------------------- | ------------------------------------------------------------ | ---- |
-| `Erc20JoinSplitProof`      | `src/core/prover_erc.go`                                     | 26   |
-| `Erc20CommitmentV2`        | `src/core/utils.go`                                          | 563  |
-| `GetNullifier`             | `src/core/utils.go`                                          | —    |
-| `Encapsulate`              | `src/core/utils.go`                                          | 216  |
-| `SaltBToField`             | `src/core/utils.go`                                          | 239  |
-| `EncryptPayload`           | `src/core/utils.go`                                          | 317  |
-| `PostProof`                | `src/core/prover_gnark.go`                                   | 48   |
-| `Erc20Circuit.Define`      | `gnark_circuits/templates/ERC20.go`                          | 45   |
-| `NewHandler` (joinSplit)   | `gnark_circuits/server/circuits/joinSplitERC20/handler.go`   | 25   |
-| `groth16.Prove`            | `gnark_circuits/server/circuits/joinSplitERC20/handler.go`   | 130  |
-| `Erc20CoinVault.transferV2`| `contracts/core/contracts/vaults/Erc20CoinVault.sol`         | 115  |
-| `checkReceiptConditions`   | `contracts/core/contracts/vaults/Erc20CoinVault.sol`         | 261  |
-| `emit EncryptedNote`       | `contracts/core/contracts/vaults/Erc20CoinVault.sol`         | 134  |
-| `ScanForErc20Notes`        | `src/core/scan.go`                                           | 62   |
-| `ContractStatement`        | `src/core/prover_auction.go`                                 | —    |
+| Symbol                      | File                                                       | Line |
+| --------------------------- | ---------------------------------------------------------- | ---- |
+| `Erc20JoinSplitProof`       | `src/core/prover_erc.go`                                   | 26   |
+| `Erc20CommitmentV2`         | `src/core/utils.go`                                        | 563  |
+| `GetNullifier`              | `src/core/utils.go`                                        | —    |
+| `Encapsulate`               | `src/core/utils.go`                                        | 216  |
+| `SaltBToField`              | `src/core/utils.go`                                        | 239  |
+| `EncryptPayload`            | `src/core/utils.go`                                        | 317  |
+| `PostProof`                 | `src/core/prover_gnark.go`                                 | 48   |
+| `Erc20Circuit.Define`       | `gnark_circuits/templates/ERC20.go`                        | 45   |
+| `NewHandler` (joinSplit)    | `gnark_circuits/server/circuits/joinSplitERC20/handler.go` | 25   |
+| `groth16.Prove`             | `gnark_circuits/server/circuits/joinSplitERC20/handler.go` | 130  |
+| `Erc20CoinVault.transferV2` | `contracts/core/contracts/vaults/Erc20CoinVault.sol`       | 115  |
+| `checkReceiptConditions`    | `contracts/core/contracts/vaults/Erc20CoinVault.sol`       | 261  |
+| `emit EncryptedNote`        | `contracts/core/contracts/vaults/Erc20CoinVault.sol`       | 134  |
+| `ScanForErc20Notes`         | `src/core/scan.go`                                         | 62   |
+| `ContractStatement`         | `src/core/prover_auction.go`                               | —    |
