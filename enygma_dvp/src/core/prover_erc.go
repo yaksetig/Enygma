@@ -993,6 +993,91 @@ func (c *GnarkClient) Erc1155NonFungibleOwnershipProof(
 	}, nil
 }
 
+// Erc1155NonFungibleOwnershipProofFromSalt is like Erc1155NonFungibleOwnershipProof but
+// accepts a pre-computed output salt and ciphertexts instead of performing ML-KEM encapsulation.
+// Use this when the output commitment must be known before proof generation — e.g. for
+// atomic DVP swaps where cross-commitment consistency is required.
+func (c *GnarkClient) Erc1155NonFungibleOwnershipProofFromSalt(
+	stMessage *big.Int,
+	wtValue *big.Int, keyIn KeyPair, wtSaltIn *big.Int, keyOut KeyPair,
+	wtSaltOut *big.Int, ctI []byte, ctII []byte,
+	merkleDepth int, merkleProof *MerkleProof,
+	stTreeNumber *big.Int,
+	wtErc1155ContractAddress *big.Int, wtErc1155TokenId *big.Int,
+	stAssetGroupTreeNumber *big.Int, assetGroupMerkleProof *MerkleProof,
+) (*ProofResult, error) {
+	nullifier, err := GetNullifier(keyIn.PrivateKey, merkleProof.Indices)
+	if err != nil {
+		return nil, fmt.Errorf("failed to compute nullifier: %w", err)
+	}
+
+	commitmentOut, err := Erc1155Commitment(wtErc1155TokenId, wtValue, keyOut.PublicKey, wtSaltOut)
+	if err != nil {
+		return nil, fmt.Errorf("failed to compute erc1155Commitment for output: %w", err)
+	}
+
+	stAssetGroupMerkleRoot := assetGroupMerkleProof.Root
+
+	payload := map[string]interface{}{
+		"StMessage":                stMessage.String(),
+		"StTreeNumbers":            []string{stTreeNumber.String()},
+		"StMerkleRoots":            []string{merkleProof.Root.String()},
+		"StNullifiers":             []string{nullifier.String()},
+		"StCommitmentOut":          []string{commitmentOut.String()},
+		"StAssetGroupTreeNumber":   []string{stAssetGroupTreeNumber.String()},
+		"StAssetGroupMerkleRoot":   []string{stAssetGroupMerkleRoot.String()},
+		"WtPrivateKeysIn":          []string{keyIn.PrivateKey.String()},
+		"WtValues":                 []string{wtValue.String()},
+		"WtPathElements":           [][]string{bigIntSliceToStrings(merkleProof.Elements)},
+		"WtPathIndices":            []string{merkleProof.Indices.String()},
+		"WtErc1155TokenId":         []string{wtErc1155TokenId.String()},
+		"WtPublicKeysOut":          []string{keyOut.PublicKey.String()},
+		"WtErc1155ContractAddress": wtErc1155ContractAddress.String(),
+		"WtAssetGroupPathElements": [][]string{bigIntSliceToStrings(assetGroupMerkleProof.Elements)},
+		"WtAssetGroupPathIndices":  []string{assetGroupMerkleProof.Indices.String()},
+		"WtSaltsIn":                []string{wtSaltIn.String()},
+		"WtSaltsOut":               []string{wtSaltOut.String()},
+	}
+
+	body, err := c.PostProof("/proof/erc1155NonFungible", payload)
+	if err != nil {
+		return nil, fmt.Errorf("erc1155NonFungibleOwnershipFromSalt proof request failed: %w", err)
+	}
+
+	var gnarkResp struct {
+		Proof []json.Number `json:"proof"`
+	}
+	if parseErr := json.Unmarshal(body, &gnarkResp); parseErr != nil {
+		return nil, fmt.Errorf("failed to parse erc1155NonFungibleOwnershipFromSalt proof response: %w", parseErr)
+	}
+	proofStrs := make([]string, len(gnarkResp.Proof))
+	for i, n := range gnarkResp.Proof {
+		proofStrs[i] = n.String()
+	}
+
+	// Statement: [message, treeNumber, merkleRoot, nullifier, commitmentOut,
+	//   assetGroupTreeNumber, assetGroupMerkleRoot]
+	statement := []*big.Int{
+		stMessage,
+		stTreeNumber,
+		merkleProof.Root,
+		nullifier,
+		commitmentOut,
+		stAssetGroupTreeNumber,
+		stAssetGroupMerkleRoot,
+	}
+
+	return &ProofResult{
+		Proof:           proofStrs,
+		Statement:       statement,
+		NumberOfInputs:  1,
+		NumberOfOutputs: 1,
+		SaltsOut:        []*big.Int{wtSaltOut},
+		CiphertextI:     [][]byte{ctI},
+		CiphertextII:    [][]byte{ctII},
+	}, nil
+}
+
 // PoseidonEncrypt calls the gnark server's /util/poseidonEncrypt endpoint to
 // encrypt plaintext values using the Poseidon sponge cipher.
 // key is [X, Y] of the BabyJubJub shared key (authKey = mulPointEscalar(auditorPubKey, random)).

@@ -1,15 +1,22 @@
 package tests
 
-// On-chain integration test for the V2 ERC1155 non-fungible ownership proof flow:
-//   deposit → transfer (Alice→Bob)
+// On-chain integration test for the V2 ERC721 ownership proof flow:
+//   deposit → transfer (Alice→Bob ownership proof)
 //
-// Prerequisites: same as other on-chain tests (Hardhat node, gnark server, deploy+init).
+// Prerequisites (all must be running/completed before this test):
+//   1. Hardhat node:        npx hardhat node
+//   2. Deploy contracts:    cd scripts &&  go build -o /tmp/deploy deploy.go enygma.go && cd .. && /tmp/deploy
+//   3. Export VKs:         cd gnark_circuits && go run ./cmd/export_vk_init/ ../build
+//   4. Init contracts:     cd scripts &&  go build -o /tmp/init init.go enygma.go && cd .. && /tmp/init
+//   5. Gnark server:       cd gnark_circuits && go run main.go
 //
 // Run with:
-//    go test -run TestV2Erc1155NonFungibleOnChain -v -timeout 300s
+//    go test -run TestV2Erc721OnChain -v -timeout 300s
 
+  
 import (
 	"context"
+	"crypto/rand"
 	"math/big"
 	"testing"
 
@@ -21,12 +28,12 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 )
 
-// TestV2Erc1155NonFungibleOnChain_DepositTransfer exercises the V2 ERC1155 non-fungible
-// ownership proof flow against a live Hardhat node + gnark proof server:
+// TestV2Erc721OnChain_DepositTransfer exercises the V2 ERC721 flow against a live
+// Hardhat node + gnark proof server:
 //
-//	Step 1 — deposit: Alice deposits tokenId=99 (amount=1 non-fungible).
-//	Step 2 — transfer: Alice proves ownership and transfers to Bob.
-func TestV2Erc1155NonFungibleOnChain_DepositTransfer(t *testing.T) {
+//	Step 1 — depositERC721: Alice deposits tokenId=42; commitment inserted on-chain.
+//	Step 2 — transferERC721: Alice proves ownership and transfers to Bob.
+func TestV2Erc721OnChain_DepositTransfer(t *testing.T) {
 	if !chainAvailable() {
 		t.Skip("Hardhat node not running on localhost:8545 — skipping on-chain test")
 	}
@@ -45,47 +52,53 @@ func TestV2Erc1155NonFungibleOnChain_DepositTransfer(t *testing.T) {
 
 	// ── Load deployed contract addresses ─────────────────────────────────────
 	receipts := loadOnchainReceipts(t)
-	vaultAddr := common.HexToAddress(receipts["Erc1155CoinVault"].ContractAddress)
-	erc1155Addr := common.HexToAddress(receipts["ERC1155"].ContractAddress)
+	vaultAddr := common.HexToAddress(receipts["Erc721CoinVault"].ContractAddress)
+	erc721Addr := common.HexToAddress(receipts["ERC721"].ContractAddress)
 
 	// ── Load ABIs ─────────────────────────────────────────────────────────────
-	vaultABI := loadOnchainABI(t, "core/contracts/vaults/Erc1155CoinVault.sol/Erc1155CoinVault.json")
-	erc1155ABI := loadOnchainABI(t, "erc1155/contracts/RaylsERC1155.sol/RaylsERC1155.json")
+	vaultABI := loadOnchainABI(t, "core/contracts/vaults/Erc721CoinVault.sol/Erc721CoinVault.json")
+	erc721ABI := loadOnchainABI(t, "erc721/contracts/RaylsERC721.sol/RaylsERC721.json")
 
+	// ── Create bound contracts ────────────────────────────────────────────────
 	vault := bind.NewBoundContract(vaultAddr, vaultABI, client, client, client)
-	erc1155 := bind.NewBoundContract(erc1155Addr, erc1155ABI, client, client, client)
+	erc721 := bind.NewBoundContract(erc721Addr, erc721ABI, client, client, client)
 
+	// ── Create signer (Hardhat account[0] = deployer = ERC721 owner) ─────────
 	auth := hardhatAuth(t, client)
 	alice := auth.From
 
+	// ── Test parameters ───────────────────────────────────────────────────────
 	gnarkClient := core.NewGnarkClient("http://localhost:8081")
 	merkleDepth := 8
-
-	contractAddress := new(big.Int).SetBytes(common.HexToAddress(receipts["ERC1155"].ContractAddress).Bytes())
-	tokenId := big.NewInt(99)
-	amount := big.NewInt(1) // non-fungible: amount = 1
-
-	// ── Mint ERC1155 tokenId=99 to Alice (amount=1) ──────────────────────────
-	mintTx, err := erc1155.Transact(auth, "mint", alice, tokenId, amount, []byte{})
+	// Use a random tokenId in [1000, 1999] to avoid collision with previously minted tokens.
+	tokenIdRand, err := rand.Int(rand.Reader, big.NewInt(1000))
 	if err != nil {
-		t.Fatalf("ERC1155.mint: %v", err)
+		t.Fatalf("rand.Int: %v", err)
+	}
+	tokenId := new(big.Int).Add(tokenIdRand, big.NewInt(1000))
+	contractAddress := big.NewInt(0) // used in circuit for contractAddress witness
+
+	// ── Mint ERC721 token to Alice ────────────────────────────────────────────
+	mintTx, err := erc721.Transact(auth, "mint", alice, tokenId)
+	if err != nil {
+		t.Fatalf("ERC721.mint: %v", err)
 	}
 	if _, err := bind.WaitMined(ctx, client, mintTx); err != nil {
 		t.Fatalf("wait mint: %v", err)
 	}
-	t.Logf("Minted ERC1155 tokenId=%s (amount=1) to Alice", tokenId)
+	t.Logf("Minted ERC721 tokenId=%s to Alice (%s)", tokenId, alice.Hex())
 
-	// ── Alice sets approval for vault ─────────────────────────────────────────
-	approvalTx, err := erc1155.Transact(auth, "setApprovalForAll", vaultAddr, true)
+	// ── Approve vault to transfer Alice's token ───────────────────────────────
+	approveTx, err := erc721.Transact(auth, "approve", vaultAddr, tokenId)
 	if err != nil {
-		t.Fatalf("ERC1155.setApprovalForAll: %v", err)
+		t.Fatalf("ERC721.approve: %v", err)
 	}
-	if _, err := bind.WaitMined(ctx, client, approvalTx); err != nil {
-		t.Fatalf("wait setApprovalForAll: %v", err)
+	if _, err := bind.WaitMined(ctx, client, approveTx); err != nil {
+		t.Fatalf("wait approve: %v", err)
 	}
 
 	// ─────────────────────────────────────────────────────────────────────────
-	// Step 1: deposit — Alice deposits tokenId=99 (amount=1)
+	// Step 1: depositERC721 — Alice deposits her NFT
 	// ─────────────────────────────────────────────────────────────────────────
 	aliceSpend, err := core.NewSpendKeyPair()
 	if err != nil {
@@ -93,21 +106,20 @@ func TestV2Erc1155NonFungibleOnChain_DepositTransfer(t *testing.T) {
 	}
 	aliceSalt, err := core.RandomInField()
 	if err != nil {
-		t.Fatalf("Alice RandomInField: %v", err)
+		t.Fatalf("Alice RandomInField (salt): %v", err)
 	}
 
-	// Non-fungible commitment: Poseidon(pk_spend, salt, amount=1, tokenId)
-	aliceCommitment, err := core.Erc1155Commitment(tokenId, amount, aliceSpend.PublicKey, aliceSalt)
+	// V2 commitment: Poseidon(pk_spend, salt, 1, tokenId)
+	aliceCommitment, err := core.Erc721Commitment(tokenId, aliceSpend.PublicKey, aliceSalt)
 	if err != nil {
-		t.Fatalf("Erc1155Commitment: %v", err)
+		t.Fatalf("Erc721Commitment: %v", err)
 	}
 	t.Logf("Step 1 — Alice commitment: %s", aliceCommitment)
 
-	// deposit([amount, tokenId, commitment]) — single deposit (params.length == 3)
-	depositParams := []*big.Int{amount, tokenId, aliceCommitment}
+	depositParams := []*big.Int{tokenId, aliceCommitment}
 	depositTx, err := vault.Transact(auth, "deposit", depositParams)
 	if err != nil {
-		t.Fatalf("vault.deposit (ERC1155 non-fungible): %v", err)
+		t.Fatalf("vault.deposit (ERC721): %v", err)
 	}
 	depositReceipt, err := bind.WaitMined(ctx, client, depositTx)
 	if err != nil {
@@ -115,12 +127,14 @@ func TestV2Erc1155NonFungibleOnChain_DepositTransfer(t *testing.T) {
 	}
 	t.Logf("Step 1 — deposit mined (block %d, gas %d)", depositReceipt.BlockNumber, depositReceipt.GasUsed)
 
+	// Verify Commitment event
 	commitmentSig := crypto.Keccak256Hash([]byte("Commitment(uint256,uint256)"))
 	foundCommitment := false
 	for _, log := range depositReceipt.Logs {
 		if log.Topics[0] == commitmentSig {
 			foundCommitment = true
-			t.Logf("  Commitment event: %s", log.Topics[2].Big())
+			t.Logf("  Commitment event: vaultId=%s commitment=%s",
+				log.Topics[1].Big(), log.Topics[2].Big())
 		}
 	}
 	if !foundCommitment {
@@ -135,22 +149,8 @@ func TestV2Erc1155NonFungibleOnChain_DepositTransfer(t *testing.T) {
 	}
 	t.Logf("Step 1 — Merkle root: %s", aliceProof.Root)
 
-	// Build asset group tree
-	uid, err := core.Erc1155UniqueId(contractAddress, tokenId, big.NewInt(0))
-	if err != nil {
-		t.Fatalf("Erc1155UniqueId: %v", err)
-	}
-	assetGroupTree := core.NewMerkleTree(merkleDepth)
-	assetGroupTree.InsertLeaf(uid)
-	assetGroupProof, err := assetGroupTree.GenerateProof(uid)
-	if err != nil {
-		t.Fatalf("GenerateProof (asset group): %v", err)
-	}
-	stAssetGroupTreeNumber := big.NewInt(0)
-	t.Logf("Step 1 — asset group root: %s", assetGroupProof.Root)
-
 	// ─────────────────────────────────────────────────────────────────────────
-	// Step 2: transfer — Alice proves non-fungible ownership and transfers to Bob
+	// Step 2: transferERC721 — Alice proves ownership and transfers to Bob
 	// ─────────────────────────────────────────────────────────────────────────
 	bobSpend, err := core.NewSpendKeyPair()
 	if err != nil {
@@ -161,9 +161,9 @@ func TestV2Erc1155NonFungibleOnChain_DepositTransfer(t *testing.T) {
 		t.Fatalf("Bob NewViewKeyPair: %v", err)
 	}
 
-	ownershipResult, err := gnarkClient.Erc1155NonFungibleOwnershipProof(
+	ownershipResult, err := gnarkClient.Erc721OwnershipProof(
 		big.NewInt(1),
-		amount,
+		tokenId,
 		core.KeyPair{PrivateKey: aliceSpend.PrivateKey, PublicKey: aliceSpend.PublicKey},
 		aliceSalt,
 		core.KeyPair{PrivateKey: bobSpend.PrivateKey, PublicKey: bobSpend.PublicKey},
@@ -172,34 +172,26 @@ func TestV2Erc1155NonFungibleOnChain_DepositTransfer(t *testing.T) {
 		aliceProof,
 		big.NewInt(0), // treeNumber
 		contractAddress,
-		tokenId,
-		stAssetGroupTreeNumber,
-		assetGroupProof,
 	)
 	if err != nil {
-		t.Fatalf("Erc1155NonFungibleOwnershipProof: %v", err)
+		t.Fatalf("Erc721OwnershipProof: %v", err)
 	}
 	if len(ownershipResult.Proof) != 8 {
 		t.Fatalf("expected 8-element proof, got %d", len(ownershipResult.Proof))
 	}
-	t.Logf("Step 2 — gnark proof generated")
+	t.Logf("Step 2 — gnark proof generated (%d elements)", len(ownershipResult.Proof))
 
-	// Build the on-chain receipt.
-	// For ERC1155 non-fungible (1-in/1-out), the prover already returns a 7-element Statement:
-	// [msg, treeNum, root, null, cmtOut, agTreeNum, agRoot]
-	// The vault expects 3 + 3*1 + 1 = 7 elements — exact match.
-	// We use Statement directly (already non-interleaved for 1-in/1-out).
+	// Build on-chain receipt
+	// ERC721: statement = [msg, treeNum, root, null, cmtOut] (5 elements, 1-in/1-out)
 	snarkProof := proofStringsToOnchain(t, ownershipResult.Proof)
-	onchainReceipt := onchainProofReceipt{
-		Proof:           snarkProof,
-		Statement:       ownershipResult.Statement, // 7 elements: correct for ERC1155 non-fungible
-		NumberOfInputs:  big.NewInt(int64(ownershipResult.NumberOfInputs)),
-		NumberOfOutputs: big.NewInt(int64(ownershipResult.NumberOfOutputs)),
-	}
+	receipt := buildReceipt(ownershipResult)
+	receipt.Proof = snarkProof
 
-	transferTx, err := vault.Transact(auth, "transfer", onchainReceipt)
+	t.Logf("Step 2 — statement: %v", ownershipResult.ContractStatement())
+
+	transferTx, err := vault.Transact(auth, "transfer", receipt)
 	if err != nil {
-		t.Fatalf("vault.transfer (ERC1155 non-fungible): %v", err)
+		t.Fatalf("vault.transfer (ERC721): %v", err)
 	}
 	transferReceipt, err := bind.WaitMined(ctx, client, transferTx)
 	if err != nil {
@@ -207,17 +199,18 @@ func TestV2Erc1155NonFungibleOnChain_DepositTransfer(t *testing.T) {
 	}
 	t.Logf("Step 2 — transfer mined (block %d, gas %d)", transferReceipt.BlockNumber, transferReceipt.GasUsed)
 
+	// Verify Commitment (Bob's new note) and Nullifier (Alice's old note spent) events
 	nullifierSig := crypto.Keccak256Hash([]byte("Nullifier(uint256,uint256,uint256)"))
 	foundBobCmt := false
 	foundNullifier := false
 	for _, log := range transferReceipt.Logs {
 		if log.Topics[0] == commitmentSig {
 			foundBobCmt = true
-			t.Logf("  Commitment event: %s", log.Topics[2].Big())
+			t.Logf("  Bob's Commitment event: commitment=%s", log.Topics[2].Big())
 		}
 		if log.Topics[0] == nullifierSig {
 			foundNullifier = true
-			t.Logf("  Nullifier event: %s", log.Topics[3].Big())
+			t.Logf("  Nullifier event: nullifier=%s", log.Topics[3].Big())
 		}
 	}
 	if !foundBobCmt {
@@ -228,23 +221,22 @@ func TestV2Erc1155NonFungibleOnChain_DepositTransfer(t *testing.T) {
 	}
 
 	bobCommitment := ownershipResult.Statement[4]
-	t.Logf("Step 2 — Bob's commitment: %s", bobCommitment)
+	t.Logf("Step 2 — Bob's commitment (from statement): %s", bobCommitment)
 
 	// Bob scans for his note
-	bobEvents := []core.OnChainErc1155Event{{
-		Commitment:      bobCommitment,
-		ContractAddress: contractAddress,
-		CiphertextI:     ownershipResult.CiphertextI[0],
-		CiphertextII:    ownershipResult.CiphertextII[0],
+	bobEvents := []core.OnChainErc721Event{{
+		Commitment:   bobCommitment,
+		CiphertextI:  ownershipResult.CiphertextI[0],
+		CiphertextII: ownershipResult.CiphertextII[0],
 	}}
-	bobNotes, err := core.ScanForErc1155Notes(bobView.DecapsKey, bobSpend.PublicKey, bobEvents)
+	bobNotes, err := core.ScanForErc721Notes(bobView.DecapsKey, bobSpend.PublicKey, bobEvents)
 	if err != nil {
-		t.Fatalf("ScanForErc1155Notes: %v", err)
+		t.Fatalf("ScanForErc721Notes: %v", err)
 	}
 	if len(bobNotes) != 1 {
 		t.Fatalf("Bob expected 1 note, got %d", len(bobNotes))
 	}
-	t.Logf("Step 2 — Bob scanned his note (amount=%s, tokenId=%s)", bobNotes[0].Amount, bobNotes[0].TokenId)
+	t.Logf("Step 2 — Bob scanned his note (tokenId=%s, salt=%s)", bobNotes[0].TokenId, bobNotes[0].SaltBField)
 
-	t.Logf("=== ERC1155 NON-FUNGIBLE ON-CHAIN TRANSFER COMPLETE ===")
+	t.Logf("=== ERC721 ON-CHAIN TRANSFER COMPLETE ===")
 }
