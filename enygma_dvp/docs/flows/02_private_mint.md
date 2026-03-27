@@ -79,13 +79,13 @@ The circuit proves that the commitment and cipherText are consistent with the sa
 Before the private mint can start, Alice and the Issuer must agree on the following values
 out-of-band (e.g. via a secure channel, KYC process, or API call):
 
-| Value | Who provides | Why it is needed |
-|---|---|---|
+| Value      | Who provides   | Why it is needed                                                                          |
+| ---------- | -------------- | ----------------------------------------------------------------------------------------- |
 | `pk_alice` | Alice → Issuer | Embedded in the commitment; only the holder of the matching `sk_alice` can spend the note |
-| `amount` | Issuer → Alice | How many tokens the note will represent |
-| `tokenId` | Issuer → Alice | Which ERC20 token (usually `0` for a single-token vault) |
-| `salt` | Issuer → Alice | Random blinding factor; Alice needs it as `WtSaltsIn` to spend later |
-| `vaultId` | Issuer → Alice | Which vault the commitment will be inserted into |
+| `amount`   | Issuer → Alice | How many tokens the note will represent                                                   |
+| `tokenId`  | Issuer → Alice | Which ERC20 token (usually `0` for a single-token vault)                                  |
+| `salt`     | Issuer → Alice | Random blinding factor; Alice needs it as `WtSaltsIn` to spend later                      |
+| `vaultId`  | Issuer → Alice | Which vault the commitment will be inserted into                                          |
 
 Alice must share her `pk_spend` with the Issuer before the flow begins.
 The Issuer must share `amount`, `tokenId`, `salt`, and `vaultId` with Alice after the mint
@@ -115,9 +115,8 @@ sequenceDiagram
     rect rgb(220, 235, 255)
         Note over Issuer: Step 1 — Prepare commitment off-chain
 
-        Issuer->>Issuer: Erc20CommitmentV2(pk_alice, salt, 100, tokenId=0)
-        Note over Issuer: poseidon.Hash(9284716503, 6628193047, 100, 0)
-        Note over Issuer: commitment = 7193827465...
+        Issuer->>Issuer: poseidon(pk_alice, salt, 100, tokenId=0)
+        Note over Issuer: poseidon(9284716503, 6628193047, 100, 0) = 7193827465...
 
         Issuer->>Issuer: poseidon.Hash(pk_alice, salt)
         Note over Issuer: cipherText = 4827361059...
