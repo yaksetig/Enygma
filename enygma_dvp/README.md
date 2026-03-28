@@ -1,7 +1,5 @@
 # Enygma Delivery-vs-Payment (DvP)
 
-# Enygma Payments
-
 ## System Architecture
 Our system is simple: **users** (e.g., a bank customers) are directly connected to **privacy nodes** (i.e., a high-performance single-node EVM blockchain). Each of the privacy nodes, is connected to a **private network hub**, which effectively acts as a bulletin board for all privacy nodes to leverage as a universal (encrypted) messaging layer and verification layer. **Issuer(s)** are the managers/admins of specific assets on the private network hub. Optionally, there is an **auditor** that oversees (some of) the transactions that take place in the network. A more formal protocol description is documented [here](./protocol_description.md).
 
@@ -81,8 +79,7 @@ enygma_dvp/
 
 ### Go module layout
 
-The repository contains four independent Go modules. They do **not** share a single
-`go.work` workspace — each must be built from its own directory.
+Four independent Go modules — no shared `go.work`, each must be built from its own directory.
 
 | Directory | Module name | Depends on |
 |-----------|-------------|------------|
@@ -91,9 +88,8 @@ The repository contains four independent Go modules. They do **not** share a sin
 | `scripts/` | `enygma_dvp` | `enygma_dvp/src_go` (via `replace => ../src`) |
 | `gnark_circuits/` | `gnark_server` | external only (gnark, no dependency on src/) |
 
-The `_go` suffix in the module name `enygma_dvp/src_go` is intentional — it disambiguates
-the Go module from the Solidity contracts that live under the same repo root. The physical
-folder is `src/`, not `src_go/`.
+The `_go` suffix in `enygma_dvp/src_go` disambiguates the Go module from the Solidity
+contracts at the same repo root. The folder on disk is `src/`, not `src_go/`.
 
 ## Implementation Details
 TBD

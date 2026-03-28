@@ -2,18 +2,16 @@
 
 ## Overview
 
-Alice holds an ERC1155 NFT (e.g. tokenId=3116, value=1) and wants to sell it to Bob in exchange
-for ERC20 tokens (e.g. 100 tokens). The swap is **atomic and non-custodial**: either both legs
-settle simultaneously or neither does.
+Alice has an ERC1155 NFT (e.g. tokenId=3116, value=1) and Bob has ERC20 tokens (e.g. 100).
+They want to swap atomically — either both sides settle or neither does.
 
-This flow differs from the ERC721 ↔ ERC20 swap ([Flow 06](./06_swap_erc721_erc20.md)) in three
-ways:
+Compared to the ERC721 ↔ ERC20 swap ([Flow 06](./06_swap_erc721_erc20.md)):
 
-1. The delivery asset lives in `Erc1155CoinVault` (vaultId=2) instead of `Erc721CoinVault` (vaultId=1).
-2. The ERC1155 proof carries a 7-element statement that includes an **asset group Merkle proof**
+1. Delivery asset is in `Erc1155CoinVault` (vaultId=2) instead of `Erc721CoinVault` (vaultId=1).
+2. The ERC1155 proof statement has 7 elements — two extra for the asset group Merkle proof
    (`agTreeNum`, `agRoot`) at indices [5] and [6].
-3. Before calling swap, the specific ERC1155 token must be registered in `NonFungibleAssetGroup`
-   via `EnygmaDvp.addTokenToGroup(2, [0, tokenId], 1)` so that `isMemberFromProofReceipt` passes.
+3. Before calling swap, the specific token must be registered in `NonFungibleAssetGroup`
+   via `EnygmaDvp.addTokenToGroup(2, [0, tokenId], 1)`. Without this `isMemberFromProofReceipt` reverts.
 
 Commitment formulae:
 
@@ -24,9 +22,9 @@ ERC20 note:   Poseidon4(pk_spend, saltBField, amount, tokenId=0)
 
 ---
 
-## Atomicity — Cross-commitment linking
+## Atomicity
 
-The on-chain `_settleOnGroupPair` enforces atomicity by verifying cross-commitment consistency:
+`_settleOnGroupPair` checks cross-commitment consistency before settling:
 
 ```
 bobPaymentReceipt.statement[0]    == aliceDeliveryReceipt.statement[4]
@@ -40,7 +38,7 @@ stMessage(Bob)   = bobNFTCmt      ← pre-computed by Bob, equals Alice's ERC115
 stMessage(Alice) = aliceERC20Cmt  ← pre-computed by Alice, equals Bob's ERC20 first output at stmt[7]
 ```
 
-Neither party can alter their outputs after the cross-commitment is fixed — any mismatch reverts.
+Once both parties fix their outputs, neither can change them — any mismatch reverts.
 
 ---
 
@@ -69,8 +67,9 @@ asset group membership in `NonFungibleAssetGroup`.
 
 ## Asset group membership
 
-Unlike ERC721 (entire vault pre-registered in NON_FUNGIBLES), ERC1155 tokens must be individually
-registered because the same vault holds both fungible and non-fungible tokens.
+ERC721 tokens get registered at the vault level during init, so no extra step is needed for swaps.
+ERC1155 is different — the same vault holds both fungible and non-fungible tokens, so you have to
+register each NFT individually before it can be used in a swap:
 
 ```
 EnygmaDvp.addTokenToGroup(
@@ -81,19 +80,19 @@ EnygmaDvp.addTokenToGroup(
 ```
 
 This inserts `uid = Erc1155UniqueId(contractAddress, tokenId, 0)` into the
-NonFungibleAssetGroup's on-chain Merkle tree. The resulting on-chain root then matches the
-off-chain `assetGroupProof.Root` built by `core.NewMerkleTree(depth).InsertLeaf(uid)`.
+`NonFungibleAssetGroup` on-chain Merkle tree, so its root matches the off-chain
+`assetGroupProof.Root` built by `core.NewMerkleTree(depth).InsertLeaf(uid)`.
 
 ---
 
 ## Participants
 
-| Participant  | Role                                                                                    |
-| ------------ | --------------------------------------------------------------------------------------- |
-| Alice        | Depositor — holds ERC1155 NFT, initiates swap, expects ERC20 payment                   |
-| Bob          | Buyer — holds ERC20 tokens (deposited via depositV2), expects ERC1155 NFT              |
-| Gnark Server | Generates ERC1155 non-fungible ownership proof (Alice) and ERC20 JoinSplit proof (Bob) |
-| EnygmaDvp    | Registers token, verifies cross-commitments, checks group membership, settles atomically|
+| Participant  | Role                                                                    |
+| ------------ | ----------------------------------------------------------------------- |
+| Alice        | Sells ERC1155 NFT, wants ERC20 payment                                  |
+| Bob          | Buys NFT with ERC20 tokens                                              |
+| Gnark Server | Generates Alice's ERC1155 ownership proof and Bob's ERC20 JoinSplit proof |
+| EnygmaDvp    | Registers token, checks group membership and cross-commitments, settles |
 
 ---
 

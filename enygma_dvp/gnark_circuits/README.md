@@ -1,8 +1,7 @@
 # gnark_circuits
 
-Go module (`gnark_server`) that implements the ZK proof server for Enygma DvP.
-It exposes a REST API on port **8081** and handles all Groth16 proof generation
-using the [gnark](https://github.com/ConsenSys/gnark) library.
+REST API server (port **8081**) that generates Groth16 proofs using [gnark](https://github.com/ConsenSys/gnark).
+Go module name: `gnark_server`.
 
 ---
 
@@ -49,27 +48,20 @@ The server must be started from the `gnark_circuits/` directory because key path
 
 ## Proving/verifying keys
 
-Pre-generated keys are committed to the repository under `scripts/keys/`. They cover
-all circuits currently in use. You do **not** need to regenerate them unless a circuit
-definition changes.
+Keys are pre-generated and committed under `scripts/keys/`. You only need to regenerate
+them if you change a circuit's `Define()` method in `templates/`.
 
-### When to regenerate keys
-
-Only regenerate keys if you modify a circuit's `Define()` method in `templates/`.
-Regeneration is done by running `generation.go` as a standalone program:
+To regenerate, run `generation.go` as a standalone program (takes several minutes):
 
 ```bash
 cd gnark_circuits
 go run generation.go
 # Writes new *.key files to scripts/keys/
-# This takes several minutes — it compiles every circuit from scratch
 ```
 
-Do not run `generation.go` while the server is running. The key files are overwritten
-in place.
+Don't run `generation.go` while the server is running — key files are overwritten in place.
 
-After regenerating keys, you must also re-export the verifying keys to the circom JSON
-format consumed by `scripts/init.go`:
+After regenerating, re-export the verifying keys so `scripts/init.go` picks up the changes:
 
 ```bash
 cd gnark_circuits

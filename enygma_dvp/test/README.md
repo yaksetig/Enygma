@@ -1,8 +1,7 @@
 # Integration Tests
 
-All tests in this directory are **on-chain integration tests** that require three
-services running concurrently. They connect to a live Hardhat node, submit real
-Ethereum transactions, and call the gnark proof server for ZK proof generation.
+These tests hit a live Hardhat node and a running gnark proof server — no mocks.
+Three services need to be up before you run anything.
 
 ---
 
@@ -64,8 +63,7 @@ cd test
 go test -run <TestFunctionName> -v -timeout 600s
 ```
 
-Tests skip automatically if the Hardhat node or gnark server is not reachable —
-they will print a `SKIP` message rather than fail.
+If the Hardhat node or gnark server isn't reachable the test prints `SKIP` and exits cleanly.
 
 ---
 
