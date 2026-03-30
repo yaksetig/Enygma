@@ -18,6 +18,10 @@ references.
 | [06](./flows/06_swap_erc721_erc20.md)            | Atomic DVP Swap      | ERC721 ↔ ERC20       | ownershipERC721 + joinSplitERC20 | ✅     |
 | [07](./flows/07_transfer_erc1155_fungible.md)    | Transfer (JoinSplit) | ERC1155 Fungible     | erc1155Fungible                  | ✅     |
 | [08](./flows/08_transfer_erc1155_nonfungible.md) | Transfer             | ERC1155 Non-Fungible | erc1155NonFungible               | ✅     |
+| [09](./flows/09_swap_erc1155nonfungible_erc20.md) | Atomic DVP Swap     | ERC1155 NFT ↔ ERC20  | erc1155NonFungible + joinSplitERC20 | ✅  |
+| [10](./flows/10_zkdvp_two_phase_swap_relayer.md) | Atomic DVP Swap (Relayer) | ERC20 ↔ ERC721  | joinSplitERC20 + ownershipERC721 | ✅     |
+| [11](./flows/11_swap_erc721_erc20_relayer.md)    | Atomic DVP Swap (Relayer) | ERC721 ↔ ERC20  | ownershipERC721 + joinSplitERC20 | ✅     |
+| [12](./flows/12_swap_erc1155nonfungible_erc20_relayer.md) | Atomic DVP Swap (Relayer) | ERC1155 NFT ↔ ERC20 | erc1155NonFungible + joinSplitERC20 | ✅ |
 
 ---
 
