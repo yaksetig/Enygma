@@ -1,6 +1,6 @@
 
 ## Problem Statement
-A commitment is of the form Commit = H(spend_pk, salt, token_id, amount).
+A commitment is of the form Commit = H(spend_pk, salt, amount, token_id).
 
 How can Alice send funds to a commitment only Bob can open in a non-interactive manner? 
 
