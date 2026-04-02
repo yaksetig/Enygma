@@ -19,22 +19,16 @@ sequenceDiagram
     participant Chain as Blockchain
     participant Bob
 
-    note over Alice: Has commmitment<br><br>Commitment_A = H(spend_pkA, saltA, amount_1, token_id_1)
+    note over Alice: Has commmitment<br><br>Commitment_A = H(spend_pkA, saltA, amount, token_id)
 
-    note over Bob: Has commitment<br><br>Commitment_B = H(spend_pkB, saltB, amount_2, token_id_2)
-
-    note over Chain: runs DvP Smart Contract
-
-    note over Alice, Bob: DvP can now start
-
-    note over Alice: Alice initiates the DvP
+    note over Chain: runs Payment<br>Smart Contract
     
-
+    
     rect rgb(191, 223, 255)
 
-        note left of Alice: Create TX payload for Bob
+        note left of Alice: Create TX 
 
-        note over Alice: Generate new ('encrypted') salt:<br><br>ss_B, CTXT = ML-KEM.Encapsulate(view_pk)
+        note over Alice: Generate new ('encrypted') salt:<br><br>ss_B, CTXT = ML-KEM.Encapsulate(view_pk_B)
 
         note over Alice: Set TX DATA: <br><br>m = (token_id || amount)<br><br>k = HKDF(ss_B, "encryption key")
 
@@ -42,29 +36,27 @@ sequenceDiagram
         
         note over Alice: Derive salt_B: <br><br> salt_B = HKDF(ss_B, "Bob salt")
 
-        note over Alice: Create destination commitment:<br><br>COMMIT_B = H(spend_pk_B, salt_B, amount_1, token_id_1)
+        note over Alice: Create destination commitment:<br><br>COMMIT_B = H(spend_pk_B, salt_B, amount, token_id)
+                note over Alice: Create nullifier for tx: <br><br>nf_A = H(spend_sk_A, leafIndex_A)
 
+        
     end     
     
 
-    
 
     rect rgb(191, 223, 255)
 
         note left of Alice: Create the ZKP for the transaction
 
-        note over Alice: Create nullifier for tx: <br><br>nf_A = H(spend_sk_A, leafIndex_A)
         
-        note over Alice: Create zero-knowledge proof (π_A):<br><br> - "I know the spend secret key for this commit"<br><br> - "This nullifier is well-formed"<br><br>- "The revert commit has the same amount and token_id as commit I'm spending"<br><br>-"The destination (COMMIT_B) has the same token_id_1 and amount_1 as the commit I'm spending"<br><br>-"I know a merkle path that proves that the commitment I'm spending is in the tree"
+        note over Alice: Create zero-knowledge proof (π_A):<br><br> - "I know the spend secret key for this commit"<br><br> - "This nullifier is well-formed"<br><br>- "The revert commit has the same amount and token_id as commit I'm spending"<br><br>-"The destination (COMMIT_B) has the same token_id and amount as the commit I'm spending"<br><br>-"I know a merkle path that proves that the commitment I'm spending is in the tree"
 
     end
 
 
     Alice->>Chain: < π_A, CTXT, COMMIT_B, ENC_TX_DATA, nf_A>
 
-    
-
-    note over Chain: Check if nf_A<br>has been spent
+        note over Chain: Check if nf_A<br>has been spent
     note over Chain: Verify ZK Proof
 
 
@@ -91,15 +83,10 @@ sequenceDiagram
     note over Bob: Obtain salt:<br><br> salt_B = HKDF(ss_B, "Bob salt")
 
 
-    note over Bob: Decrypt ENC_TX_DATA<br>(using symmetric key k)<br><br>obtain token_id_1 & amount_1
+    note over Bob: Decrypt ENC_TX_DATA<br>(using symmetric key k)<br><br>obtain token_id & amount
 
-    note over Bob: Obtain commitment<br><br>C = H(spend_pk_B, salt_B, amount_1, token_id_1)
+    note over Bob: Obtain commitment<br><br>C = H(spend_pk_B, salt_B, amount, token_id)
     note over Bob: Check if commitments match: <br><br>C == COMMIT_B
-
-
-
-
-
    
 ```
 
