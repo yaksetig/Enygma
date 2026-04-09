@@ -10,9 +10,9 @@ How can Alice send funds to a commitment only Bob can open in a non-interactive 
 
 Alice already has a deposit in EnygmaDvp system which in format of a note inserted, with the following paramenters.
 
+```go
 Note_Alice:= H(spend_pkA, saltA, amount, token_id)
-
-### 2. Alice prepare transaction
+```
 
 ```mermaid
 
@@ -27,6 +27,8 @@ sequenceDiagram
 
 
 ```
+
+### 2. Alice prepare transaction
 
 ## Protocol Flow
 
