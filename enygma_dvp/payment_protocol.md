@@ -76,14 +76,21 @@ sequenceDiagram
 
 ```
 
-### 3. Zero Knowledge proves is created
+### 3. Zero-Knowledge Proof is generated
 
-Zero knowledge is created and the payload has to obey the following rules that.
+Alice generates a zero-knowledge proof `π_A` that convinces the smart contract her transaction is valid — without revealing any private inputs (secret key, salt, Merkle path).
 
-1. Knowledge of Alice's secret key
-2. Nullifier is well formed
-3. Destination commtiment is well formed
-4. The commitment that is been sent is inserted in the known Merkle Tree
+The proof attests to the following five statements simultaneously:
+
+| # | Statement | Private inputs used | What it guarantees |
+|---|---|---|---|
+| 1 | **Knowledge of spend secret key** | `spend_sk_A` | Alice owns `Commitment_A` and is authorised to spend it. Without this, anyone could spend a commitment they do not own. |
+| 2 | **Nullifier is well-formed** | `spend_sk_A`, `leafIndex_A` | `nf_A = H(spend_sk_A, leafIndex_A)` was computed correctly. The nullifier uses the *secret* key so that no observer can link `nf_A` back to `Commitment_A` on-chain. |
+| 3 | **Source commitment is well-formed** | `spend_pk_A`, `saltA`, `amount`, `token_id` | The commitment Alice is spending was honestly constructed and has not been tampered with. |
+| 4 | **Destination commitment is consistent** | `amount`, `token_id` | `COMMIT_B` encodes the same `amount` and `token_id` as `Commitment_A`. This prevents Alice from inflating the transferred value. |
+| 5 | **Merkle membership** | Merkle path to `leafIndex_A` | `Commitment_A` is a leaf in the current on-chain Merkle tree, i.e. it was previously deposited and has not been fabricated. |
+
+All five statements are proven together in a single proof `π_A`. The public inputs visible on-chain are: `COMMIT_B`, `nf_A`, and the Merkle root. All other values remain private.
 
 ```mermaid
 
