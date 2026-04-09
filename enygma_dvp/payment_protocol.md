@@ -76,6 +76,38 @@ sequenceDiagram
 
 ```
 
+### 3. Zero Knowledge proves is created
+
+Zero knowledge is created and the payload has to obey the following rules that.
+
+1. Knowledge of Alice's secret key
+2. Nullifier is well formed
+3. Destination commtiment is well formed
+4. The commitment that is been sent is inserted in the known Merkle Tree
+
+```mermaid
+
+sequenceDiagram
+    autonumber
+
+    participant Alice
+    participant Chain as Blockchain
+    participant Bob
+
+
+    rect rgb(191, 223, 255)
+
+        note left of Alice: Create the ZKP for the transaction
+
+
+        note over Alice: Create zero-knowledge proof (π_A):<br><br> - "I know the spend secret key for this commit"<br><br> - "This nullifier is well-formed"<br><br>- "The destination (COMMIT_B) has the same token_id and amount as the commit I'm spending"<br><br>-"I know a merkle path that proves that the commitment I'm spending is in the tree"
+
+    end
+
+
+
+```
+
 ## Protocol Flow
 
 ```mermaid
@@ -122,7 +154,7 @@ sequenceDiagram
         note left of Alice: Create the ZKP for the transaction
 
 
-        note over Alice: Create zero-knowledge proof (π_A):<br><br> - "I know the spend secret key for this commit"<br><br> - "This nullifier is well-formed"<br><br>- "The revert commit has the same amount and token_id as commit I'm spending"<br><br>-"The destination (COMMIT_B) has the same token_id and amount as the commit I'm spending"<br><br>-"I know a merkle path that proves that the commitment I'm spending is in the tree"
+        note over Alice: Create zero-knowledge proof (π_A):<br><br> - "I know the spend secret key for this commit"<br><br> - "This nullifier is well-formed"<br><br>- "The destination (COMMIT_B) has the same token_id and amount as the commit I'm spending"<br><br>-"I know a merkle path that proves that the commitment I'm spending is in the tree"
 
     end
 
