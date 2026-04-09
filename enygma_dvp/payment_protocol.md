@@ -12,6 +12,8 @@ Alice already has a deposit in EnygmaDvp system which in format of a note insert
 
 ```go
 Note_Alice:= H(spend_pkA, saltA, amount, token_id)
+
+H:= poseidon hash
 ```
 
 ```mermaid
@@ -29,6 +31,50 @@ sequenceDiagram
 ```
 
 ### 2. Alice prepare transaction
+
+1. Alice runs ML-KEM.Encapsulate on Bob's view public key, producing a shared secret ss_B  
+   and a ciphertext `CTXT`. Only Bob — who holds the corresponding view secret key — can later recover `ss_B`.
+
+2. `m` is the plaintext payload, formed by concatenating `token_id` and `amount`
+
+3. `k` = `HKDF(ss_B, "encryption key")` — the shared secret ss_B is used as the key material; "encryption key" is a domain label that scopes this derivation to symmetric encryption.
+
+4. `ENC_TX_DATA = AES-GCM-ENC(k, m)` — the payload`m`is encrypted with the derived key k. AES-GCM provides authenticated encryption, so any tampering with the ciphertext is detectable.
+
+5. `salt_B = HKDF(ss_B, "Bob salt")` — a second domain-separated derivation from the same shared secret, producing a fresh salt that only Bob can independently reproduce.
+
+6. Destination commitment is created by using hash (Poseidon function) of Bob's spend public key (`spend_pk_B`), Bob's salt created in 5 (`salt_B`), `amount` and `token_id`
+
+7. Finally, Alice's nullifier is created by hashing (poseidon) Alice's spend private key (`spend_sk_A`) and leaf index, the index where the commitment is located in Merkle Tree.
+
+```mermaid
+sequenceDiagram
+    autonumber
+
+    participant Alice
+    participant Chain as Blockchain
+    participant Bob
+
+    rect rgb(191, 223, 255)
+
+        note left of Alice: Create TX
+
+        note over Alice: Generate new ('encrypted') salt:<br><br>ss_B, CTXT = ML-KEM.Encapsulate(view_pk_B)
+
+        note over Alice: Set TX DATA: <br><br>m = (token_id || amount)<br><br>k = HKDF(ss_B, "encryption key")
+
+        note over Alice: Encrypt TX Data: <br><br> ENC_TX_DATA = AES-GCM-ENC(k, m)
+
+        note over Alice: Derive salt_B: <br><br> salt_B = HKDF(ss_B, "Bob salt")
+
+        note over Alice: Create destination commitment:<br><br>COMMIT_B = H(spend_pk_B, salt_B, amount, token_id)
+                note over Alice: Create nullifier for tx: <br><br>nf_A = H(spend_sk_A, leafIndex_A)
+
+
+    end
+
+
+```
 
 ## Protocol Flow
 
