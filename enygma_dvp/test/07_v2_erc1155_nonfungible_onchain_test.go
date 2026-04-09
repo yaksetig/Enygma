@@ -246,8 +246,8 @@ func TestV2Erc1155NonFungibleOnChain_DepositTransferV2(t *testing.T) {
 	bobEvents := []core.OnChainErc1155Event{{
 		Commitment:      bobCommitment,
 		ContractAddress: contractAddress,
-		CiphertextI:     ownershipResult.CiphertextI[0],
-		CiphertextII:    ownershipResult.CiphertextII[0],
+		CipherText:     ownershipResult.CipherText[0],
+		EncTxData:    ownershipResult.EncTxData[0],
 	}}
 	bobNotes, err := core.ScanForErc1155Notes(bobView.DecapsKey, bobSpend.PublicKey, bobEvents)
 	if err != nil {

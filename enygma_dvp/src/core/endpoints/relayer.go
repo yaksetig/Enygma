@@ -1,5 +1,6 @@
 package endpoints
 
+
 /*
 Port of src/core/endpoints/relayer.js
 
@@ -211,6 +212,23 @@ func Swap(
 		deliveryReceipt.Statement[4],
 	}
 	return commitments, nil
+}
+
+// SubmitPayment submits a Payment circuit proof to the EnygmaDvp.payment() function.
+// ctxts[j] and encTxDatas[j] are the per-output ML-KEM capsule and AES-GCM ciphertext
+// that enable each recipient to scan and discover their note without prior interaction.
+func SubmitPayment(
+	client *ethclient.Client,
+	auth *bind.TransactOpts,
+	contractABI abi.ABI,
+	contractAddr common.Address,
+	receipt ProofReceipt,
+	vaultId *big.Int,
+	ctxts [][]byte,
+	encTxDatas [][]byte,
+) (*types.Receipt, error) {
+	return relayTransact(client, auth, contractABI, contractAddr,
+		"payment", receipt, vaultId, ctxts, encTxDatas)
 }
 
 // Exchange executes a payment-vs-payment exchange on the EnygmaDvp contract.

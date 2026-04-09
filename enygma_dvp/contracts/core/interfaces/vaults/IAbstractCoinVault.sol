@@ -22,9 +22,10 @@ interface IAbstractCoinVault {
 
     // Getting fired alongside Commitment for the non-interactive flow.
     // ciphertextI  — ML-KEM-768 capsule (1088 bytes): recipient runs
-    //                Decapsulate(sk_view, ciphertextI) to recover saltB.
-    // ciphertextII — ChaCha20-Poly1305 ciphertext of tokenId||amount keyed
-    //                by saltB; an auth failure means the note is not theirs.
+    //                ss = Decapsulate(sk_view, ciphertextI), then derives
+    //                salt_B = HKDF(ss,"Bob salt") and encKey = HKDF(ss,"encryption key").
+    // ciphertextII — AES-256-GCM ciphertext of tokenId||amount keyed by encKey;
+    //                an auth failure means the note is not addressed to this key.
     event EncryptedNote(
         uint256 indexed vaultId,
         uint256 indexed commitment,

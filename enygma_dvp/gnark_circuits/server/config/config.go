@@ -37,7 +37,12 @@ type Config struct {
     LegitBrokerVk string
     PrivateMintPk string
     PrivateMintVk string
-	
+    PaymentPk     string
+    PaymentVk     string
+    DvPInitiatorPk   string
+    DvPInitiatorVk   string
+    DvPDestinationPk string
+    DvPDestinationVk string
 }
 
 func Load() *Config {
@@ -77,6 +82,12 @@ func Load() *Config {
         LegitBrokerVk:  "./scripts/keys/LegitBrokerVK.key",
         PrivateMintPk: "./scripts/keys/PrivateMintPK.key",
         PrivateMintVk: "./scripts/keys/PrivateMintVK.key",
+        PaymentPk:     "./scripts/keys/PaymentPK.key",
+        PaymentVk:     "./scripts/keys/PaymentVK.key",
+        DvPInitiatorPk:   "./scripts/keys/DvPInitiatorPK.key",
+        DvPInitiatorVk:   "./scripts/keys/DvPInitiatorVK.key",
+        DvPDestinationPk: "./scripts/keys/DvPDestinationPK.key",
+        DvPDestinationVk: "./scripts/keys/DvPDestinationVK.key",
     }
 }
 

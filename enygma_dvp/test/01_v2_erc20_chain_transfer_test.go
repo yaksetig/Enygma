@@ -141,7 +141,7 @@ func TestV2Erc20ChainOnChain_AliceBobCarolWithdraw(t *testing.T) {
 	receipt1.Proof = snarkProof1
 
 	transfer1Tx, err := vault.Transact(auth, "transferV2",
-		receipt1, aliceToBobResult.CiphertextI, aliceToBobResult.CiphertextII)
+		receipt1, aliceToBobResult.CipherText, aliceToBobResult.EncTxData)
 	if err != nil { t.Fatalf("vault.transferV2 (Alice→Bob): %v", err) }
 	transfer1Receipt, err := bind.WaitMined(ctx, client, transfer1Tx)
 	if err != nil { t.Fatalf("wait transferV2 (Alice→Bob): %v", err) }
@@ -159,8 +159,8 @@ func TestV2Erc20ChainOnChain_AliceBobCarolWithdraw(t *testing.T) {
 	// Step 3: Bob scans his note
 	// ─────────────────────────────────────────────────────────────────────────
 	bobEvents := []core.OnChainErc20Event{
-		{Commitment: aliceToBobResult.Statement[7], CiphertextI: aliceToBobResult.CiphertextI[0], CiphertextII: aliceToBobResult.CiphertextII[0]},
-		{Commitment: aliceToBobResult.Statement[8], CiphertextI: aliceToBobResult.CiphertextI[1], CiphertextII: aliceToBobResult.CiphertextII[1]},
+		{Commitment: aliceToBobResult.Statement[7], CipherText: aliceToBobResult.CipherText[0], EncTxData: aliceToBobResult.EncTxData[0]},
+		{Commitment: aliceToBobResult.Statement[8], CipherText: aliceToBobResult.CipherText[1], EncTxData: aliceToBobResult.EncTxData[1]},
 	}
 	bobNotes, err := core.ScanForErc20Notes(bobView.DecapsKey, bobSpend.PublicKey, bobEvents)
 	if err != nil { t.Fatalf("Bob ScanForErc20Notes: %v", err) }
@@ -202,7 +202,7 @@ func TestV2Erc20ChainOnChain_AliceBobCarolWithdraw(t *testing.T) {
 	receipt2.Proof = snarkProof2
 
 	transfer2Tx, err := vault.Transact(auth, "transferV2",
-		receipt2, bobToCarolResult.CiphertextI, bobToCarolResult.CiphertextII)
+		receipt2, bobToCarolResult.CipherText, bobToCarolResult.EncTxData)
 	if err != nil { t.Fatalf("vault.transferV2 (Bob→Carol): %v", err) }
 	transfer2Receipt, err := bind.WaitMined(ctx, client, transfer2Tx)
 	if err != nil { t.Fatalf("wait transferV2 (Bob→Carol): %v", err) }
@@ -220,8 +220,8 @@ func TestV2Erc20ChainOnChain_AliceBobCarolWithdraw(t *testing.T) {
 	// Step 5: Carol scans her note
 	// ─────────────────────────────────────────────────────────────────────────
 	carolEvents := []core.OnChainErc20Event{
-		{Commitment: bobToCarolResult.Statement[7], CiphertextI: bobToCarolResult.CiphertextI[0], CiphertextII: bobToCarolResult.CiphertextII[0]},
-		{Commitment: bobToCarolResult.Statement[8], CiphertextI: bobToCarolResult.CiphertextI[1], CiphertextII: bobToCarolResult.CiphertextII[1]},
+		{Commitment: bobToCarolResult.Statement[7], CipherText: bobToCarolResult.CipherText[0], EncTxData: bobToCarolResult.EncTxData[0]},
+		{Commitment: bobToCarolResult.Statement[8], CipherText: bobToCarolResult.CipherText[1], EncTxData: bobToCarolResult.EncTxData[1]},
 	}
 	carolNotes, err := core.ScanForErc20Notes(carolView.DecapsKey, carolSpend.PublicKey, carolEvents)
 	if err != nil { t.Fatalf("Carol ScanForErc20Notes: %v", err) }

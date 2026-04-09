@@ -262,13 +262,13 @@ func TestV2Erc20OnChain_DepositTransferWithdraw(t *testing.T) {
 	}
 
 	// Encrypt (tokenId, amount) so Alice can scan her own deposit
-	ciphertextII, err := core.EncryptPayload(saltB, tokenId, depositAmount)
+	encTxData, err := core.EncryptPayload(saltB, tokenId, depositAmount)
 	if err != nil {
 		t.Fatalf("EncryptPayload: %v", err)
 	}
 
 	depositParams := []*big.Int{depositAmount, aliceCommitment}
-	depositTx, err := vault.Transact(auth, "depositV2", depositParams, capsule, ciphertextII)
+	depositTx, err := vault.Transact(auth, "depositV2", depositParams, capsule, encTxData)
 	if err != nil {
 		t.Fatalf("vault.depositV2: %v", err)
 	}
@@ -364,8 +364,8 @@ func TestV2Erc20OnChain_DepositTransferWithdraw(t *testing.T) {
 
 	transferTx, err := vault.Transact(auth, "transferV2",
 		receipt,
-		joinSplitResult.CiphertextI,
-		joinSplitResult.CiphertextII,
+		joinSplitResult.CipherText,
+		joinSplitResult.EncTxData,
 	)
 	if err != nil {
 		t.Fatalf("vault.transferV2: %v", err)
@@ -400,13 +400,13 @@ func TestV2Erc20OnChain_DepositTransferWithdraw(t *testing.T) {
 	events := []core.OnChainErc20Event{
 		{
 			Commitment:   joinSplitResult.Statement[7],
-			CiphertextI:  joinSplitResult.CiphertextI[0],
-			CiphertextII: joinSplitResult.CiphertextII[0],
+			CipherText:  joinSplitResult.CipherText[0],
+			EncTxData: joinSplitResult.EncTxData[0],
 		},
 		{
 			Commitment:   joinSplitResult.Statement[8],
-			CiphertextI:  joinSplitResult.CiphertextI[1],
-			CiphertextII: joinSplitResult.CiphertextII[1],
+			CipherText:  joinSplitResult.CipherText[1],
+			EncTxData: joinSplitResult.EncTxData[1],
 		},
 	}
 	ownedNotes, err := core.ScanForErc20Notes(bobView.DecapsKey, bobSpend.PublicKey, events)

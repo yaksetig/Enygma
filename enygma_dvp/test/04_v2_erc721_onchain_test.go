@@ -13,6 +13,7 @@ package tests
 // Run with:
 //    go test -run TestV2Erc721OnChain -v -timeout 300s
 
+
   
 import (
 	"context"
@@ -226,8 +227,8 @@ func TestV2Erc721OnChain_DepositTransfer(t *testing.T) {
 	// Bob scans for his note
 	bobEvents := []core.OnChainErc721Event{{
 		Commitment:   bobCommitment,
-		CiphertextI:  ownershipResult.CiphertextI[0],
-		CiphertextII: ownershipResult.CiphertextII[0],
+		CipherText:  ownershipResult.CipherText[0],
+		EncTxData: ownershipResult.EncTxData[0],
 	}}
 	bobNotes, err := core.ScanForErc721Notes(bobView.DecapsKey, bobSpend.PublicKey, bobEvents)
 	if err != nil {

@@ -89,7 +89,7 @@ sequenceDiagram
 
         Alice->>Alice: Encapsulate(encapKey_bob)
         Note over Alice: saltB = 0x4f2a..., ctI = 0x9d3e...
-        Alice->>Alice: CommitmentB = poseidon(pk_bob, SaltBToField(saltB), 5, 10)
+        Alice->>Alice: CommitmentB = Poseidon4(pk_bob, SaltBToField(saltB), 5, 10)
         Note over Alice: CommitmentB = 9102837465... (USDT for Bob)
 
         Alice->>Alice: saltStar = GenerateRandomValue(length(SaltB))

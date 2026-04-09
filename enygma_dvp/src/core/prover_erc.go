@@ -75,27 +75,36 @@ func (c *GnarkClient) Erc20JoinSplitProof(
 	// --- outputs: KEM encapsulation, AEAD encryption, V2 commitments ---
 	wtSaltsOut := make([]*big.Int, nOut)
 	stCommitmentsOut := make([]*big.Int, nOut)
-	ciphertextI := make([][]byte, nOut)
-	ciphertextII := make([][]byte, nOut)
+	cipherText := make([][]byte, nOut)
+	encTxData := make([][]byte, nOut)
 
 	for i := 0; i < nOut; i++ {
-		// Encapsulate using recipient's view public key
-		saltB, ctI, err := Encapsulate(recipientViewEncapKeys[i])
+		// Encapsulate using recipient's view public key → raw shared secret ss
+		ss, ctI, err := Encapsulate(recipientViewEncapKeys[i])
 		if err != nil {
 			return nil, fmt.Errorf("failed to encapsulate for output %d: %w", i, err)
 		}
-		ciphertextI[i] = ctI
+		cipherText[i] = ctI
 
-		// Reduce saltB to a SNARK field element for use in Poseidon
+		// HKDF-derive commitment salt and AES-GCM encryption key from ss
+		saltB, err := DerivePaymentSalt(ss)
+		if err != nil {
+			return nil, fmt.Errorf("failed to derive payment salt for output %d: %w", i, err)
+		}
+		encKey, err := DerivePaymentKey(ss)
+		if err != nil {
+			return nil, fmt.Errorf("failed to derive payment key for output %d: %w", i, err)
+		}
+
 		saltBField := SaltBToField(saltB)
 		wtSaltsOut[i] = saltBField
 
-		// Encrypt tokenId||amount so the recipient can learn what was sent
-		ctII, err := EncryptPayload(saltB, wtTokenId, wtValuesOut[i])
+		// Encrypt tokenId||amount with AES-GCM so the recipient can learn what was sent
+		ctII, err := EncryptPayload(encKey, wtTokenId, wtValuesOut[i])
 		if err != nil {
 			return nil, fmt.Errorf("failed to encrypt payload for output %d: %w", i, err)
 		}
-		ciphertextII[i] = ctII
+		encTxData[i] = ctII
 
 		// V2 commitment: Poseidon(pk_spendRecipient, saltB_field, amount, tokenId)
 		cmt, err := Erc20CommitmentV2(recipientSpendPks[i], saltBField, wtValuesOut[i], wtTokenId)
@@ -170,8 +179,8 @@ func (c *GnarkClient) Erc20JoinSplitProof(
 		Statement:       statement,
 		NumberOfInputs:  nIn,
 		NumberOfOutputs: nOut,
-		CiphertextI:     ciphertextI,
-		CiphertextII:    ciphertextII,
+		CipherText:     cipherText,
+		EncTxData:    encTxData,
 	}, nil
 }
 
@@ -188,13 +197,13 @@ type ZkDvpSwapInitResult struct {
 	// This is the commitment Alice receives (Bob's asset coming to Alice).
 	CommitmentA *big.Int
 
-	// CiphertextI is the ML-KEM capsule (1088 bytes) from Encapsulate(bobViewEncapKey).
+	// CipherText is the ML-KEM capsule (1088 bytes) from Encapsulate(bobViewEncapKey).
 	// Bob decapsulates to recover saltB.
-	CiphertextI []byte
+	CipherText []byte
 
-	// CiphertextII is the AEAD ciphertext of (tokenIdOut || amountOut || saltStar)
+	// EncTxData is the AEAD ciphertext of (tokenIdOut || amountOut || saltStar)
 	// keyed by saltB. Bob decrypts to verify CommitmentA is well-formed.
-	CiphertextII []byte
+	EncTxData []byte
 
 	// SaltStar is the raw random salt used in CommitmentA. Alice keeps this to
 	// spend CommitmentA in a future proof (used as WtSaltsIn).
@@ -210,10 +219,10 @@ type ZkDvpSwapInitResult struct {
 
 // ZkDvpInitiateSwap produces all of Alice's ZkDvp swap artefacts in one call:
 //
-//  1. Calls Encapsulate(bobViewEncapKey) to derive (saltB, ciphertextI).
+//  1. Calls Encapsulate(bobViewEncapKey) to derive (saltB, cipherText).
 //  2. Computes CommitmentB = Poseidon(bobSpendPk, SaltBToField(saltB), amountIn, tokenIdIn).
 //  3. Generates saltStar and computes CommitmentA = C' = Poseidon(aliceSpendPk, SaltBToField(saltStar), amountOut, tokenIdOut).
-//  4. Encrypts (tokenIdOut || amountOut || saltStar) with saltB → ciphertextII.
+//  4. Encrypts (tokenIdOut || amountOut || saltStar) with saltB → encTxData.
 //  5. Computes Alice's nullifier.
 //  6. Generates the JoinSplit ZK proof for Alice's input note with StMessage = CommitmentA (C').
 //
@@ -246,12 +255,13 @@ func (c *GnarkClient) ZkDvpInitiateSwap(
 	merkleProof *MerkleProof,
 	stTreeNumber *big.Int,
 ) (*ZkDvpSwapInitResult, error) {
-	// Step 1: Alice explicitly encapsulates Bob's view key → shared saltB + ciphertextI.
-	saltB, ciphertextI, err := Encapsulate(bobViewEncapKey)
+	// Step 1: Alice encapsulates Bob's view key → raw shared secret ss + cipherText.
+	// ZkDvP uses ss directly (not HKDF-derived) for commitment and swap-payload encryption.
+	ss, cipherText, err := Encapsulate(bobViewEncapKey)
 	if err != nil {
 		return nil, fmt.Errorf("encapsulate failed: %w", err)
 	}
-	saltBField := SaltBToField(saltB)
+	saltBField := SaltBToField(ss)
 
 	// Step 2: CommitmentB — Bob receives Alice's asset.
 	commitmentB, err := Erc20CommitmentV2(bobSpendPk, saltBField, amountIn, tokenIdIn)
@@ -260,8 +270,8 @@ func (c *GnarkClient) ZkDvpInitiateSwap(
 	}
 
 	// Step 3: C' (CommitmentA) — Alice receives Bob's asset.
-	// saltStar is freshly generated with the same byte-length as saltB.
-	saltStar, err := GenerateRandomValue(len(saltB))
+	// saltStar is freshly generated with the same byte-length as ss.
+	saltStar, err := GenerateRandomValue(len(ss))
 	if err != nil {
 		return nil, fmt.Errorf("GenerateRandomValue failed: %w", err)
 	}
@@ -272,7 +282,8 @@ func (c *GnarkClient) ZkDvpInitiateSwap(
 	}
 
 	// Step 4: Encrypt (tokenIdOut || amountOut || saltStar) for Bob.
-	ciphertextII, err := EncryptSwapPayload(saltB, tokenIdOut, amountOut, saltStar)
+	// ZkDvP swap payload uses ss directly (ChaCha20-Poly1305).
+	encTxData, err := EncryptSwapPayload(ss, tokenIdOut, amountOut, saltStar)
 	if err != nil {
 		return nil, fmt.Errorf("EncryptSwapPayload failed: %w", err)
 	}
@@ -362,8 +373,8 @@ func (c *GnarkClient) ZkDvpInitiateSwap(
 		AliceNullifier: nullifier,
 		CommitmentB:    commitmentB,
 		CommitmentA:    commitmentA,
-		CiphertextI:    ciphertextI,
-		CiphertextII:   ciphertextII,
+		CipherText:    cipherText,
+		EncTxData:   encTxData,
 		SaltStar:       saltStar,
 		SaltStarField:  saltStarField,
 		Proof:          proofStrs,
@@ -535,12 +546,20 @@ func (c *GnarkClient) Erc721OwnershipProof(
 	if recipientViewEncapKey == nil {
 		return nil, fmt.Errorf("recipientViewEncapKey is required for non-interactive note delivery")
 	}
-	saltB, ctI, kemErr := Encapsulate(recipientViewEncapKey)
+	ss, ctI, kemErr := Encapsulate(recipientViewEncapKey)
 	if kemErr != nil {
 		return nil, fmt.Errorf("failed to encapsulate for output: %w", kemErr)
 	}
+	saltB, err := DerivePaymentSalt(ss)
+	if err != nil {
+		return nil, fmt.Errorf("failed to derive payment salt for output: %w", err)
+	}
+	encKey, err := DerivePaymentKey(ss)
+	if err != nil {
+		return nil, fmt.Errorf("failed to derive payment key for output: %w", err)
+	}
 	wtSaltOut := SaltBToField(saltB)
-	ctII, err := EncryptPayload(saltB, wtErc721ContractAddress, wtValue)
+	ctII, err := EncryptPayload(encKey, wtErc721ContractAddress, wtValue)
 	if err != nil {
 		return nil, fmt.Errorf("failed to encrypt payload for output: %w", err)
 	}
@@ -597,8 +616,8 @@ func (c *GnarkClient) Erc721OwnershipProof(
 		NumberOfInputs:  1,
 		NumberOfOutputs: 1,
 		SaltsOut:        []*big.Int{wtSaltOut},
-		CiphertextI:     [][]byte{ctI},
-		CiphertextII:    [][]byte{ctII},
+		CipherText:     [][]byte{ctI},
+		EncTxData:    [][]byte{ctII},
 	}, nil
 }
 
@@ -676,8 +695,8 @@ func (c *GnarkClient) Erc721OwnershipProofFromSalt(
 		NumberOfInputs:  1,
 		NumberOfOutputs: 1,
 		SaltsOut:        []*big.Int{wtSaltOut},
-		CiphertextI:     [][]byte{ctI},
-		CiphertextII:    [][]byte{ctII},
+		CipherText:     [][]byte{ctI},
+		EncTxData:    [][]byte{ctII},
 	}, nil
 }
 
@@ -693,8 +712,8 @@ func (c *GnarkClient) Erc20JoinSplitProofFromSalts(
 	wtValuesOut []*big.Int,
 	recipientSpendPks []*big.Int,
 	wtSaltsOut []*big.Int,
-	ciphertextI [][]byte,
-	ciphertextII [][]byte,
+	cipherText [][]byte,
+	encTxData [][]byte,
 	merkleDepth int,
 	merkleProofs []*MerkleProof,
 	stTreeNumbers []*big.Int,
@@ -798,8 +817,8 @@ func (c *GnarkClient) Erc20JoinSplitProofFromSalts(
 		Statement:       statement,
 		NumberOfInputs:  nIn,
 		NumberOfOutputs: nOut,
-		CiphertextI:     ciphertextI,
-		CiphertextII:    ciphertextII,
+		CipherText:     cipherText,
+		EncTxData:    encTxData,
 	}, nil
 }
 
@@ -890,8 +909,8 @@ func (c *GnarkClient) Erc1155FungibleJoinSplitProof(
 		NumberOfInputs:  len(wtValuesIn),
 		NumberOfOutputs: len(wtValuesOut),
 		SaltsOut:        wtSaltsOut,
-		CiphertextI:     ctI,
-		CiphertextII:    ctII,
+		CipherText:     ctI,
+		EncTxData:    ctII,
 	}, nil
 }
 
@@ -916,12 +935,20 @@ func (c *GnarkClient) Erc1155NonFungibleOwnershipProof(
 	if recipientViewEncapKey == nil {
 		return nil, fmt.Errorf("recipientViewEncapKey is required for non-interactive note delivery")
 	}
-	saltB, ctI, kemErr := Encapsulate(recipientViewEncapKey)
+	ss, ctI, kemErr := Encapsulate(recipientViewEncapKey)
 	if kemErr != nil {
 		return nil, fmt.Errorf("failed to encapsulate for output: %w", kemErr)
 	}
+	saltB, saltErr := DerivePaymentSalt(ss)
+	if saltErr != nil {
+		return nil, fmt.Errorf("failed to derive payment salt for output: %w", saltErr)
+	}
+	encKey, keyErr := DerivePaymentKey(ss)
+	if keyErr != nil {
+		return nil, fmt.Errorf("failed to derive payment key for output: %w", keyErr)
+	}
 	wtSaltOut := SaltBToField(saltB)
-	ctII, encErr := EncryptPayload(saltB, wtErc1155TokenId, wtValue)
+	ctII, encErr := EncryptPayload(encKey, wtErc1155TokenId, wtValue)
 	if encErr != nil {
 		return nil, fmt.Errorf("failed to encrypt payload for output: %w", encErr)
 	}
@@ -988,8 +1015,8 @@ func (c *GnarkClient) Erc1155NonFungibleOwnershipProof(
 		NumberOfInputs:  1,
 		NumberOfOutputs: 1,
 		SaltsOut:        []*big.Int{wtSaltOut},
-		CiphertextI:     [][]byte{ctI},
-		CiphertextII:    [][]byte{ctII},
+		CipherText:     [][]byte{ctI},
+		EncTxData:    [][]byte{ctII},
 	}, nil
 }
 
@@ -1073,8 +1100,8 @@ func (c *GnarkClient) Erc1155NonFungibleOwnershipProofFromSalt(
 		NumberOfInputs:  1,
 		NumberOfOutputs: 1,
 		SaltsOut:        []*big.Int{wtSaltOut},
-		CiphertextI:     [][]byte{ctI},
-		CiphertextII:    [][]byte{ctII},
+		CipherText:     [][]byte{ctI},
+		EncTxData:    [][]byte{ctII},
 	}, nil
 }
 
@@ -1271,8 +1298,8 @@ func (c *GnarkClient) Erc1155FungibleAuditorProof(
 		NumberOfInputs:  len(wtValuesIn),
 		NumberOfOutputs: len(wtValuesOut),
 		SaltsOut:        wtSaltsOut,
-		CiphertextI:     ctI,
-		CiphertextII:    ctII,
+		CipherText:     ctI,
+		EncTxData:    ctII,
 		AuditData: &AuditEncryptionData{
 			AuthKeyX:   authKeyX,
 			AuthKeyY:   authKeyY,
@@ -1307,12 +1334,20 @@ func (c *GnarkClient) Erc1155NonFungibleAuditorProof(
 	if recipientViewEncapKey == nil {
 		return nil, fmt.Errorf("recipientViewEncapKey is required for non-interactive note delivery")
 	}
-	saltB, ctI, kemErr := Encapsulate(recipientViewEncapKey)
+	ss, ctI, kemErr := Encapsulate(recipientViewEncapKey)
 	if kemErr != nil {
 		return nil, fmt.Errorf("failed to encapsulate for output: %w", kemErr)
 	}
+	saltB, saltErr := DerivePaymentSalt(ss)
+	if saltErr != nil {
+		return nil, fmt.Errorf("failed to derive payment salt for output: %w", saltErr)
+	}
+	encKey, keyErr := DerivePaymentKey(ss)
+	if keyErr != nil {
+		return nil, fmt.Errorf("failed to derive payment key for output: %w", keyErr)
+	}
 	wtSaltOut := SaltBToField(saltB)
-	ctII, encErr := EncryptPayload(saltB, wtErc1155TokenId, wtValue)
+	ctII, encErr := EncryptPayload(encKey, wtErc1155TokenId, wtValue)
 	if encErr != nil {
 		return nil, fmt.Errorf("failed to encrypt payload for output: %w", encErr)
 	}
@@ -1399,8 +1434,8 @@ func (c *GnarkClient) Erc1155NonFungibleAuditorProof(
 		NumberOfInputs:  1,
 		NumberOfOutputs: 1,
 		SaltsOut:        []*big.Int{wtSaltOut},
-		CiphertextI:     [][]byte{ctI},
-		CiphertextII:    [][]byte{ctII},
+		CipherText:     [][]byte{ctI},
+		EncTxData:    [][]byte{ctII},
 		AuditData: &AuditEncryptionData{
 			AuthKeyX:   authKeyX,
 			AuthKeyY:   authKeyY,
@@ -1482,4 +1517,392 @@ func (c *GnarkClient) Erc20PrivateMintProof(
 		Salt:          salt,
 		ProofResponse: &resp,
 	}, nil
+}
+
+// PaymentResult holds the output of PaymentProof — everything Alice needs to submit
+// the transaction on-chain and that each recipient needs to scan their note.
+type PaymentResult struct {
+	Proof           []string    // 8-element Groth16 proof
+	Statement       []*big.Int  // interleaved: [msg, tree0, root0, null0, ..., cmt0, cmt1]
+	NumberOfInputs  int
+	NumberOfOutputs int
+	// Per-output encrypted note data (index 0 = payment, 1 = change, ...)
+	CipherText  [][]byte // ML-KEM capsule per output (1088 bytes)
+	EncTxData [][]byte // AES-256-GCM ciphertext of (tokenId || amount) per output
+}
+
+// ContractStatement de-interleaves the statement for on-chain submission.
+func (r *PaymentResult) ContractStatement() []*big.Int {
+	nIn := r.NumberOfInputs
+	nOut := r.NumberOfOutputs
+	out := make([]*big.Int, 1+3*nIn+nOut)
+	out[0] = r.Statement[0]
+	for i := 0; i < nIn; i++ {
+		base := 1 + i*3
+		out[1+i]       = r.Statement[base]
+		out[1+nIn+i]   = r.Statement[base+1]
+		out[1+2*nIn+i] = r.Statement[base+2]
+	}
+	for i := 0; i < nOut; i++ {
+		out[1+3*nIn+i] = r.Statement[1+3*nIn+i]
+	}
+	return out
+}
+
+// PaymentProof generates a Payment circuit proof for Alice paying some amount to Bob
+// with optional change back to herself (or any other recipients).
+//
+// Circuit config: 2 inputs / 2 outputs / Merkle depth 8.
+//   - Input 0: Alice's real note; Input 1: dummy (value=0, Merkle check skipped).
+//   - Output 0: payment to Bob; Output 1: change back to Alice.
+//
+// For each output the function runs ML-KEM.Encapsulate + HKDF to derive salt_j and
+// encKey_j, computes the V2 commitment, and encrypts (tokenId || amount_j) with AES-GCM.
+// The caller submits the resulting ctxts/encTxDatas alongside the proof on-chain.
+func (c *GnarkClient) PaymentProof(
+	stMessage *big.Int,
+	wtValuesIn []*big.Int,           // [aliceAmount, 0]
+	keysIn []KeyPair,                // [aliceKey, dummyKey]
+	wtSaltsIn []*big.Int,            // [aliceSaltBField, 0]
+	wtValuesOut []*big.Int,          // [paymentAmount, changeAmount]
+	recipientSpendPks []*big.Int,    // [bobPk, alicePk]
+	recipientViewEncapKeys [][]byte, // [bobViewEncapKey, aliceViewEncapKey]
+	merkleDepth int,
+	merkleProofs []*MerkleProof,     // [aliceProof, dummyProof]
+	stTreeNumbers []*big.Int,        // [0, 0]
+	wtTokenId *big.Int,
+) (*PaymentResult, error) {
+	nIn := len(wtValuesIn)
+	nOut := len(wtValuesOut)
+
+	// --- inputs: nullifiers and Merkle paths ---
+	stNullifiers := make([]*big.Int, nIn)
+	wtPathIndices := make([]*big.Int, nIn)
+	wtPathElements := make([]*big.Int, 0, nIn*merkleDepth)
+
+	for i := 0; i < nIn; i++ {
+		if wtValuesIn[i].Sign() == 0 {
+			wtPathIndices[i] = big.NewInt(0)
+			zeros := make([]*big.Int, merkleDepth)
+			for j := range zeros {
+				zeros[j] = big.NewInt(0)
+			}
+			wtPathElements = append(wtPathElements, zeros...)
+		} else {
+			wtPathIndices[i] = merkleProofs[i].Indices
+			wtPathElements = append(wtPathElements, merkleProofs[i].Elements...)
+		}
+		nf, err := GetNullifier(keysIn[i].PrivateKey, wtPathIndices[i])
+		if err != nil {
+			return nil, fmt.Errorf("GetNullifier input %d: %w", i, err)
+		}
+		stNullifiers[i] = nf
+	}
+
+	// --- outputs: KEM + HKDF + AES-GCM + V2 commitments ---
+	wtSaltsOut := make([]*big.Int, nOut)
+	stCommitmentsOut := make([]*big.Int, nOut)
+	cipherText := make([][]byte, nOut)
+	encTxData := make([][]byte, nOut)
+
+	for i := 0; i < nOut; i++ {
+		ss, ctI, err := Encapsulate(recipientViewEncapKeys[i])
+		if err != nil {
+			return nil, fmt.Errorf("Encapsulate output %d: %w", i, err)
+		}
+		cipherText[i] = ctI
+
+		saltB, err := DerivePaymentSalt(ss)
+		if err != nil {
+			return nil, fmt.Errorf("DerivePaymentSalt output %d: %w", i, err)
+		}
+		encKey, err := DerivePaymentKey(ss)
+		if err != nil {
+			return nil, fmt.Errorf("DerivePaymentKey output %d: %w", i, err)
+		}
+		saltBField := SaltBToField(saltB)
+		wtSaltsOut[i] = saltBField
+
+		ctII, err := EncryptPayload(encKey, wtTokenId, wtValuesOut[i])
+		if err != nil {
+			return nil, fmt.Errorf("EncryptPayload output %d: %w", i, err)
+		}
+		encTxData[i] = ctII
+
+		cmt, err := Erc20CommitmentV2(recipientSpendPks[i], saltBField, wtValuesOut[i], wtTokenId)
+		if err != nil {
+			return nil, fmt.Errorf("Erc20CommitmentV2 output %d: %w", i, err)
+		}
+		stCommitmentsOut[i] = cmt
+	}
+
+	// --- Merkle roots ---
+	stMerkleRoots := make([]*big.Int, nIn)
+	for i := range wtValuesIn {
+		if wtValuesIn[i].Sign() == 0 {
+			stMerkleRoots[i] = big.NewInt(0)
+		} else {
+			stMerkleRoots[i] = merkleProofs[i].Root
+		}
+	}
+
+	pathElementChunks := chunkBigIntSlice(wtPathElements, merkleDepth)
+
+	payload := map[string]interface{}{
+		"stMessage":            stMessage.String(),
+		"stTreeNumbers":        bigIntSliceToStrings(stTreeNumbers),
+		"stMerkleRoots":        bigIntSliceToStrings(stMerkleRoots),
+		"stNullifiers":         bigIntSliceToStrings(stNullifiers),
+		"stCommitmentsOut":     bigIntSliceToStrings(stCommitmentsOut),
+		"wtPrivateKeysIn":      bigIntSliceToStrings(extractPrivateKeys(keysIn)),
+		"wtValuesIn":           bigIntSliceToStrings(wtValuesIn),
+		"wtSaltsIn":            bigIntSliceToStrings(wtSaltsIn),
+		"wtPathElements":       bigIntChunksToStringChunks(pathElementChunks),
+		"wtPathIndices":        bigIntSliceToStrings(wtPathIndices),
+		"wtTokenId":            wtTokenId.String(),
+		"wtSpendPublicKeysOut": bigIntSliceToStrings(recipientSpendPks),
+		"wtValuesOut":          bigIntSliceToStrings(wtValuesOut),
+		"wtSaltsOut":           bigIntSliceToStrings(wtSaltsOut),
+	}
+
+	body, err := c.PostProof("/proof/payment", payload)
+	if err != nil {
+		return nil, fmt.Errorf("payment proof request failed: %w", err)
+	}
+
+	var gnarkResp struct {
+		Proof        []json.Number  `json:"proof"`
+		PublicSignal []json.Number  `json:"publicSignal"`
+	}
+	if err := json.Unmarshal(body, &gnarkResp); err != nil {
+		return nil, fmt.Errorf("failed to parse payment proof response: %w", err)
+	}
+	proofStrs := make([]string, len(gnarkResp.Proof))
+	for i, n := range gnarkResp.Proof {
+		proofStrs[i] = n.String()
+	}
+
+	// Build interleaved statement from public signal returned by the server.
+	// Server returns: [msg, tree0, root0, null0, tree1, root1, null1, cmt0, cmt1]
+	statement := make([]*big.Int, 0, 1+3*nIn+nOut)
+	statement = append(statement, stMessage)
+	for i := 0; i < nIn; i++ {
+		statement = append(statement, stTreeNumbers[i], stMerkleRoots[i], stNullifiers[i])
+	}
+	statement = append(statement, stCommitmentsOut...)
+
+	return &PaymentResult{
+		Proof:           proofStrs,
+		Statement:       statement,
+		NumberOfInputs:  nIn,
+		NumberOfOutputs: nOut,
+		CipherText:     cipherText,
+		EncTxData:    encTxData,
+	}, nil
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DvP Initiator (Alice's side)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// DvPInitiatorResult holds the output of DvPInitiatorProof.
+type DvPInitiatorResult struct {
+	Proof         []string   // 8-element Groth16 proof
+	Statement     []*big.Int // [msg, treeNum, root, nf_A, commitB, commitA, revertCommitA]
+	CipherText    []byte     // ML-KEM capsule for Bob (1088 bytes)
+	EncTxData     []byte     // AES-256-GCM ciphertext of (tokenIdIn || valueIn)
+	CommitB       *big.Int
+	CommitA       *big.Int
+	RevertCommitA *big.Int
+	SaltA         *big.Int // passed to Bob's DvPDestinationProof
+}
+
+// DvPInitiatorProof generates Alice's side of the DvP proof.
+func (c *GnarkClient) DvPInitiatorProof(
+	stMessage *big.Int,
+	aliceKey KeyPair,
+	aliceSaltIn *big.Int,
+	valueIn *big.Int,
+	tokenIdIn *big.Int,
+	bobSpendPk *big.Int,
+	bobViewEncapKey []byte,
+	valueBob *big.Int,
+	tokenIdBob *big.Int,
+	stTreeNumber *big.Int,
+	merkleProof *MerkleProof,
+	merkleDepth int,
+) (*DvPInitiatorResult, error) {
+	ss, cipherText, err := Encapsulate(bobViewEncapKey)
+	if err != nil {
+		return nil, fmt.Errorf("Encapsulate: %w", err)
+	}
+	saltBBytes, err := DerivePaymentSalt(ss)
+	if err != nil {
+		return nil, fmt.Errorf("DerivePaymentSalt: %w", err)
+	}
+	saltABytes, err := DeriveDvpSaltInit(ss)
+	if err != nil {
+		return nil, fmt.Errorf("DeriveDvpSaltInit: %w", err)
+	}
+	encKey, err := DerivePaymentKey(ss)
+	if err != nil {
+		return nil, fmt.Errorf("DerivePaymentKey: %w", err)
+	}
+	saltB := SaltBToField(saltBBytes)
+	saltA := SaltBToField(saltABytes)
+
+	encTxData, err := EncryptPayload(encKey, tokenIdIn, valueIn)
+	if err != nil {
+		return nil, fmt.Errorf("EncryptPayload: %w", err)
+	}
+
+	revertSaltBytes, err := GenerateRandomValue(32)
+	if err != nil {
+		return nil, fmt.Errorf("RandomBytes (revert salt): %w", err)
+	}
+	revertSalt := SaltBToField(revertSaltBytes)
+
+	pathIndex := merkleProof.Indices
+	nf, err := GetNullifier(aliceKey.PrivateKey, pathIndex)
+	if err != nil {
+		return nil, fmt.Errorf("GetNullifier: %w", err)
+	}
+
+	commitB, err := Erc20CommitmentV2(bobSpendPk, saltB, valueIn, tokenIdIn)
+	if err != nil {
+		return nil, fmt.Errorf("Erc20CommitmentV2 (commitB): %w", err)
+	}
+	commitA, err := Erc20CommitmentV2(aliceKey.PublicKey, saltA, valueBob, tokenIdBob)
+	if err != nil {
+		return nil, fmt.Errorf("Erc20CommitmentV2 (commitA): %w", err)
+	}
+	revertCommitA, err := Erc20CommitmentV2(aliceKey.PublicKey, revertSalt, valueIn, tokenIdIn)
+	if err != nil {
+		return nil, fmt.Errorf("Erc20CommitmentV2 (revertCommitA): %w", err)
+	}
+
+	pathElems := make([]*big.Int, merkleDepth)
+	copy(pathElems, merkleProof.Elements[:merkleDepth])
+
+	payload := map[string]interface{}{
+		"stMessage":       stMessage.String(),
+		"stTreeNumber":    stTreeNumber.String(),
+		"stMerkleRoot":    merkleProof.Root.String(),
+		"stNullifier":     nf.String(),
+		"stCommitB":       commitB.String(),
+		"stCommitA":       commitA.String(),
+		"stRevertCommitA": revertCommitA.String(),
+		"wtSpendKeyIn":    aliceKey.PrivateKey.String(),
+		"wtValueIn":       valueIn.String(),
+		"wtSaltIn":        aliceSaltIn.String(),
+		"wtTokenIdIn":     tokenIdIn.String(),
+		"wtPathElements":  bigIntSliceToStrings(pathElems),
+		"wtPathIndex":     pathIndex.String(),
+		"wtSpendPkBob":    bobSpendPk.String(),
+		"wtSaltB":         saltB.String(),
+		"wtValueBob":      valueBob.String(),
+		"wtTokenIdBob":    tokenIdBob.String(),
+		"wtSaltA":         saltA.String(),
+		"wtRevertSalt":    revertSalt.String(),
+	}
+
+	body, err := c.PostProof("/proof/dvpInitiator", payload)
+	if err != nil {
+		return nil, fmt.Errorf("dvpInitiator proof request failed: %w", err)
+	}
+
+	var gnarkResp struct {
+		Proof        []json.Number `json:"proof"`
+		PublicSignal []json.Number `json:"publicSignal"`
+	}
+	if err := json.Unmarshal(body, &gnarkResp); err != nil {
+		return nil, fmt.Errorf("failed to parse dvpInitiator proof response: %w", err)
+	}
+	proofStrs := make([]string, len(gnarkResp.Proof))
+	for i, n := range gnarkResp.Proof {
+		proofStrs[i] = n.String()
+	}
+
+	statement := []*big.Int{stMessage, stTreeNumber, merkleProof.Root, nf, commitB, commitA, revertCommitA}
+
+	return &DvPInitiatorResult{
+		Proof:         proofStrs,
+		Statement:     statement,
+		CipherText:    cipherText,
+		EncTxData:     encTxData,
+		CommitB:       commitB,
+		CommitA:       commitA,
+		RevertCommitA: revertCommitA,
+		SaltA:         saltA,
+	}, nil
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DvP Destination (Bob's side)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// DvPDestinationResult holds the output of DvPDestinationProof.
+type DvPDestinationResult struct {
+	Proof     []string   // 8-element Groth16 proof
+	Statement []*big.Int // [msg, treeNum, root, nf_B, commitA]
+}
+
+// DvPDestinationProof generates Bob's side of the DvP proof.
+func (c *GnarkClient) DvPDestinationProof(
+	stMessage *big.Int,
+	bobKey KeyPair,
+	bobSaltIn *big.Int,
+	valueIn *big.Int,
+	tokenIdIn *big.Int,
+	aliceSpendPk *big.Int,
+	saltA *big.Int,
+	commitA *big.Int,
+	stTreeNumber *big.Int,
+	merkleProof *MerkleProof,
+	merkleDepth int,
+) (*DvPDestinationResult, error) {
+	pathIndex := merkleProof.Indices
+	nf, err := GetNullifier(bobKey.PrivateKey, pathIndex)
+	if err != nil {
+		return nil, fmt.Errorf("GetNullifier: %w", err)
+	}
+
+	pathElems := make([]*big.Int, merkleDepth)
+	copy(pathElems, merkleProof.Elements[:merkleDepth])
+
+	payload := map[string]interface{}{
+		"stMessage":      stMessage.String(),
+		"stTreeNumber":   stTreeNumber.String(),
+		"stMerkleRoot":   merkleProof.Root.String(),
+		"stNullifier":    nf.String(),
+		"stCommitA":      commitA.String(),
+		"wtSpendKeyIn":   bobKey.PrivateKey.String(),
+		"wtValueIn":      valueIn.String(),
+		"wtSaltIn":       bobSaltIn.String(),
+		"wtTokenIdIn":    tokenIdIn.String(),
+		"wtPathElements": bigIntSliceToStrings(pathElems),
+		"wtPathIndex":    pathIndex.String(),
+		"wtSpendPkAlice": aliceSpendPk.String(),
+		"wtSaltA":        saltA.String(),
+	}
+
+	body, err := c.PostProof("/proof/dvpDestination", payload)
+	if err != nil {
+		return nil, fmt.Errorf("dvpDestination proof request failed: %w", err)
+	}
+
+	var gnarkResp struct {
+		Proof        []json.Number `json:"proof"`
+		PublicSignal []json.Number `json:"publicSignal"`
+	}
+	if err := json.Unmarshal(body, &gnarkResp); err != nil {
+		return nil, fmt.Errorf("failed to parse dvpDestination proof response: %w", err)
+	}
+	proofStrs := make([]string, len(gnarkResp.Proof))
+	for i, n := range gnarkResp.Proof {
+		proofStrs[i] = n.String()
+	}
+
+	statement := []*big.Int{stMessage, stTreeNumber, merkleProof.Root, nf, commitA}
+	return &DvPDestinationResult{Proof: proofStrs, Statement: statement}, nil
 }

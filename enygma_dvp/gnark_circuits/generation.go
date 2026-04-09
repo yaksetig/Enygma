@@ -188,8 +188,21 @@ func GenerationVkPk (){
 		TmAssetGroupMerkleTree:8,
 		}
 
-	private_mint_config := templates.PrivateMintConfig{
+	private_mint_config := templates.PrivateMintConfig{}
 
+	payment_config := templates.PaymentCircuitConfig{
+		TmNInputs:         2,
+		TmMOutputs:        2,
+		TmMerkleTreeDepth: 8,
+		TmRange:           frontend.Variable("1000000000000000000000000000000000000"),
+	}
+
+	dvp_initiator_config := templates.DvPInitiatorCircuitConfig{
+		TmMerkleTreeDepth: 8,
+	}
+
+	dvp_destination_config := templates.DvPDestinationCircuitConfig{
+		TmMerkleTreeDepth: 8,
 	}
 
 	script.SetupAuctionBid(auctionbidConfig,"AuctionBid")
@@ -230,6 +243,9 @@ func GenerationVkPk (){
 	script.SetupOwnershipERC1155NonFungibleAuditor(ownership_erc1155_Non_Fungible_config_with_auditor,"OwnershipERC1155NonFungibleAuditor")
 
 	script.SetupPrivateMint(private_mint_config, "PrivateMint")
+	script.SetupPayment(payment_config, "Payment")
+	script.SetupDvPInitiator(dvp_initiator_config, "DvPInitiator")
+	script.SetupDvPDestination(dvp_destination_config, "DvPDestination")
 }
 
 func main(){

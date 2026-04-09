@@ -11,8 +11,8 @@ import (
 //
 //  1. Alice holds a note (sk_spendA, saltA, amount=5, tokenId=10).
 //  2. Alice sends 5 USDT to Bob non-interactively:
-//     a. Encapsulate(pk_viewB) → saltB, ciphertextI
-//     b. EncryptPayload(saltB, tokenId, amount) → ciphertextII
+//     a. Encapsulate(pk_viewB) → saltB, cipherText
+//     b. EncryptPayload(saltB, tokenId, amount) → encTxData
 //     c. Commitment = Poseidon(pk_spendB, saltB_field, amount, tokenId)
 //  3. Bob scans the event and recovers the note without prior interaction.
 func TestScanForErc20Notes_FullFlow(t *testing.T) {
@@ -30,12 +30,12 @@ func TestScanForErc20Notes_FullFlow(t *testing.T) {
 	}
 
 	// --- Alice builds the output note for Bob ---
-	saltB, ciphertextI, err := core.Encapsulate(bobView.EncapsKey)
+	saltB, cipherText, err := core.Encapsulate(bobView.EncapsKey)
 	if err != nil {
 		t.Fatalf("Encapsulate: %v", err)
 	}
 
-	ciphertextII, err := core.EncryptPayload(saltB, tokenId, amount)
+	encTxData, err := core.EncryptPayload(saltB, tokenId, amount)
 	if err != nil {
 		t.Fatalf("EncryptPayload: %v", err)
 	}
@@ -50,8 +50,8 @@ func TestScanForErc20Notes_FullFlow(t *testing.T) {
 	events := []core.OnChainErc20Event{
 		{
 			Commitment:  commitment,
-			CiphertextI: ciphertextI,
-			CiphertextII: ciphertextII,
+			CipherText: cipherText,
+			EncTxData: encTxData,
 		},
 	}
 
@@ -93,14 +93,14 @@ func TestScanForErc20Notes_IgnoresOtherRecipients(t *testing.T) {
 		t.Fatalf("NewSpendKeyPair carol: %v", err)
 	}
 
-	saltB, ciphertextI, err := core.Encapsulate(carolView.EncapsKey)
+	saltB, cipherText, err := core.Encapsulate(carolView.EncapsKey)
 	if err != nil {
 		t.Fatalf("Encapsulate: %v", err)
 	}
 	tokenId := big.NewInt(10)
 	amount := big.NewInt(5)
 
-	ciphertextII, err := core.EncryptPayload(saltB, tokenId, amount)
+	encTxData, err := core.EncryptPayload(saltB, tokenId, amount)
 	if err != nil {
 		t.Fatalf("EncryptPayload: %v", err)
 	}
@@ -111,7 +111,7 @@ func TestScanForErc20Notes_IgnoresOtherRecipients(t *testing.T) {
 	}
 
 	events := []core.OnChainErc20Event{
-		{Commitment: commitment, CiphertextI: ciphertextI, CiphertextII: ciphertextII},
+		{Commitment: commitment, CipherText: cipherText, EncTxData: encTxData},
 	}
 
 	// Bob tries to scan — should find nothing.
@@ -169,7 +169,7 @@ func TestScanForErc20Notes_MultipleEvents(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Erc20CommitmentV2: %v", err)
 		}
-		return core.OnChainErc20Event{Commitment: cmt, CiphertextI: ctI, CiphertextII: ctII}
+		return core.OnChainErc20Event{Commitment: cmt, CipherText: ctI, EncTxData: ctII}
 	}
 
 	events := []core.OnChainErc20Event{
@@ -211,11 +211,11 @@ func TestScanForErc20Notes_SaltBFieldUsableAsWitness(t *testing.T) {
 		t.Fatalf("NewViewKeyPair: %v", err)
 	}
 
-	saltB, ciphertextI, err := core.Encapsulate(bobView.EncapsKey)
+	saltB, cipherText, err := core.Encapsulate(bobView.EncapsKey)
 	if err != nil {
 		t.Fatalf("Encapsulate: %v", err)
 	}
-	ciphertextII, err := core.EncryptPayload(saltB, tokenId, amount)
+	encTxData, err := core.EncryptPayload(saltB, tokenId, amount)
 	if err != nil {
 		t.Fatalf("EncryptPayload: %v", err)
 	}
@@ -226,7 +226,7 @@ func TestScanForErc20Notes_SaltBFieldUsableAsWitness(t *testing.T) {
 	}
 
 	events := []core.OnChainErc20Event{
-		{Commitment: commitment, CiphertextI: ciphertextI, CiphertextII: ciphertextII},
+		{Commitment: commitment, CipherText: cipherText, EncTxData: encTxData},
 	}
 
 	owned, err := core.ScanForErc20Notes(bobView.DecapsKey, bobSpend.PublicKey, events)

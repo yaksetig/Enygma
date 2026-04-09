@@ -20,6 +20,9 @@ import (
     "gnark_server/server/circuits/erc1155Fungible"
     "gnark_server/server/circuits/erc1155FungibleAuditor"
     "gnark_server/server/circuits/privateMint"
+    "gnark_server/server/circuits/payment"
+    "gnark_server/server/circuits/dvpInit"
+    "gnark_server/server/circuits/dvpDestination"
     serverutils "gnark_server/server/utils"
 
 
@@ -46,6 +49,9 @@ func NewServer(cfg *config.Config) *gin.Engine {
     r.POST("/proof/legitBroker",legitBroker.NewHandler(cfg.LegitBrokerPk, cfg.LegitBrokerVk))
     r.POST("/proof/erc1155FungibleAuditor", erc1155FungibleAuditor.NewHandler(cfg.ERC1155FungibleAuditorPk, cfg.ERC1155FungibleAuditorVk))
     r.POST("/proof/privateMint", privateMint.NewHandler(cfg.PrivateMintPk, cfg.PrivateMintVk))
+    r.POST("/proof/payment",         payment.NewHandler(cfg.PaymentPk, cfg.PaymentVk))
+    r.POST("/proof/dvpInitiator",    dvpInit.NewHandler(cfg.DvPInitiatorPk, cfg.DvPInitiatorVk))
+    r.POST("/proof/dvpDestination",  dvpDestination.NewHandler(cfg.DvPDestinationPk, cfg.DvPDestinationVk))
     r.POST("/util/poseidonEncrypt", serverutils.PoseidonEncryptHandler())
     r.POST("/util/poseidonDecrypt", serverutils.PoseidonDecryptHandler())
     return r

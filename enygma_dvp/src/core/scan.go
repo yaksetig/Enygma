@@ -9,24 +9,24 @@ import (
 // OnChainErc20Event represents a single on-chain note-creation event published
 // by the ERC20 vault after a successful JoinSplit proof.
 //
-// The sender posts (Commitment, CiphertextI, CiphertextII) for each output note.
+// The sender posts (Commitment, CipherText, EncTxData) for each output note.
 // Everything else (token address, tree number, Merkle root) comes from the chain
 // but is not needed for note scanning — the recipient only needs these three fields
 // to determine ownership.
 type OnChainErc20Event struct {
 	// Commitment is the output note commitment:
-	//   Poseidon(pk_spendRecipient, saltB_field, amount, tokenId)
+	//   Poseidon(pk_spendRecipient, SaltBToField(HKDF(ss,"Bob salt")), amount, tokenId)
 	Commitment *big.Int
 
-	// CiphertextI is the ML-KEM capsule (1088 bytes) produced by the sender via
+	// CipherText is the ML-KEM capsule (1088 bytes) produced by the sender via
 	// Encapsulate(pk_viewRecipient). The recipient decapsulates it with sk_view to
-	// recover saltB.
-	CiphertextI []byte
+	// recover the raw shared secret ss.
+	CipherText []byte
 
-	// CiphertextII is the ChaCha20-Poly1305 ciphertext of (tokenId || amount),
-	// keyed by saltB. A decryption failure means this note is not addressed to
-	// the scanning view key.
-	CiphertextII []byte
+	// EncTxData is the AES-256-GCM ciphertext of (tokenId || amount), keyed by
+	// HKDF(ss, "encryption key"). A decryption failure means this note is not
+	// addressed to the scanning view key.
+	EncTxData []byte
 }
 
 // OwnedErc20Note is a note that Bob has confirmed belongs to him after scanning.
@@ -35,10 +35,10 @@ type OwnedErc20Note struct {
 	// Commitment is the on-chain commitment value.
 	Commitment *big.Int
 
-	// TokenId recovered from ciphertextII.
+	// TokenId recovered from encTxData.
 	TokenId *big.Int
 
-	// Amount recovered from ciphertextII.
+	// Amount recovered from encTxData.
 	Amount *big.Int
 
 	// SaltBField is saltB reduced mod SNARK_SCALAR_FIELD.
@@ -50,12 +50,11 @@ type OwnedErc20Note struct {
 // addressed to the given view/spend key pair.
 //
 // For each event it:
-//  1. Decapsulates ciphertextI using dk_view to recover saltB.
-//  2. Attempts to decrypt ciphertextII with saltB; a failure means the note is not
-//     for this recipient and it is silently skipped.
-//  3. Recomputes Poseidon(pk_spend, saltB_field, amount, tokenId) and checks it
-//     matches the on-chain commitment. A mismatch is returned as an error (it
-//     indicates tampered or inconsistent data).
+//  1. Decapsulates cipherText to recover the raw ML-KEM shared secret ss.
+//  2. Derives salt_B = HKDF(ss, "Bob salt") and encKey = HKDF(ss, "encryption key").
+//  3. Attempts to decrypt encTxData with encKey (AES-GCM); failure = not for us.
+//  4. Recomputes Poseidon(pk_spend, SaltBToField(salt_B), amount, tokenId) and
+//     checks it matches the on-chain commitment. A mismatch is an error (tampered).
 //
 // dk is the recipient's ML-KEM decapsulation key (sk_view).
 // pkSpend is the recipient's spend public key (pk_spend = Poseidon(sk_spend)).
@@ -67,21 +66,29 @@ func ScanForErc20Notes(
 	var owned []OwnedErc20Note
 
 	for i, ev := range events {
-		// Step 1: recover saltB from the ML-KEM capsule.
-		saltB, err := Decapsulate(dk, ev.CiphertextI)
+		// Step 1: recover raw shared secret from the ML-KEM capsule.
+		ss, err := Decapsulate(dk, ev.CipherText)
 		if err != nil {
-			// Internal KEM failure — unexpected, surface it.
 			return nil, fmt.Errorf("event %d: decapsulation failed: %w", i, err)
 		}
 
-		// Step 2: try to decrypt the payload. Failure = note is not for us.
-		tokenId, amount, err := DecryptPayload(saltB, ev.CiphertextII)
+		// Step 2: HKDF-derive salt and encryption key.
+		saltB, err := DerivePaymentSalt(ss)
 		if err != nil {
-			// AEAD auth failure: note addressed to a different recipient; skip.
+			return nil, fmt.Errorf("event %d: DerivePaymentSalt failed: %w", i, err)
+		}
+		encKey, err := DerivePaymentKey(ss)
+		if err != nil {
+			return nil, fmt.Errorf("event %d: DerivePaymentKey failed: %w", i, err)
+		}
+
+		// Step 3: try to decrypt the payload. AES-GCM auth failure = not for us.
+		tokenId, amount, err := DecryptPayload(encKey, ev.EncTxData)
+		if err != nil {
 			continue
 		}
 
-		// Step 3: recompute commitment and verify it matches the chain.
+		// Step 4: recompute commitment and verify it matches the chain.
 		saltBField := SaltBToField(saltB)
 		expected, err := Erc20CommitmentV2(pkSpend, saltBField, amount, tokenId)
 		if err != nil {
@@ -109,8 +116,8 @@ func ScanForErc20Notes(
 // by the ERC721 vault after a successful ownership proof.
 type OnChainErc721Event struct {
 	Commitment   *big.Int
-	CiphertextI  []byte
-	CiphertextII []byte
+	CipherText  []byte
+	EncTxData []byte
 }
 
 // OwnedErc721Note is a note confirmed to belong to the scanning key pair.
@@ -123,7 +130,7 @@ type OwnedErc721Note struct {
 
 // ScanForErc721Notes scans on-chain ERC721 events for notes owned by the given key pair.
 //
-// CiphertextII was created with EncryptPayload(saltB, contractAddress, tokenId)
+// EncTxData was created with EncryptPayload(encKey, contractAddress, tokenId)
 // so DecryptPayload returns (contractAddress, tokenId).
 func ScanForErc721Notes(
 	dk *mlkem.DecapsulationKey768,
@@ -133,13 +140,22 @@ func ScanForErc721Notes(
 	var owned []OwnedErc721Note
 
 	for i, ev := range events {
-		saltB, err := Decapsulate(dk, ev.CiphertextI)
+		ss, err := Decapsulate(dk, ev.CipherText)
 		if err != nil {
 			return nil, fmt.Errorf("event %d: decapsulation failed: %w", i, err)
 		}
 
+		saltB, err := DerivePaymentSalt(ss)
+		if err != nil {
+			return nil, fmt.Errorf("event %d: DerivePaymentSalt failed: %w", i, err)
+		}
+		encKey, err := DerivePaymentKey(ss)
+		if err != nil {
+			return nil, fmt.Errorf("event %d: DerivePaymentKey failed: %w", i, err)
+		}
+
 		// DecryptPayload returns (contractAddress, tokenId) for ERC721
-		contractAddress, tokenId, err := DecryptPayload(saltB, ev.CiphertextII)
+		contractAddress, tokenId, err := DecryptPayload(encKey, ev.EncTxData)
 		if err != nil {
 			continue // not addressed to this key
 		}
@@ -174,7 +190,7 @@ func ScanForErc721Notes(
 //   - CommitmentA (C') — the new note Alice will receive (the asset Bob is sending)
 //   - CommitmentB      — the new note Bob will receive (the asset Alice is sending)
 //
-// To complete the swap Bob must decapsulate CiphertextI, decrypt CiphertextII,
+// To complete the swap Bob must decapsulate CipherText, decrypt EncTxData,
 // verify both commitments, and submit his own nullifier + ZK proof.
 type OnChainZkDvpEvent struct {
 	// CommitmentA is Alice's output commitment C':
@@ -185,13 +201,13 @@ type OnChainZkDvpEvent struct {
 	//   Poseidon(bobSpendPk, SaltBToField(saltB), amountIn, tokenIdIn)
 	CommitmentB *big.Int
 
-	// CiphertextI is the ML-KEM capsule (1088 bytes) Alice produced via
+	// CipherText is the ML-KEM capsule (1088 bytes) Alice produced via
 	// Encapsulate(bobViewEncapKey). Bob decapsulates to recover saltB.
-	CiphertextI []byte
+	CipherText []byte
 
-	// CiphertextII is the AEAD ciphertext of (tokenIdOut || amountOut || saltStar)
+	// EncTxData is the AEAD ciphertext of (tokenIdOut || amountOut || saltStar)
 	// keyed by saltB. Bob decrypts to verify CommitmentA is well-formed.
-	CiphertextII []byte
+	EncTxData []byte
 }
 
 // ZkDvpSwapInfo is the result of Bob successfully scanning a ZkDvp pending event.
@@ -203,10 +219,10 @@ type ZkDvpSwapInfo struct {
 	// CommitmentB is the commitment Bob will receive (verified against saltB).
 	CommitmentB *big.Int
 
-	// TokenIdOut is the token ID Alice will receive (from ciphertextII).
+	// TokenIdOut is the token ID Alice will receive (from encTxData).
 	TokenIdOut *big.Int
 
-	// AmountOut is the amount Alice will receive (from ciphertextII).
+	// AmountOut is the amount Alice will receive (from encTxData).
 	AmountOut *big.Int
 
 	// SaltStar is the salt Alice used in CommitmentA. Bob needs this to know
@@ -221,8 +237,8 @@ type ZkDvpSwapInfo struct {
 // ScanForZkDvpSwap scans on-chain ZkDvp pending events for swaps addressed to Bob.
 //
 // For each event it:
-//  1. Decapsulates CiphertextI with dk (Bob's view decapsulation key) to recover saltB.
-//  2. Decrypts CiphertextII with saltB to get (tokenIdOut, amountOut, saltStar).
+//  1. Decapsulates CipherText with dk (Bob's view decapsulation key) to recover saltB.
+//  2. Decrypts EncTxData with saltB to get (tokenIdOut, amountOut, saltStar).
 //     An AEAD failure silently skips the event (not addressed to Bob).
 //  3. Verifies CommitmentA = Poseidon(aliceSpendPk, SaltBToField(saltStar), amountOut, tokenIdOut).
 //  4. Verifies CommitmentB = Poseidon(bobSpendPk, SaltBToField(saltB), amountIn, tokenIdIn).
@@ -244,14 +260,15 @@ func ScanForZkDvpSwap(
 	var swaps []ZkDvpSwapInfo
 
 	for i, ev := range events {
-		// Step 1: recover saltB from the ML-KEM capsule.
-		saltB, err := Decapsulate(dk, ev.CiphertextI)
+		// Step 1: recover raw shared secret from the ML-KEM capsule.
+		// ZkDvP uses ss directly (not HKDF-derived) for commitment and encryption.
+		ss, err := Decapsulate(dk, ev.CipherText)
 		if err != nil {
 			return nil, fmt.Errorf("event %d: decapsulation failed: %w", i, err)
 		}
 
 		// Step 2: decrypt payload; failure = not addressed to Bob.
-		tokenIdOut, amountOut, saltStar, err := DecryptSwapPayload(saltB, ev.CiphertextII)
+		tokenIdOut, amountOut, saltStar, err := DecryptSwapPayload(ss, ev.EncTxData)
 		if err != nil {
 			continue // not for Bob
 		}
@@ -270,7 +287,7 @@ func ScanForZkDvpSwap(
 		}
 
 		// Step 4: verify CommitmentB is well-formed using agreed swap terms.
-		saltBField := SaltBToField(saltB)
+		saltBField := SaltBToField(ss)
 		expectedCommB, err := Erc20CommitmentV2(bobSpendPk, saltBField, amountIn, tokenIdIn)
 		if err != nil {
 			return nil, fmt.Errorf("event %d: failed to compute CommitmentB: %w", i, err)
@@ -300,8 +317,8 @@ func ScanForZkDvpSwap(
 type OnChainErc1155Event struct {
 	Commitment      *big.Int
 	ContractAddress *big.Int // public info from on-chain event
-	CiphertextI     []byte
-	CiphertextII    []byte
+	CipherText     []byte
+	EncTxData    []byte
 }
 
 // OwnedErc1155Note is an ERC1155 note confirmed to belong to the scanning key pair.
@@ -315,7 +332,7 @@ type OwnedErc1155Note struct {
 
 // ScanForErc1155Notes scans on-chain ERC1155 events for notes owned by the given key pair.
 //
-// CiphertextII was created with EncryptPayload(saltB, tokenId, amount).
+// EncTxData was created with EncryptPayload(encKey, tokenId, amount).
 // contractAddress comes from the on-chain event (it is public).
 func ScanForErc1155Notes(
 	dk *mlkem.DecapsulationKey768,
@@ -325,12 +342,21 @@ func ScanForErc1155Notes(
 	var owned []OwnedErc1155Note
 
 	for i, ev := range events {
-		saltB, err := Decapsulate(dk, ev.CiphertextI)
+		ss, err := Decapsulate(dk, ev.CipherText)
 		if err != nil {
 			return nil, fmt.Errorf("event %d: decapsulation failed: %w", i, err)
 		}
 
-		tokenId, amount, err := DecryptPayload(saltB, ev.CiphertextII)
+		saltB, err := DerivePaymentSalt(ss)
+		if err != nil {
+			return nil, fmt.Errorf("event %d: DerivePaymentSalt failed: %w", i, err)
+		}
+		encKey, err := DerivePaymentKey(ss)
+		if err != nil {
+			return nil, fmt.Errorf("event %d: DerivePaymentKey failed: %w", i, err)
+		}
+
+		tokenId, amount, err := DecryptPayload(encKey, ev.EncTxData)
 		if err != nil {
 			continue // not addressed to this key
 		}

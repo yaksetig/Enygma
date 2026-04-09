@@ -1,16 +1,21 @@
 package core
 
 import (
+	"crypto/aes"
+	"crypto/cipher"
 	"crypto/mlkem"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math/big"
 	"os"
 
 	"github.com/iden3/go-iden3-crypto/babyjub"
 	"github.com/iden3/go-iden3-crypto/poseidon"
 	"golang.org/x/crypto/chacha20poly1305"
+	"golang.org/x/crypto/hkdf"
 	"golang.org/x/crypto/sha3"
 )
 
@@ -207,13 +212,16 @@ func NewViewKeyPair() (*ViewKeyPair, error) {
 
 // --- KEM: Encapsulate / Decapsulate ---
 
-// Encapsulate derives a shared salt and a KEM ciphertext from the recipient's
-// encapsulation key (pk_view). The sender keeps saltB secret; ciphertextI is
-// published on-chain alongside the commitment.
+// Encapsulate performs ML-KEM-768 key encapsulation against the recipient's
+// encapsulation key (pk_view).  Returns the raw 32-byte shared secret ss and
+// the 1088-byte capsule cipherText.
 //
-//	saltB      — 32-byte shared secret, used as the symmetric key for EncryptPayload
-//	ciphertextI — 1088-byte ML-KEM capsule, only the holder of dk_view can open it
-func Encapsulate(encapsKey []byte) (saltB, ciphertextI []byte, err error) {
+// The caller must NOT use ss directly; derive the commitment salt and the
+// encryption key via DerivePaymentSalt and DerivePaymentKey respectively.
+//
+//	ss          — 32-byte ML-KEM shared secret (keep private; used as HKDF IKM)
+//	cipherText — 1088-byte ML-KEM capsule published on-chain alongside the commitment
+func Encapsulate(encapsKey []byte) (ss, cipherText []byte, err error) {
 	ek, err := mlkem.NewEncapsulationKey768(encapsKey)
 	if err != nil {
 		return nil, nil, fmt.Errorf("invalid encapsulation key: %w", err)
@@ -222,23 +230,68 @@ func Encapsulate(encapsKey []byte) (saltB, ciphertextI []byte, err error) {
 	return sharedKey, ct, nil
 }
 
-// Decapsulate recovers the shared salt from a KEM ciphertext using the
-// recipient's decapsulation key (sk_view).
-// Returns an error only on internal failures; per the ML-KEM spec a wrong
-// ciphertext produces a deterministic but unpredictable key (implicit rejection).
-func Decapsulate(dk *mlkem.DecapsulationKey768, ciphertextI []byte) (saltB []byte, err error) {
-	sharedKey, err := dk.Decapsulate(ciphertextI)
+// Decapsulate recovers the raw ML-KEM shared secret ss from a capsule using the
+// recipient's decapsulation key (sk_view).  Per the ML-KEM spec, a wrong
+// ciphertext yields a deterministic but unpredictable key (implicit rejection).
+func Decapsulate(dk *mlkem.DecapsulationKey768, cipherText []byte) (ss []byte, err error) {
+	sharedKey, err := dk.Decapsulate(cipherText)
 	if err != nil {
 		return nil, fmt.Errorf("decapsulation failed: %w", err)
 	}
 	return sharedKey, nil
 }
 
-// SaltBToField reduces the 32-byte ML-KEM shared secret to a SNARK scalar field
-// element so it can be used inside Poseidon commitments inside the ZK circuit.
+// SaltBToField reduces a 32-byte salt to a SNARK scalar field element so it
+// can be used inside Poseidon commitments inside the ZK circuit.
 func SaltBToField(saltB []byte) *big.Int {
 	n := new(big.Int).SetBytes(saltB)
 	return n.Mod(n, SNARK_SCALAR_FIELD)
+}
+
+// --- HKDF-based payment key derivation ---
+
+// hkdfDerive is a helper that runs HKDF-SHA256 with the given IKM and info
+// label, producing `length` bytes.  Salt is omitted (nil) — the ML-KEM shared
+// secret already carries sufficient entropy.
+func hkdfDerive(ikm []byte, info string, length int) ([]byte, error) {
+	r := hkdf.New(sha256.New, ikm, nil, []byte(info))
+	out := make([]byte, length)
+	if _, err := io.ReadFull(r, out); err != nil {
+		return nil, fmt.Errorf("hkdf derivation failed: %w", err)
+	}
+	return out, nil
+}
+
+// DerivePaymentSalt derives the recipient's commitment salt from the raw ML-KEM
+// shared secret ss:
+//
+//	salt_B = HKDF-SHA256(ikm=ss, info="note salt")  →  32 bytes
+//
+// The ss is already unique per recipient (derived from their ML-KEM key), so the
+// info label just provides domain separation from DerivePaymentKey.
+// Reduce the result with SaltBToField before using it in a Poseidon commitment.
+func DerivePaymentSalt(ss []byte) ([]byte, error) {
+	return hkdfDerive(ss, "note salt", 32)
+}
+
+// DerivePaymentKey derives the AES-GCM encryption key from the raw ML-KEM
+// shared secret ss:
+//
+//	k = HKDF-SHA256(ikm=ss, info="encryption key")  →  32 bytes
+//
+// Pass the result to EncryptPayload / DecryptPayload.
+func DerivePaymentKey(ss []byte) ([]byte, error) {
+	return hkdfDerive(ss, "encryption key", 32)
+}
+
+// DeriveDvpSaltInit derives the initiator's receiving commitment salt for the DvP protocol:
+//
+//	salt_A = HKDF-SHA256(ikm=ss, info="Init Salt")  →  32 bytes
+//
+// Alice computes this off-chain when building her initiator proof.
+// Bob re-derives it after decapsulating CTXT to independently verify COMMIT_A.
+func DeriveDvpSaltInit(ss []byte) ([]byte, error) {
+	return hkdfDerive(ss, "Init Salt", 32)
 }
 
 // --- AEAD payload encryption ---
@@ -284,18 +337,18 @@ func EncryptSwapPayload(saltB []byte, tokenId, amount *big.Int, saltStar []byte)
 // DecryptSwapPayload decrypts a ZkDvp swap ciphertext produced by EncryptSwapPayload.
 // Returns tokenId, amount, and saltStar. A non-nil error means the payload is not
 // addressed to this key (authentication failure or wrong key).
-func DecryptSwapPayload(saltB, ciphertextII []byte) (tokenId, amount *big.Int, saltStar []byte, err error) {
+func DecryptSwapPayload(saltB, encTxData []byte) (tokenId, amount *big.Int, saltStar []byte, err error) {
 	aead, err := chacha20poly1305.New(saltB)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create AEAD cipher: %w", err)
 	}
 
 	nonceSize := aead.NonceSize()
-	if len(ciphertextII) < nonceSize {
+	if len(encTxData) < nonceSize {
 		return nil, nil, nil, fmt.Errorf("ciphertext too short")
 	}
 
-	nonce, ct := ciphertextII[:nonceSize], ciphertextII[nonceSize:]
+	nonce, ct := encTxData[:nonceSize], encTxData[nonceSize:]
 	plaintext, err := aead.Open(nil, nonce, ct, nil)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("decryption failed: payload not addressed to this key")
@@ -311,13 +364,17 @@ func DecryptSwapPayload(saltB, ciphertextII []byte) (tokenId, amount *big.Int, s
 	return tokenId, amount, saltStar, nil
 }
 
-// EncryptPayload authenticates and encrypts tokenId||amount using the 32-byte
-// saltB from ML-KEM as the ChaCha20-Poly1305 key (ciphertextII).
-// Layout on wire: [ 12-byte nonce | ciphertext | 16-byte Poly1305 tag ]
-func EncryptPayload(saltB []byte, tokenId, amount *big.Int) ([]byte, error) {
-	aead, err := chacha20poly1305.New(saltB)
+// EncryptPayload encrypts tokenId||amount using AES-256-GCM keyed by encKey.
+// encKey must be the 32-byte value from DerivePaymentKey(ss).
+// Wire layout: [ 12-byte nonce | AES-GCM ciphertext | 16-byte GCM tag ]
+func EncryptPayload(encKey []byte, tokenId, amount *big.Int) ([]byte, error) {
+	block, err := aes.NewCipher(encKey)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create AEAD cipher: %w", err)
+		return nil, fmt.Errorf("failed to create AES cipher: %w", err)
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create GCM: %w", err)
 	}
 
 	// plaintext = tokenId (32 bytes big-endian) || amount (32 bytes big-endian)
@@ -325,31 +382,36 @@ func EncryptPayload(saltB []byte, tokenId, amount *big.Int) ([]byte, error) {
 	tokenId.FillBytes(plaintext[:32])
 	amount.FillBytes(plaintext[32:])
 
-	nonce := make([]byte, aead.NonceSize()) // 12 bytes
+	nonce := make([]byte, gcm.NonceSize()) // 12 bytes
 	if _, err := rand.Read(nonce); err != nil {
 		return nil, fmt.Errorf("failed to generate nonce: %w", err)
 	}
 
 	// Seal prepends nonce so the receiver can split it off
-	return aead.Seal(nonce, nonce, plaintext, nil), nil
+	return gcm.Seal(nonce, nonce, plaintext, nil), nil
 }
 
-// DecryptPayload decrypts ciphertextII produced by EncryptPayload.
-// Returns a non-nil error if saltB is wrong or the ciphertext was tampered —
+// DecryptPayload decrypts encTxData produced by EncryptPayload.
+// encKey must be the 32-byte value from DerivePaymentKey(ss).
+// Returns a non-nil error if encKey is wrong or the ciphertext was tampered —
 // this is the implicit "not for me" signal Bob uses when scanning the chain.
-func DecryptPayload(saltB, ciphertextII []byte) (tokenId, amount *big.Int, err error) {
-	aead, err := chacha20poly1305.New(saltB)
+func DecryptPayload(encKey, encTxData []byte) (tokenId, amount *big.Int, err error) {
+	block, err := aes.NewCipher(encKey)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create AEAD cipher: %w", err)
+		return nil, nil, fmt.Errorf("failed to create AES cipher: %w", err)
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create GCM: %w", err)
 	}
 
-	nonceSize := aead.NonceSize()
-	if len(ciphertextII) < nonceSize {
+	nonceSize := gcm.NonceSize()
+	if len(encTxData) < nonceSize {
 		return nil, nil, fmt.Errorf("ciphertext too short")
 	}
 
-	nonce, ct := ciphertextII[:nonceSize], ciphertextII[nonceSize:]
-	plaintext, err := aead.Open(nil, nonce, ct, nil)
+	nonce, ct := encTxData[:nonceSize], encTxData[nonceSize:]
+	plaintext, err := gcm.Open(nil, nonce, ct, nil)
 	if err != nil {
 		// Deliberately vague: wrong key and tampered ciphertext are indistinguishable
 		return nil, nil, fmt.Errorf("decryption failed: payload not addressed to this key")

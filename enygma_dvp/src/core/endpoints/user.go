@@ -162,15 +162,23 @@ func DepositErc20V2(
 	recipientSpendPk *big.Int,
 	recipientViewEncapKey []byte,
 ) error {
-	// Encapsulate to derive saltB and the ML-KEM ciphertext for the recipient
-	saltB, ciphertextI, err := core.Encapsulate(recipientViewEncapKey)
+	// Encapsulate to derive raw shared secret ss and ML-KEM capsule for the recipient
+	ss, cipherText, err := core.Encapsulate(recipientViewEncapKey)
 	if err != nil {
 		return fmt.Errorf("encapsulate failed: %w", err)
 	}
+	saltB, err := core.DerivePaymentSalt(ss)
+	if err != nil {
+		return fmt.Errorf("derive payment salt failed: %w", err)
+	}
+	encKey, err := core.DerivePaymentKey(ss)
+	if err != nil {
+		return fmt.Errorf("derive payment key failed: %w", err)
+	}
 	saltBField := core.SaltBToField(saltB)
 
-	// Encrypt (tokenId||amount) so the recipient can learn what was sent
-	ciphertextII, err := core.EncryptPayload(saltB, tokenId, depositAmount)
+	// Encrypt (tokenId||amount) with AES-GCM so the recipient can learn what was sent
+	encTxData, err := core.EncryptPayload(encKey, tokenId, depositAmount)
 	if err != nil {
 		return fmt.Errorf("encrypt payload failed: %w", err)
 	}
@@ -194,10 +202,10 @@ func DepositErc20V2(
 	fmt.Printf("...approves the transfer of Erc20 to ZkDvp\n")
 	fmt.Printf("gasUsed: %d\n", approveReceipt.GasUsed)
 
-	// Step 2: vault.depositV2([depositAmount, commitment], ciphertextI, ciphertextII)
+	// Step 2: vault.depositV2([depositAmount, commitment], cipherText, encTxData)
 	params := []*big.Int{depositAmount, commitment}
 	vaultContract := bind.NewBoundContract(vaultAddr, vaultABI, client, client, client)
-	depositTx, err := vaultContract.Transact(auth, "depositV2", params, ciphertextI, ciphertextII)
+	depositTx, err := vaultContract.Transact(auth, "depositV2", params, cipherText, encTxData)
 	if err != nil {
 		return fmt.Errorf("depositV2 failed: %w", err)
 	}
@@ -845,10 +853,10 @@ func TransferErc20V2(
 
 	proofReceipt := buildProofReceipt(result)
 
-	// vault.transferV2(receipt, ciphertextI[], ciphertextII[])
+	// vault.transferV2(receipt, cipherText[], encTxData[])
 	vaultContract := bind.NewBoundContract(vaultAddr, vaultABI, client, client, client)
 	transferTx, err := vaultContract.Transact(auth, "transferV2",
-		proofReceipt, result.CiphertextI, result.CiphertextII)
+		proofReceipt, result.CipherText, result.EncTxData)
 	if err != nil {
 		return fmt.Errorf("transferV2 failed: %w", err)
 	}
@@ -1073,8 +1081,8 @@ type Erc20Note struct {
 }
 
 // ScanErc20Notes scans EncryptedNote events emitted by a vault contract between
-// fromBlock and toBlock. For each event it attempts to decapsulate ciphertextI with
-// dk (Bob's ML-KEM view decapsulation key) and then decrypt ciphertextII. Events
+// fromBlock and toBlock. For each event it attempts to decapsulate cipherText with
+// dk (Bob's ML-KEM view decapsulation key) and then decrypt encTxData. Events
 // that pass AEAD authentication belong to Bob and are returned as Erc20Note values.
 func ScanErc20Notes(
 	client *ethclient.Client,
@@ -1109,25 +1117,35 @@ func ScanErc20Notes(
 		vaultId := new(big.Int).SetBytes(log.Topics[1].Bytes())
 		commitment := new(big.Int).SetBytes(log.Topics[2].Bytes())
 
-		// Decode non-indexed fields: ciphertextI, ciphertextII
+		// Decode non-indexed fields: cipherText, encTxData
 		values := make(map[string]interface{})
 		if err := vaultABI.UnpackIntoMap(values, "EncryptedNote", log.Data); err != nil {
 			continue
 		}
-		ciphertextI, ok1 := values["ciphertextI"].([]byte)
-		ciphertextII, ok2 := values["ciphertextII"].([]byte)
+		cipherText, ok1 := values["cipherText"].([]byte)
+		encTxData, ok2 := values["encTxData"].([]byte)
 		if !ok1 || !ok2 {
 			continue
 		}
 
-		// Try to decapsulate — derives the KEM shared secret (saltB)
-		saltB, err := core.Decapsulate(dk, ciphertextI)
+		// Decapsulate the ML-KEM capsule → raw shared secret ss
+		ss, err := core.Decapsulate(dk, cipherText)
 		if err != nil {
 			continue // ciphertext malformed or not from a valid encapsulation
 		}
 
-		// Try to decrypt (tokenId||amount) — AEAD auth failure means note is not ours
-		tokenId, amount, err := core.DecryptPayload(saltB, ciphertextII)
+		// HKDF-derive commitment salt and AES-GCM encryption key
+		saltB, err := core.DerivePaymentSalt(ss)
+		if err != nil {
+			continue
+		}
+		encKey, err := core.DerivePaymentKey(ss)
+		if err != nil {
+			continue
+		}
+
+		// Try to decrypt (tokenId||amount) — AES-GCM auth failure means note is not ours
+		tokenId, amount, err := core.DecryptPayload(encKey, encTxData)
 		if err != nil {
 			continue
 		}

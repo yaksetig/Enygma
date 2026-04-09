@@ -179,7 +179,7 @@ func TestV2Erc20ConsolidationOnChain(t *testing.T) {
 	receipt.Proof = snarkProof
 
 	transferTx, err := vault.Transact(auth, "transferV2",
-		receipt, consolidateResult.CiphertextI, consolidateResult.CiphertextII)
+		receipt, consolidateResult.CipherText, consolidateResult.EncTxData)
 	if err != nil { t.Fatalf("vault.transferV2 (consolidation): %v", err) }
 	transferTxReceipt, err := bind.WaitMined(ctx, client, transferTx)
 	if err != nil { t.Fatalf("wait transferV2: %v", err) }
@@ -200,13 +200,13 @@ func TestV2Erc20ConsolidationOnChain(t *testing.T) {
 	aliceEvents := []core.OnChainErc20Event{
 		{
 			Commitment:   consolidateResult.Statement[aliceCmtIdx],
-			CiphertextI:  consolidateResult.CiphertextI[0],
-			CiphertextII: consolidateResult.CiphertextII[0],
+			CipherText:  consolidateResult.CipherText[0],
+			EncTxData: consolidateResult.EncTxData[0],
 		},
 		{
 			Commitment:   consolidateResult.Statement[aliceCmtIdx+1],
-			CiphertextI:  consolidateResult.CiphertextI[1],
-			CiphertextII: consolidateResult.CiphertextII[1],
+			CipherText:  consolidateResult.CipherText[1],
+			EncTxData: consolidateResult.EncTxData[1],
 		},
 	}
 	aliceNotes, err := core.ScanForErc20Notes(aliceView.DecapsKey, aliceSpend.PublicKey, aliceEvents)

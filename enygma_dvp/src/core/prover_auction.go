@@ -20,16 +20,16 @@ type ProofResult struct {
 	NumberOfInputs  int
 	NumberOfOutputs int
 
-	// CiphertextI holds the ML-KEM capsule for each output note (one per output,
+	// CipherText holds the ML-KEM capsule for each output note (one per output,
 	// 1088 bytes each). Published on-chain alongside the commitment so the
 	// recipient can run Decapsulate to recover saltB.
-	CiphertextI [][]byte
+	CipherText [][]byte
 
-	// CiphertextII holds the AEAD-encrypted payload for each output note
+	// EncTxData holds the AEAD-encrypted payload for each output note
 	// (one per output). Contains tokenId||amount encrypted with saltB via
 	// ChaCha20-Poly1305. An authentication failure means the note is not
 	// addressed to the scanning key.
-	CiphertextII [][]byte
+	EncTxData [][]byte
 
 	// SaltsOut holds the output salt for each output note (one per output).
 	// Populated by non-KEM flows (e.g. ERC721, ERC1155) where the salt is
@@ -639,8 +639,8 @@ func (c *GnarkClient) Erc1155FungibleWithBrokerV1Proof(
 		NumberOfInputs:  len(valuesIn),
 		NumberOfOutputs: len(valuesOut),
 		SaltsOut:        wtSaltsOut,
-		CiphertextI:     ctI,
-		CiphertextII:    ctII,
+		CipherText:     ctI,
+		EncTxData:    ctII,
 	}, nil
 }
 
@@ -691,11 +691,11 @@ func prepareErc1155ProofParams(
 	merkleProofs []*MerkleProof,
 	contractAddress *big.Int,
 	tokenId *big.Int,
-) (commitmentsOut []*big.Int, saltsOut []*big.Int, ciphertextI [][]byte, ciphertextII [][]byte, nullifiers []*big.Int, pathIndices []*big.Int, pathElements []*big.Int, err error) {
+) (commitmentsOut []*big.Int, saltsOut []*big.Int, cipherText [][]byte, encTxData [][]byte, nullifiers []*big.Int, pathIndices []*big.Int, pathElements []*big.Int, err error) {
 	commitmentsOut = make([]*big.Int, len(keysOut))
 	saltsOut = make([]*big.Int, len(keysOut))
-	ciphertextI = make([][]byte, len(keysOut))
-	ciphertextII = make([][]byte, len(keysOut))
+	cipherText = make([][]byte, len(keysOut))
+	encTxData = make([][]byte, len(keysOut))
 	nullifiers = make([]*big.Int, len(valuesIn))
 	pathIndices = make([]*big.Int, len(valuesIn))
 	pathElements = make([]*big.Int, 0)
@@ -730,17 +730,25 @@ func prepareErc1155ProofParams(
 		if recipientViewEncapKeys[i] == nil {
 			return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("recipientViewEncapKeys[%d] is required for non-interactive note delivery", i)
 		}
-		saltB, ctI, encErr := Encapsulate(recipientViewEncapKeys[i])
+		ss, ctI, encErr := Encapsulate(recipientViewEncapKeys[i])
 		if encErr != nil {
 			return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("failed to encapsulate for output %d: %w", i, encErr)
 		}
-		ciphertextI[i] = ctI
+		cipherText[i] = ctI
+		saltB, saltErr := DerivePaymentSalt(ss)
+		if saltErr != nil {
+			return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("failed to derive payment salt for output %d: %w", i, saltErr)
+		}
+		encKey, keyErr := DerivePaymentKey(ss)
+		if keyErr != nil {
+			return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("failed to derive payment key for output %d: %w", i, keyErr)
+		}
 		saltBField := SaltBToField(saltB)
-		ctII, encErr := EncryptPayload(saltB, tokenId, valuesOut[i])
+		ctII, encErr := EncryptPayload(encKey, tokenId, valuesOut[i])
 		if encErr != nil {
 			return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("failed to encrypt payload for output %d: %w", i, encErr)
 		}
-		ciphertextII[i] = ctII
+		encTxData[i] = ctII
 		saltsOut[i] = saltBField
 		cmt, err := Erc1155Commitment(tokenId, valuesOut[i], keysOut[i].PublicKey, saltBField)
 		if err != nil {
@@ -749,7 +757,7 @@ func prepareErc1155ProofParams(
 		commitmentsOut[i] = cmt
 	}
 
-	return commitmentsOut, saltsOut, ciphertextI, ciphertextII, nullifiers, pathIndices, pathElements, nil
+	return commitmentsOut, saltsOut, cipherText, encTxData, nullifiers, pathIndices, pathElements, nil
 }
 
 // bigIntSliceToStrings converts []*big.Int to []string.

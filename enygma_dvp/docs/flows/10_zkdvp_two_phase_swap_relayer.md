@@ -79,7 +79,7 @@ It **can**: choose when to submit (liveness trust only) and pays gas.
 | Alice        | Initiator — spends her USDT note, pre-commits to receiving the concert ticket           |
 | Bob          | Completer — decrypts swap payload, spends his ticket note                               |
 | Gnark Server | Generates Alice's ERC20 JoinSplit proof and Bob's ERC721 Ownership proof                |
-| Relayer      | Collects both ProofReceipts, submits `EnygmaDvp.swap()` with its own Ethereum key      |
+| Relayer      | Collects both ProofReceipts, submits `EnygmaDvp.swap()` with its own Ethereum key       |
 | EnygmaDvp    | Verifies both proofs, checks cross-commitment consistency, settles atomically in one tx |
 
 ---
@@ -209,18 +209,18 @@ sequenceDiagram
 
 ## Key references
 
-| Symbol                         | File                                                              | Line |
-| ------------------------------ | ----------------------------------------------------------------- | ---- |
-| `Erc20JoinSplitProofFromSalts` | `src/core/prover_erc.go`                                         | 680  |
-| `Erc721OwnershipProofFromSalt` | `src/core/prover_erc.go`                                         | —    |
-| `ScanForZkDvpSwap`             | `src/core/scan.go`                                               | 237  |
-| `EncryptSwapPayload`           | `src/core/utils.go`                                              | 264  |
-| `Erc20CommitmentV2`            | `src/core/utils.go`                                              | 563  |
-| `Erc721Commitment`             | `src/core/utils.go`                                              | —    |
-| `Encapsulate` / `SaltBToField` | `src/core/utils.go`                                              | 216  |
-| `endpoints.Swap`               | `src/core/endpoints/relayer.go`                                  | 183  |
-| `endpoints.ProofReceipt`       | `src/core/endpoints/relayer.go`                                  | 61   |
-| `swap`                         | `contracts/core/contracts/EnygmaDvp.sol`                         | 707  |
-| `_settleOnGroupPair`           | `contracts/core/contracts/EnygmaDvp.sol`                         | 798  |
-| Integration test               | `test/05_v2_zkdvp_two_phase_swap_relayer_test.go`                | —    |
-| ZkDvP without relayer          | `docs/flows/06_swap_erc721_erc20.md`                             | —    |
+| Symbol                         | File                                              | Line |
+| ------------------------------ | ------------------------------------------------- | ---- |
+| `Erc20JoinSplitProofFromSalts` | `src/core/prover_erc.go`                          | 680  |
+| `Erc721OwnershipProofFromSalt` | `src/core/prover_erc.go`                          | —    |
+| `ScanForZkDvpSwap`             | `src/core/scan.go`                                | 237  |
+| `EncryptSwapPayload`           | `src/core/utils.go`                               | 264  |
+| `Erc20CommitmentV2`            | `src/core/utils.go`                               | 563  |
+| `Erc721Commitment`             | `src/core/utils.go`                               | —    |
+| `Encapsulate` / `SaltBToField` | `src/core/utils.go`                               | 216  |
+| `endpoints.Swap`               | `src/core/endpoints/relayer.go`                   | 183  |
+| `endpoints.ProofReceipt`       | `src/core/endpoints/relayer.go`                   | 61   |
+| `swap`                         | `contracts/core/contracts/EnygmaDvp.sol`          | 707  |
+| `_settleOnGroupPair`           | `contracts/core/contracts/EnygmaDvp.sol`          | 798  |
+| Integration test               | `test/05_v2_zkdvp_two_phase_swap_relayer_test.go` | —    |
+| ZkDvP without relayer          | `docs/flows/06_swap_erc721_erc20.md`              | —    |

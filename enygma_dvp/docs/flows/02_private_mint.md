@@ -100,35 +100,35 @@ sequenceDiagram
     participant Alice
     participant Issuer
     participant Gnark as Gnark Server
-    participant DVP as EnygmaDvp
+    participant DVP as Blockchain
 
     rect rgb(255, 250, 210)
         Note over Alice,Issuer: Pre-mint agreement (off-chain, secure channel)
 
-        Alice->>Issuer: pk_alice = 9284716503...
+        Alice->>Issuer: spend_pkA = 9284716503...
         Issuer->>Alice: amount = 100
         Issuer->>Alice: tokenId = 0
-        Issuer->>Alice: salt = 6628193047...
+        Issuer->>Alice: saltA = 6628193047... (random number)
         Issuer->>Alice: vaultId = 1
     end
 
     rect rgb(220, 235, 255)
         Note over Issuer: Step 1 — Prepare commitment off-chain
 
-        Issuer->>Issuer: cmt = Poseidon4(pk_alice, salt, 100, tokenId=0) = 7193827465...
+        Issuer->>Issuer: Commitment_A = Hash(spend_pkA, saltA, 100, tokenId=0) = 7193827465...
 
-        Issuer->>Issuer: Poseidon2(pk_alice, salt)
-        Note over Issuer: cipherText = 4827361059...
+        Issuer->>Issuer: cipherText = Hash(pk_alice, salt) =4827361059...
+
     end
 
     rect rgb(220, 255, 220)
         Note over Issuer,Gnark: Step 2 — Generate ZK proof
 
         Issuer->>Gnark: POST /proof/privateMint
-        Note over Gnark: public:  commitment=7193..., contractAddress=0xabc..., tokenId=0, cipherText=4827...
+        Note over Gnark: public:  Commitment_A=7193..., contractAddress=0xabc..., tokenId=0, cipherText=4827...
         Note over Gnark: private: salt=6628..., amount=100, publicKey=9284...
-        Note over Gnark: assert Poseidon4(pk, salt, 100, 0) == commitment
-        Note over Gnark: assert Poseidon2(pk, salt) == cipherText
+        Note over Gnark: assert Hash(pk, salt, 100, 0) == Commitment_A
+        Note over Gnark: assert Hash(pk, salt) == cipherText
         Note over Gnark: groth16.Prove + local verify
 
         Gnark-->>Issuer: proof = [Ax,Ay,Bx0,Bx1,By0,By1,Cx,Cy]
@@ -149,10 +149,10 @@ sequenceDiagram
     rect rgb(240, 220, 255)
         Note over Alice: Step 4 — Alice confirms her note
 
-        Alice->>Alice: poseidon.Hash(pk_alice, salt=6628...)
+        Alice->>Alice: Hash(pk_alice, salt=6628...)
         Alice->>Alice: compare result against cipherText=4827... from event
         Note over Alice: match confirmed — note is mine
-        Note over Alice: ready to spend: commitment=7193..., salt=6628..., amount=100
+        Note over Alice: ready to spend: Commitment_A=7193..., salt=6628..., amount=100
     end
 ```
 

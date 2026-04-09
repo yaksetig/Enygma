@@ -159,20 +159,20 @@ func TestErc20JoinSplitProofLive(t *testing.T) {
 
 	t.Logf("Proof generated successfully!")
 	t.Logf("Statement: %v", result.Statement)
-	t.Logf("CiphertextI[0] len: %d bytes", len(result.CiphertextI[0]))
-	t.Logf("CiphertextII[0] len: %d bytes", len(result.CiphertextII[0]))
+	t.Logf("CipherText[0] len: %d bytes", len(result.CipherText[0]))
+	t.Logf("EncTxData[0] len: %d bytes", len(result.EncTxData[0]))
 
 	// V2: both ciphertexts must be populated for both outputs
-	if len(result.CiphertextI) != 2 {
-		t.Errorf("expected 2 CiphertextI entries, got %d", len(result.CiphertextI))
+	if len(result.CipherText) != 2 {
+		t.Errorf("expected 2 CipherText entries, got %d", len(result.CipherText))
 	}
-	if len(result.CiphertextI[0]) == 0 {
-		t.Error("expected non-empty CiphertextI[0]")
+	if len(result.CipherText[0]) == 0 {
+		t.Error("expected non-empty CipherText[0]")
 	}
-	if len(result.CiphertextII) != 2 {
-		t.Errorf("expected 2 CiphertextII entries, got %d", len(result.CiphertextII))
+	if len(result.EncTxData) != 2 {
+		t.Errorf("expected 2 EncTxData entries, got %d", len(result.EncTxData))
 	}
-	if len(result.CiphertextII[0]) == 0 {
-		t.Error("expected non-empty CiphertextII[0]")
+	if len(result.EncTxData[0]) == 0 {
+		t.Error("expected non-empty EncTxData[0]")
 	}
 }

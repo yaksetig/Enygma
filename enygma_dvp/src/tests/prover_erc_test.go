@@ -107,12 +107,12 @@ func TestErc20JoinSplitProof_Success(t *testing.T) {
 		t.Errorf("expected 2/2, got %d/%d", result.NumberOfInputs, result.NumberOfOutputs)
 	}
 
-	// V2: CiphertextI and CiphertextII should be populated
-	if len(result.CiphertextI) != 2 {
-		t.Errorf("expected 2 CiphertextI entries, got %d", len(result.CiphertextI))
+	// V2: CipherText and EncTxData should be populated
+	if len(result.CipherText) != 2 {
+		t.Errorf("expected 2 CipherText entries, got %d", len(result.CipherText))
 	}
-	if len(result.CiphertextII) != 2 {
-		t.Errorf("expected 2 CiphertextII entries, got %d", len(result.CiphertextII))
+	if len(result.EncTxData) != 2 {
+		t.Errorf("expected 2 EncTxData entries, got %d", len(result.EncTxData))
 	}
 }
 
@@ -268,8 +268,8 @@ func TestErc20WithdrawProof_Success(t *testing.T) {
 	}
 
 	// No ciphertexts for withdrawal (no KEM)
-	if len(result.CiphertextI) != 0 {
-		t.Errorf("expected empty CiphertextI for withdrawal, got %d entries", len(result.CiphertextI))
+	if len(result.CipherText) != 0 {
+		t.Errorf("expected empty CipherText for withdrawal, got %d entries", len(result.CipherText))
 	}
 }
 

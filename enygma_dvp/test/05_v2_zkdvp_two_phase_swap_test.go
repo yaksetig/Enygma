@@ -240,8 +240,8 @@ func TestV2ZkDvp_TwoPhaseSwapOnChain(t *testing.T) {
 		{
 			CommitmentA:  commitmentA,
 			CommitmentB:  commitmentB,
-			CiphertextI:  ctI,
-			CiphertextII: ctII,
+			CipherText:  ctI,
+			EncTxData: ctII,
 		},
 	}
 	swaps, err := core.ScanForZkDvpSwap(

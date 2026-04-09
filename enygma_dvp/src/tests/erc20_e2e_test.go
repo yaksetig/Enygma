@@ -23,7 +23,7 @@ import (
 //    Alice consumes her minted note as an input and creates one output note
 //    addressed to Bob (using Bob's spend public key + ML-KEM view key).
 //    A second dummy output (zero value) satisfies the 2-output circuit requirement.
-//    The proof is submitted on-chain together with (ciphertextI, ciphertextII)
+//    The proof is submitted on-chain together with (cipherText, encTxData)
 //    for each output.
 //
 //  Step 3 — Bob scans
@@ -141,9 +141,9 @@ func TestErc20Swap_E2E(t *testing.T) {
 	if len(joinSplitResult.Statement) != expectedStatementLen {
 		t.Errorf("expected %d statement elements, got %d", expectedStatementLen, len(joinSplitResult.Statement))
 	}
-	if len(joinSplitResult.CiphertextI) != 2 || len(joinSplitResult.CiphertextII) != 2 {
+	if len(joinSplitResult.CipherText) != 2 || len(joinSplitResult.EncTxData) != 2 {
 		t.Errorf("expected 2 ciphertext pairs, got I=%d II=%d",
-			len(joinSplitResult.CiphertextI), len(joinSplitResult.CiphertextII))
+			len(joinSplitResult.CipherText), len(joinSplitResult.EncTxData))
 	}
 
 	// The on-chain commitment for Bob's note is at stCommitmentsOut[0].
@@ -155,17 +155,17 @@ func TestErc20Swap_E2E(t *testing.T) {
 	// -----------------------------------------------------------------------
 	// Step 3: Bob scans the on-chain events
 	// -----------------------------------------------------------------------
-	// Bob sees all output events. Each output note produces one (ciphertextI, ciphertextII, commitment) triple.
+	// Bob sees all output events. Each output note produces one (cipherText, encTxData, commitment) triple.
 	events := []core.OnChainErc20Event{
 		{
 			Commitment:   joinSplitResult.Statement[7], // Bob's output
-			CiphertextI:  joinSplitResult.CiphertextI[0],
-			CiphertextII: joinSplitResult.CiphertextII[0],
+			CipherText:  joinSplitResult.CipherText[0],
+			EncTxData: joinSplitResult.EncTxData[0],
 		},
 		{
 			Commitment:   joinSplitResult.Statement[8], // dummy output
-			CiphertextI:  joinSplitResult.CiphertextI[1],
-			CiphertextII: joinSplitResult.CiphertextII[1],
+			CipherText:  joinSplitResult.CipherText[1],
+			EncTxData: joinSplitResult.EncTxData[1],
 		},
 	}
 

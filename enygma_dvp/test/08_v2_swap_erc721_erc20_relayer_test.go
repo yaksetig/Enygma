@@ -292,8 +292,8 @@ func TestV2Swap_Erc721ForErc20_OnChain_WithRelayer(t *testing.T) {
 	// Bob scans for his NFT note.
 	nftEvents := []core.OnChainErc721Event{{
 		Commitment:   bobNFTCommitment,
-		CiphertextI:  ctINFT,
-		CiphertextII: ctIINFT,
+		CipherText:  ctINFT,
+		EncTxData: ctIINFT,
 	}}
 	bobNFTNotes, err := core.ScanForErc721Notes(bobView.DecapsKey, bobSpend.PublicKey, nftEvents)
 	if err != nil { t.Fatalf("ScanForErc721Notes: %v", err) }
@@ -305,8 +305,8 @@ func TestV2Swap_Erc721ForErc20_OnChain_WithRelayer(t *testing.T) {
 	// Alice scans for her ERC20 payment note.
 	erc20Events := []core.OnChainErc20Event{{
 		Commitment:   aliceERC20Commitment,
-		CiphertextI:  ctIPayment,
-		CiphertextII: ctIIPayment,
+		CipherText:  ctIPayment,
+		EncTxData: ctIIPayment,
 	}}
 	aliceERC20Notes, err := core.ScanForErc20Notes(aliceView.DecapsKey, aliceSpend.PublicKey, erc20Events)
 	if err != nil { t.Fatalf("ScanForErc20Notes: %v", err) }

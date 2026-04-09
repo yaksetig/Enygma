@@ -319,8 +319,8 @@ func TestV2Swap_Erc1155NonFungibleForErc20_OnChain_WithRelayer(t *testing.T) {
 	nftEvents := []core.OnChainErc1155Event{{
 		Commitment:      bobNFTCommitment,
 		ContractAddress: contractAddress,
-		CiphertextI:     ctINFT,
-		CiphertextII:    ctIINFT,
+		CipherText:     ctINFT,
+		EncTxData:    ctIINFT,
 	}}
 	bobNFTNotes, err := core.ScanForErc1155Notes(bobView.DecapsKey, bobSpend.PublicKey, nftEvents)
 	if err != nil { t.Fatalf("ScanForErc1155Notes: %v", err) }
@@ -335,8 +335,8 @@ func TestV2Swap_Erc1155NonFungibleForErc20_OnChain_WithRelayer(t *testing.T) {
 	// Alice scans for her ERC20 payment note.
 	erc20Events := []core.OnChainErc20Event{{
 		Commitment:   aliceERC20Commitment,
-		CiphertextI:  ctIPayment,
-		CiphertextII: ctIIPayment,
+		CipherText:  ctIPayment,
+		EncTxData: ctIIPayment,
 	}}
 	aliceERC20Notes, err := core.ScanForErc20Notes(aliceView.DecapsKey, aliceSpend.PublicKey, erc20Events)
 	if err != nil { t.Fatalf("ScanForErc20Notes: %v", err) }

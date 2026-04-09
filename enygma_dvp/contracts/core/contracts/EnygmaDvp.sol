@@ -97,6 +97,9 @@ contract EnygmaDvp is IEnygmaDvp, AccessControl {
 
     // auditor's mapping AuditorId -> AuditorData
     mapping(uint256 => AuditorData) private _registeredAuditors;
+
+    // authorized on-chain relayer contracts (set by owner)
+    mapping(address => bool) public authorizedRelayers;
     ///////////////////////////////////////////////
     //              Constructor
     //////////////////////////////////////////////
@@ -181,6 +184,20 @@ contract EnygmaDvp is IEnygmaDvp, AccessControl {
             _verifierContractAddress
         );
 
+        return true;
+    }
+
+    function registerRelayer(
+        address relayer
+    ) public onlyRole(DEFAULT_OWNER_ROLE) returns (bool) {
+        authorizedRelayers[relayer] = true;
+        return true;
+    }
+
+    function deregisterRelayer(
+        address relayer
+    ) public onlyRole(DEFAULT_OWNER_ROLE) returns (bool) {
+        authorizedRelayers[relayer] = false;
         return true;
     }
 
@@ -595,6 +612,41 @@ contract EnygmaDvp is IEnygmaDvp, AccessControl {
         return 0;
     }
 
+    modifier onlyRelayer() {
+        require(authorizedRelayers[msg.sender], "EnygmaDvp: caller is not an authorized relayer");
+        _;
+    }
+
+    // Lock all input nullifiers in a receipt so the prover cannot double-spend
+    // while the counterparty's receipt is pending in SwapRelayer.
+    // Only callable by an authorized SwapRelayer contract.
+    function lockReceiptNullifiers(
+        ProofReceipt calldata receipt,
+        uint256 vaultId
+    ) public onlyRelayer returns (bool) {
+        uint treeNumbersIndex = 1;
+        uint nullifiersIndex  = 1 + (2 * receipt.numberOfInputs);
+
+        for (uint256 i = 0; i < receipt.numberOfInputs; i++) {
+            IAbstractCoinVault(_coinVaults[vaultId]).lockCoin(
+                receipt.statement[treeNumbersIndex + i],
+                receipt.statement[nullifiersIndex + i]
+            );
+        }
+        return true;
+    }
+
+    // Release the nullifier locks placed by lockReceiptNullifiers.
+    // Called by SwapRelayer when a swap is cancelled after expiry.
+    // Only callable by an authorized SwapRelayer contract.
+    function unlockReceiptNullifiers(
+        ProofReceipt calldata receipt,
+        uint256 vaultId
+    ) public onlyRelayer returns (bool) {
+        IAbstractCoinVault(_coinVaults[vaultId]).unlockFromReceipt(receipt);
+        return true;
+    }
+
     function submitPartialSettlement(
         ProofReceipt memory receipt,
         uint256 vaultId,
@@ -903,6 +955,57 @@ contract EnygmaDvp is IEnygmaDvp, AccessControl {
         // TODO:: Require to check that challenge != valid address
 
         _rottenChallenges[challenge_] = true;
+
+        return true;
+    }
+
+    ///////////////////////////////////////////////
+    //          Payment function
+    //////////////////////////////////////////////
+
+    // payment nullifies Alice's input notes and inserts all output commitments.
+    //
+    // Off-chain flow (matches the mermaid payment diagram, N-in / M-out):
+    //   For each output j:
+    //     ss_j, ctxts[j]  = ML-KEM.Encapsulate(view_pk_j)
+    //     salt_j          = HKDF(ss_j, "Bob salt")
+    //     encKey_j        = HKDF(ss_j, "encryption key")
+    //     COMMIT_j        = Poseidon(spend_pk_j, SaltBToField(salt_j), amount_j, tokenId)
+    //     encTxDatas[j]   = AES-GCM-ENC(encKey_j, tokenId || amount_j)
+    //
+    // A Payment event is emitted per output so every recipient can scan independently.
+    // len(ctxts) == len(encTxDatas) == receipt.numberOfOutputs.
+    function payment(
+        ProofReceipt memory receipt,
+        uint256 vaultId,
+        bytes[] calldata ctxts,
+        bytes[] calldata encTxDatas
+    ) public returns (bool) {
+        if (receipt.numberOfOutputs == 0) revert InvalidNumberOfOutputs();
+        if (ctxts.length != receipt.numberOfOutputs) revert InvalidNumberOfOutputs();
+        if (encTxDatas.length != receipt.numberOfOutputs) revert InvalidNumberOfOutputs();
+        if (_coinVaults[vaultId] == address(0)) revert InvalidVaultId();
+
+        IAbstractCoinVault vault = IAbstractCoinVault(_coinVaults[vaultId]);
+
+        // Verify ZK proof and check nullifier/root validity.
+        vault.checkReceiptConditions(receipt);
+
+        // Insert all output commitments into the Merkle tree.
+        vault.insertCommitmentsFromReceipt(receipt);
+
+        // Mark all input nullifiers as spent.
+        vault.nullifyFromReceipt(receipt);
+
+        // Statement layout (non-interleaved / ContractStatement):
+        //   [msg, treeNums[nIn], roots[nIn], nullifiers[nIn], cmts[nOut]]
+        uint256 commitmentsIndex = 1 + 3 * receipt.numberOfInputs;
+
+        // Emit one Payment event per output for non-interactive note discovery.
+        for (uint256 j = 0; j < receipt.numberOfOutputs; j++) {
+            uint256 commitmentOut = receipt.statement[commitmentsIndex + j];
+            emit Payment(vaultId, commitmentOut, ctxts[j], encTxDatas[j]);
+        }
 
         return true;
     }

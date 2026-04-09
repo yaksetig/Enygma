@@ -16,7 +16,7 @@ her balance without revealing it publicly.
 | Participant | Role                                                                                        |
 | ----------- | ------------------------------------------------------------------------------------------- |
 | Alice       | Depositor — owns the ERC20 tokens and the resulting private note                            |
-| EnygmaDvp   | Accepts the deposit, pulls tokens into the vault, inserts the Merkle leaf, and emits events |
+| Blockchain  | Accepts the deposit, pulls tokens into the vault, inserts the Merkle leaf, and emits events |
 
 ---
 
@@ -25,26 +25,24 @@ her balance without revealing it publicly.
 ```mermaid
 sequenceDiagram
     participant Alice
-    participant DVP as EnygmaDvp
+    participant DVP as Blockchain
 
-    Note over Alice: amount = 50
-    Note over Alice: tokenId = 0
-    Note over Alice: No ZK proof required for deposit
+    Note over Alice: amount = 50, tokenId = 0, No ZK proof required for deposit
 
     rect rgb(220, 235, 255)
         Note over Alice: Step 1 — Prepare commitment off-chain
 
-        Alice->>Alice: Encapsulate(aliceViewEncapKey)
-        Note over Alice: returns saltB = 0x8f3c...a910
-        Note over Alice: returns ctI   = 0x2d1e...9f03
+        Alice->>Alice: Encapsulate(view_pkA)
+        Note over Alice: returns saltA = 0x8f3c...a910 , returns ciphertext_I   = 0x2d1e...9f03
 
-        Alice->>Alice: SaltBToField(saltB)
-        Note over Alice: saltBField = 4401928374...
 
-        Alice->>Alice: EncryptPayload(saltB, tokenId=0, amount=50)
-        Note over Alice: returns ctII = 0x3f2a...7b44
+        Alice->>Alice: saltAToField(saltA)
+        Note over Alice: saltAField = 4401928374...
 
-        Alice->>Alice: cmt = poseidon(pk_alice, saltBField, 50, tokenId=0) =3847261905...
+        Alice->>Alice: m(tokenId=0,amount=50,saltAToField)
+        Note over Alice: returns ciphertext_II = 0x3f2a...7b44
+
+        Alice->>Alice: Commitment_A = Hash(spend_pkA, saltAField, amount=50, tokenId=0) =3847261905...
 
     end
 
@@ -58,20 +56,20 @@ sequenceDiagram
     rect rgb(255, 240, 220)
         Note over Alice,DVP: Step 3 — Deposit
 
-        Alice->>DVP: depositV2([amount=50, commitment=3847261905...], ctI, ctII)
+        Alice->>DVP: depositV2([amount=50, Commitment_A], ciphertext_I, ciphertext_II)
         Note over DVP: transferFrom(alice, vault, 50)
         Note over DVP: vault now holds 50 real tokens
         Note over DVP: insertLeaves([3847261905...]) → leafIndex = 0
 
-        DVP-->>Alice: emit Commitment(vaultId=1, 3847261905...)
-        DVP-->>Alice: emit EncryptedNote(vaultId=1, 3847261905..., ctI, ctII)
+        DVP-->>Alice: emit Commitment(vaultId=1, Commitment_A)
+        DVP-->>Alice: emit EncryptedNote(vaultId=1, Commitment_A, ciphertext_I, ciphertext_II)
     end
 
     rect rgb(240, 220, 255)
         Note over Alice: Step 4 — Alice stores her note locally
-        Note over Alice: commitment = 3847261905...
+        Note over Alice: Commitment_A = 3847261905...
         Note over Alice: amount     = 50
-        Note over Alice: saltBField = 4401928374...
+        Note over Alice: saltAField = 4401928374...
         Note over Alice: leafIndex  = 0
         Note over Alice: These are needed to spend the note later
     end
