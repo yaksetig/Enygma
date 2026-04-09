@@ -4,6 +4,30 @@ A commitment is of the form Commit = H(spend_pk, salt, amount, token_id).
 
 How can Alice send funds to a commitment only Bob can open in a non-interactive manner?
 
+## Step by Step
+
+### 1. Alice has already deposit a note in a Merkle Tree
+
+Alice already has a deposit in EnygmaDvp system which in format of a note inserted, with the following paramenters.
+
+Note_Alice:= H(spend_pkA, saltA, amount, token_id)
+
+### 2. Alice prepare transaction
+
+```mermaid
+
+sequenceDiagram
+    autonumber
+
+    participant Alice
+    participant Chain as Blockchain
+    participant Bob
+
+    note over Alice: Has commmitment<br><br>Commitment_A = H(spend_pkA, saltA, amount, token_id)
+
+
+```
+
 ## Protocol Flow
 
 ```mermaid
