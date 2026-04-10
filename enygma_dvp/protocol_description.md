@@ -91,6 +91,12 @@ config:
  note over Alice: Alice initiates the DvP
  sequenceDiagram
 
+
+    autonumber
+    participant Alice
+    participant Chain as Blockchain
+    participant Bob
+
     rect rgb(191, 223, 255)
 
         note left of Alice: Create TX payload for Bob
