@@ -89,6 +89,7 @@ config:
   theme: redux
 ---
  note over Alice: Alice initiates the DvP
+ sequenceDiagram
 
     rect rgb(191, 223, 255)
 
@@ -96,7 +97,9 @@ config:
 
         note over Alice: Generate new ('encrypted') salt:<br><br>ss_B, CTXT = ML-KEM.Encapsulate(view_pk)
 
-        note over Alice: Set TX DATA: <br><br>m = (token_id || amount)<br><br>k = HKDF(ss_B, "encryption key")
+        note over Alice: Set TX DATA: <br><br>m = (token_id || amou
+
+        nt)<br><br>k = HKDF(ss_B, "encryption key")
 
         note over Alice: Encrypt TX Data: <br><br> ENC_TX_DATA = AES-GCM-ENC(k, m)
 
