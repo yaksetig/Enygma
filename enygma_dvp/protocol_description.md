@@ -87,10 +87,12 @@ Alice initiates the swap by constructing the transaction by following these step
 
 1. _Key encapsulation_ — Alice runs ML-KEM encapsulation on Bob's view public key, obtaining a shared secret `ss_B` and ciphertext `CTXT`.
 2. _Salt derivation_ — Alice derives `salt_B` and `salt_A` deterministically from `ss_B` via HKDF, so that Bob can later reconstruct them after decapsulation.
-3. _Commitment_ — Alice creates `COMMIT_B` (the commitment Bob will receive) and `COMMIT_A` (the commitment Alice will receive from Bob),using the derived salts and the agreed token_ids and amounts.
-4. _Payload encryption_ — Alice encrypts (`token_id`, `amount`) under a symmetric key derived from ss_B, producing ENC_TX_DATA. This allows Bob to verify the commitment without Alice revealing the plaintext publicly.
-5. _Revert commitment_ — Alice creates `REVERT_COMMIT_A`, a self-addressed commitment over the same asset she is spending. If Bob does not respond before the deadline, the chain inserts this commitment instead, returning Alice's funds.
-6. _Zero-knowledge proof_ — Alice generates a proof `π_A` attesting that she knows the spend key for the commitment she is nullifying, the nullifier is well-formed, the revert and destination commitments are consistent with the spent asset, and the commitment exists in the Merkle tree.
+3. _k generation_ - The shared secret `ss_B` is used as the key materiall; "encryption key" is a domain label that scopes this derivation to symmetric encryption.
+4. _Payload encrpytion ENC TX DATA_ - Alices encrypted the payload with the derived key `k`. AES-GCM provides authenticated encryption, so any tampering with the ciphertext is detectable.
+5. _Commitment_ — Alice creates `COMMIT_B` (the commitment Bob will receive) and `COMMIT_A` (the commitment Alice will receive from Bob),using the derived salts and the agreed token_ids and amounts.
+6. _Payload encryption_ — Alice encrypts (`token_id`, `amount`) under a symmetric key derived from ss_B, producing ENC_TX_DATA. This allows Bob to verify the commitment without Alice revealing the plaintext publicly.
+7. _Revert commitment_ — Alice creates `REVERT_COMMIT_A`, a self-addressed commitment over the same asset she is spending. If Bob does not respond before the deadline, the chain inserts this commitment instead, returning Alice's funds.
+8. _Zero-knowledge proof_ — Alice generates the `nf_A` =`H(spend_pk_A, leafIndexA)`. She also generates a proof `π_A` attesting that she knows the spend key for the commitment she is nullifying, the nullifier is well-formed, the revert and destination commitments are consistent with the spent asset, and the commitment exists in the Merkle tree.
 
 ```mermaid
 
@@ -149,6 +151,53 @@ sequenceDiagram
 
     end
 
+```
+
+### c. Transaction verification
+
+Upon receiving Alice's submission, the smart contract performs three independent checks before accepting the transaction:
+
+1. Deadline validity — the contract confirms that the supplied deadline has not yet passed, ensuring the swap can still be completed within the agreed time window.
+2. Nullifier status — the contract checks that `nf_A` has not already been spent or locked by a prior transaction, preventing double-spends.
+3. Zero-knowledge proof — the contract verifies `π_A` on-chain is proof is valid or not.
+
+If all theree conditions are valid simultaneously. The smart contract do the following
+
+- Creates a `swap_id` = `H(COMMIT_A, REVER_COMMIT_A, nf_A, COMMIT_B, deadline)`
+- Marks `nf_A` as locked and spent
+- Emits the following data <`CTXT`, `COMMIT_B`, `ENC_TX_DATA`, `COMMIT_A`, `swap_id`>
+
+```mermaid
+---
+config:
+  theme: redux
+---
+sequenceDiagram
+    autonumber
+    participant Alice
+    participant Chain as Blockchain
+    participant Bob
+   Alice->>Chain: < π_A, CTXT, COMMIT_B, ENC_TX_DATA, COMMIT_A, REVERT_COMMIT_A, nf_A, deadline>
+
+
+    note over Chain: Check if<br>deadline is valid
+
+    note over Chain: Check if nf_A<br>has been spent
+    note over Chain: Verify ZK Proof
+
+
+    alt (Verify(π_A) = TRUE) && (nf_A NOT MARKED AS SPENT) && (DEADLINE IS VALID)
+
+        note over Chain: Create swap_id<br><br>swap_id = H(COMMIT_A, REVERT_COMMIT_A, nf_A, COMMIT_B, deadline)
+        note over Chain: Mark nf_A as locked
+        Chain ->> Alice: TX OK
+
+
+    else (Verify(π_A) = FALSE) || (nf_A IS MARKED AS SPENT) || (DEADLINE IS NOT VALID)
+      note over Chain: Reject TX
+      Chain ->> Alice: TX ERROR
+
+    end
 ```
 
 ### Full flow
