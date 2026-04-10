@@ -88,8 +88,12 @@ sequenceDiagram
 config:
   theme: redux
 ---
- note over Alice: Alice initiates the DvP
- note over Alice: Alice initiates the DvP
+  autonumber
+  participant Alice
+  participant Chain as Blockchain
+  participant Bob
+  note over Alice: Alice initiates the DvP
+
 
     rect rgb(191, 223, 255)
 
