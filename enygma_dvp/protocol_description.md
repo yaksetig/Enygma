@@ -56,8 +56,8 @@ sequenceDiagram
 
     note over Chain: Runs a DvP<br>Smart Contract
 
-    Note over Alice: Owns an existing note<br>C_A = Commit(spend_pkA, saltA, amount=5, token_id=10)<br>(represents 5 USDT)
-    Note over Bob: Owns an existing note<br>C_B = Commit(spend_pkB, saltB, amount=1, token_id=25)<br>(represents 1 concert ticket)
+    Note over Alice: Owns an existing note<br>Commitment_A = H(spend_pkA, saltA, amount=5, token_id=10)<br>(represents 5 USDT)
+    Note over Bob: Owns an existing note<br>Commitment_B = H(spend_pkB, saltB, amount=1, token_id=25)<br>(represents 1 concert ticket)
 
 ```
 
@@ -88,32 +88,29 @@ sequenceDiagram
 config:
   theme: redux
 ---
-sequenceDiagram
-    autonumber
-    participant Alice
-    participant Chain as Blockchain
-    participant Bob
+ note over Alice: Alice initiates the DvP
 
-    note over Alice: Run Encapsulate(view_pkB) and obtain: <br> (saltB, ciphertext_I)
+    rect rgb(191, 223, 255)
 
-    note over Alice: Generate new salt : salt*
-    note over Alice: Create new commitment (Bob will send funds here): <br>Commitment_A = Hash(spend_pkA, salt*, amount=1, token_id=25)
+        note left of Alice: Create TX payload for Bob
 
-    note over Alice: Generate new (revert) salt : newSaltA
-    note over Alice: Create revert commitment (for Alice if Bob doesn't send): <br>C'_A = Hash(spend_pkA, newSaltA, amount=5, token_id=10)
+        note over Alice: Generate new ('encrypted') salt:<br><br>ss_B, CTXT = ML-KEM.Encapsulate(view_pk)
 
+        note over Alice: Set TX DATA: <br><br>m = (token_id || amount)<br><br>k = HKDF(ss_B, "encryption key")
 
+        note over Alice: Encrypt TX Data: <br><br> ENC_TX_DATA = AES-GCM-ENC(k, m)
 
-    note over Alice: Create message:<br> m = (token_id || amount || salt* )
-    note over Alice: Set<br> k = saltB
+        note over Alice: Derive salt_B: <br><br> salt_B = HKDF(ss_B, "Bob salt")
 
-    note over Alice: Calculate<br> ciphertext_II = ENC_AEAD(k, m)
+        note over Alice: Create destination commitment:<br><br>COMMIT_B = H(spend_pk_B, salt_B, amount_1, token_id_1)
 
-    note over Alice: Commitment_B = Hash(spend_pkB, saltB, amount, token_id)
+        note over Alice: Generate new salt:<br><br>salt_A = HKDF(ss_B, "Alice salt")
 
-    note over Alice: Create DvP_id = HASH(Commitment_B, Commitment_A)
+        %% Bob also needs to be able to generate the value of salt_A in order to prove that token_ids and amounts match across commitments
 
-    Alice->>Chain: nullifier_A, ZKP, ciphertext_I, Commitment_B, DvP_id, ciphertext_II, C'_A,
+        note over Alice: Create (self) destination commitment:<br><br>COMMIT_A = H(spend_pk_A, salt_A, amount_2, token_id_2)
+
+    end
 ```
 
 ### Full flow
