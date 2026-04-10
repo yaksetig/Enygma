@@ -61,7 +61,7 @@ sequenceDiagram
 
 ```
 
-### 1. Off-chain Agreement
+### a . Off-chain Agreement
 
 Before initiating any on-chain transaction, Alice and Bob agree on the terms of the trade through an off-chain channel.They establish which assets are being exchanged — including the token identifiers and amounts on each side — without any  
 blockchain interaction.
@@ -81,7 +81,7 @@ sequenceDiagram
     note over Alice, Bob: < Agree on trade parameters. Swap 5 USDT (token_id = 10) for 1 concert ticket(token_id = 25) >
 ```
 
-### 2. Initiating the DvP
+### b. Initiating the DvP
 
 Alice initiates the swap by constructing the transaction by following these steps
 
