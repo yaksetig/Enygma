@@ -88,6 +88,7 @@ sequenceDiagram
 config:
   theme: redux
 ---
+sequenceDiagram
   autonumber
   participant Alice
   participant Chain as Blockchain
