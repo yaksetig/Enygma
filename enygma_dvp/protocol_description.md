@@ -61,9 +61,10 @@ sequenceDiagram
 
 ```
 
-### Off-chain Agreement
+### 1. Off-chain Agreement
 
-First, Alice and Bob agree on the terms for the trade. For example, on an online marketplace.
+Before initiating any on-chain transaction, Alice and Bob agree on the terms of the trade through an off-chain channel.They establish which assets are being exchanged — including the token identifiers and amounts on each side — without any  
+blockchain interaction.
 
 ```mermaid
 
@@ -80,7 +81,16 @@ sequenceDiagram
     note over Alice, Bob: < Agree on trade parameters. Swap 5 USDT (token_id = 10) for 1 concert ticket(token_id = 25) >
 ```
 
-### Initiating the DvP
+### 2. Initiating the DvP
+
+Alice initiates the swap by constructing the transaction by following these steps
+
+1. _Key encapsulation_ — Alice runs ML-KEM encapsulation on Bob's view public key, obtaining a shared secret `ss_B` and ciphertext `CTXT`.
+2. _Salt derivation_ — Alice derives `salt_B` and `salt_A` deterministically from `ss_B` via HKDF, so that Bob can later reconstruct them after decapsulation.
+3. _Commitment_ — Alice creates `COMMIT_B` (the commitment Bob will receive) and `COMMIT_A` (the commitment Alice will receive from Bob),using the derived salts and the agreed token_ids and amounts.
+4. _Payload encryption_ — Alice encrypts (`token_id`, `amount`) under a symmetric key derived from ss_B, producing ENC_TX_DATA. This allows Bob to verify the commitment without Alice revealing the plaintext publicly.
+5. _Revert commitment_ — Alice creates `REVERT_COMMIT_A`, a self-addressed commitment over the same asset she is spending. If Bob does not respond before the deadline, the chain inserts this commitment instead, returning Alice's funds.
+6. _Zero-knowledge proof_ — Alice generates a proof `π_A` attesting that she knows the spend key for the commitment she is nullifying, the nullifier is well-formed, the revert and destination commitments are consistent with the spent asset, and the commitment exists in the Merkle tree.
 
 ```mermaid
 
