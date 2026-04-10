@@ -128,6 +128,27 @@ sequenceDiagram
 
     end
 
+    rect rgb(191, 223, 255)
+
+        note left of Alice: Creation of Revert Commitment<br>(if TX fails, should revert to new commit)
+
+        note over Alice: Generate new (revert) salt:<br><br>revert_salt_A
+        note over Alice: Create revert commitment:<br><br>REVERT_COMMIT_A = H(spend_pk_A, revert_salt_A, amount_1, token_id_1)
+
+    end
+
+
+
+    rect rgb(191, 223, 255)
+
+        note left of Alice: Create the ZKP for the transaction
+
+        note over Alice: Create nullifier for tx: <br><br>nf_A = H(spend_sk_A, leafIndex_A)
+
+        note over Alice: Create zero-knowledge proof (π_A):<br><br> - "I know the spend secret key for this commit"<br><br> - "This nullifier is well-formed"<br><br>- "The revert commit has the same amount and token_id as commit I'm spending"<br><br>- "The nullifier, the (self) destination commitment (COMMIT_A), and the REVERT_COMMIT_A are all associated with the same spend pk"<br><br>-"The destination (COMMIT_B) has the same token_id_1 and amount_1 as the commit I'm spending"<br><br>-"I know a merkle path that proves that the commitment I'm spending is in the tree"
+
+    end
+
 ```
 
 ### Full flow
