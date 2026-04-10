@@ -200,85 +200,124 @@ sequenceDiagram
     end
 ```
 
-### Full flow
+### d. Bob receiving the transaction
+
+Once the swap is recorded on-chain, Bob is notified of the pending transaction and receives (`CTXT`, `COMMIT_B`, `ENC_TX_DATA`, `COMMIT_A`,`swap_id`).
+
+Bob begins by recovering the shared secret Alice used when constructing the payload:
+
+1. _Decapsulation_ — Bob runs ML-KEM decapsulation on `CTXT` using his view secret key, recovering `ss_B`.
+2. _Key and salt derivation_ — Bob derives the symmetric encryption key k` = HKDF(ss_B, "encryption key")` and his salt `salt_B = HKDF(ss_B, "Bob salt")`.
+3. _Payload decryption_ — Bob decrypts `ENC_TX_DATA` using `k`, obtaining `token_id_1` and `amount_1` in plaintext.
+
+Bob then performs two commitment checks to verify the swap is legitimate and intended for him:
+
+- He recomputes `C = H(spend_pk_B, salt_B, amount_1, token_id_1)` and checks that `C == COMMIT_B`.
+- He derives `salt_A = HKDF(ss_B, "Alice salt")`, recomputes `C* = H(spend_pk_A, salt_A, amount_2, token_id_2)`, and checks that `C* == COMMIT_A`.
+
+If both checks pass, Bob construct his response:
+
+1. _Nullifier_ :Bob computes `nf_B = H(spend_sk_B, leafIndex_B)`, the nullifier for the commitment he is spending.
+2. _Zero-knowledge proof_: Bob generates `π_B` attesting that he knows the spend secret key for his commitment, the nullifier is well-formed, the destination commitment `COMMIT_A` encodes the same `token_id` and amount as the commitment he is spending, and the commitment exists in the Merkle tree.
 
 ```mermaid
 ---
 config:
   theme: redux
+  look: handDrawn
 ---
 sequenceDiagram
     autonumber
+
     participant Alice
     participant Chain as Blockchain
     participant Bob
 
-    note over Chain: Runs a DvP<br>Smart Contract
-
-    Note over Alice: Owns an existing note<br>C_A = Commit(spend_pkA, saltA, amount=5, token_id=10)<br>(represents 5 USDT)
-    Note over Bob: Owns an existing note<br>C_B = Commit(spend_pkB, saltB, amount=1, token_id=25)<br>(represents 1 concert ticket)
-
-    note over Alice, Bob: < Agree on trade parameters. Swap 5 USDT (token_id = 10) for 1 concert ticket(token_id = 25) >
-
-    note over Alice: Obtain <br>(salt_B, ciphertext_I) = Encapsulate(view_pkB)
-
-    note over Alice: Generate new salt : salt*
-    note over Alice: Create new commitment (Bob will send funds here): <br>Commitment_A = Hash(spend_pkA, salt*, amount=1, token_id=25)
-
-    note over Alice: Generate new (revert) salt : newSaltA
-    note over Alice: Create revert commitment (for Alice if Bob doesn't send): <br>C'_A = Hash(spend_pkA, newSaltA, amount=5, token_id=10)
+    note over Bob: Decapsulate CTXT and<br>obtain ss_B
 
 
+    note over Bob: Obtain symmetric key:<br><br> k = HKDF(ss_B, "encryption key")
 
-    note over Alice: Create message:<br> m = (token_id || amount || salt* )
-    note over Alice: Set<br> k = saltB
+    note over Bob: Obtain salt:<br><br> salt_B = HKDF(ss_B, "Bob salt")
 
-    note over Alice: Calculate<br> ciphertext_II = ENC_AEAD(k, m)
 
-    note over Alice: Commitment_B = Hash(spend_pkB, salt_B, amount, token_id)
+    note over Bob: Decrypt ENC_TX_DATA<br>(using symmetric key k)<br><br>obtain token_id_1 & amount_1
 
-    note over Alice: Create DvP_id = HASH(Commitment_B, Commitment_A)
+    note over Bob: Obtain commitment<br><br>C = H(spend_pk_B, salt_B, amount_1, token_id_1)
+    note over Bob: Check if commitments match: <br><br>C == COMMIT_B
 
-    Alice->>Chain: nullifier_A, ZKP, ciphertext_I, Commitment_B, DvP_id, ciphertext_II, C'_A,
+    note over Bob: Obtain salt_A<br><br>salt_A = HKDF(ss_B, "Alice salt")
 
-    Note over Chain: Mark nullifier_A as 'locked'
-    Note over Chain: Mark TX with id = DvP_id as 'pending'
+    note over Bob: Obtain (Alice's) commitment:<br><br>C* = H(spent_pk_A, salt_A, amount_2, token_id_2)
 
-    Chain-->>Bob: New tx (& payloads)
+    note over Bob: Check if commitments match:<br><br>C* == COMMIT_A
 
-    note over Bob: Obtain<br>salt' = Decapsulate(view_skB, ciphertext_I)
-    note over Bob: Set<br> k' = salt'
-    note over Bob: Attempt Decrypt<br>(ok, m) = DEC_AEAD(k', ciphertext_II)
+    note over Bob: Create nullifier for tx: <br><br>nf_B = H(spend_sk_B, leafIndex_B)
 
-    alt Decryption Ok
-        Note over Bob: Parse m -> (token_id, amount, salt*)
-        Note over Bob: _commitment_B = Hash(spend_pkB, salt', amount, token_id)
-        Note over Bob: Compare _commitment_B == commitment_B
+    note over Bob: Create zero-knowledge proof (π_B):<br><br> - "I know the spend sk for this commitment"<br><br> - "This nullifier is well-formed"<br><br>- "The destination commit (COMMIT_A) has the same token_id<br>and amount as the commit I'm spending"<br><br>-"I know a merkle path that proves that the commitment I'm spending is in the tree"
 
-        Note over Bob: If equal, funds belong to Bob
-
-        Note over Bob: Check if Commitment_A is well-formed
-
-        Bob ->> Chain: tx_id, nullifier_B, ZKP, Commitment_A
-
-        alt TX OK
-            Note over Chain: Calculate tx_id = HASH()
-            Note over Chain: Mark nullifier_A & nullifier_B as used
-
-            Note over Chain: Insert Commitment_A and Commitment_B in tree
-        else Timeout
-            Note over Chain: Move TX_id = DvP_id from 'pending' to 'reverted'
-            Note over Chain: Mark nullifier_A as used
-            Note over Chain: Insert C'_A into tree
-        end
-
-    else Decryption Fail
-        Note over Bob: Payload not intended for Bob
-    end
 
 ```
 
-## New Protocol
+### e. Smart Contract checks Bob TX
+
+Bob submits (`π_B`, `COMMIT_A`, `nf_B`, `swap_id`) to the smart contract. The contract must validate Bob's submission before finalizing the swap.
+
+Three conditions must hold simultaneously:
+
+1. _Deadline not exceeded_: the contract checks that Bob's submission arrives before the deadline embedded in `swap_id`.
+2. _Nullifier status_ : the contract verifies that `nf_B` has not already been spent, preventing Bob from double-spending his commitment.
+3. _Zero-knowledge proof_:the contract verifies`π_B` on-chain, confirming that Bob knows the spend key for his commitment, the nullifier is correctly formed, the destination commitment `COMMIT_A` is consistent with the asset Bob is delivering, and Bob's commitment exists in the Merkle tree.
+
+If all conditions are met, the contract finalizes the swap atomically:
+
+- `nf_A` is marked as spent
+- `COMMIT_A` (Bob's asset, now owned by Alice) and `COMMIT_B` (Alice's asset, now owned by Bob) are inserted into the Merkle tree
+- the swap is marked as completed.
+
+If the deadline has passed before Bob submits, the contract executes the revert path instead:
+
+- nf_A is marked as spent
+- `REVERT_COMMIT_A` is inserted into the Merkle tree, returning Alice's original asset to her under a fresh commitment
+- the swap is marked as failed (`timeout`), and Alice is notified.
+
+```mermaid
+---
+config:
+  theme: redux
+  look: handDrawn
+---
+sequenceDiagram
+    autonumber
+
+    participant Alice
+    participant Chain as Blockchain
+    participant Bob
+
+    alt (TX On Time) && (Verify(π_B) = TRUE) && (nf_B NOT MARKED AS SPENT)
+
+      Bob->>Chain: < π_B, COMMIT_A, nf_B, swap_id >
+
+      note over Chain: Mark nf_A as spent
+      note over Chain: Mark nf_B as spent
+      note over Chain: Insert COMMIT_A into tree
+      note over Chain: Insert COMMIT_B into tree
+
+      note over Chain: Mark DvP TX as completed
+
+
+    else (TX Timeout)
+      note over Chain: Mark nf_A as spent
+      note over Chain: Insert REVERT_COMMIT_A into tree
+      note over Chain: Mark DvP TX as failed (i.e., timeout)
+
+      Chain ->> Alice: TX Reverted
+    end
+
+
+```
+
+## Full Protocol
 
 ```mermaid
 ---
