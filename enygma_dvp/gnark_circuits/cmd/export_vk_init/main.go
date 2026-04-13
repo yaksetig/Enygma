@@ -78,6 +78,8 @@ var circuitMapping = map[string]string{
 	"JoinSplitErc20_10_2_WithAuditor":     "scripts/keys/JoinERC20_10_2AuditorVK.key",
 	"AuctionInit_Auditor":                 "scripts/keys/AuctionInitAuditorVK.key",
 	"AuctionBid_Auditor":                  "scripts/keys/AuctionBidAuditorVK.key",
+	"DvPInitiator":                        "scripts/keys/DvPInitiatorVK.key",
+	"DvPDestination":                      "scripts/keys/DvPDestinationVK.key",
 }
 
 func g1Fields(x, y *big.Int) []string {

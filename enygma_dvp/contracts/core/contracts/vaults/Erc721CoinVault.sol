@@ -18,6 +18,8 @@ contract Erc721CoinVault is AbstractCoinVault {
     //////////////////////////////////////////////
 
     uint256 public constant VK_ID_ERC721_1 = 1;
+    // DvP Destination circuit: circuit id=25 in enygmadvp.config.json → VK slot 24 (0-indexed)
+    uint256 public constant VK_ID_DVP_DESTINATION = 24;
     ///////////////////////////////////////////////
     //              Constructor
     //////////////////////////////////////////////
@@ -209,12 +211,12 @@ contract Erc721CoinVault is AbstractCoinVault {
     function checkReceiptConditions(
         IEnygmaDvp.ProofReceipt memory receipt
     ) public view override returns (bool) {
-        // ownReceipt.inputs:
+        // Statement layout (ERC721 Ownership and DvP Destination share the same 5-element structure):
         // 0 message;
         // 1 treeNumber;
         // 2 merkleRoot;
         // 3 nullifier;
-        // 4 commitment;
+        // 4 commitment (commitA for DvP Destination);
 
         if (!isValidRoot(receipt.statement[1], receipt.statement[2])) {
             revert InvalidMerkleRoot();
@@ -224,11 +226,22 @@ contract Erc721CoinVault is AbstractCoinVault {
             revert InvalidNullifier();
         }
 
-        IVerifier(_verifierContractAddress).verifyProof(
+        // Try the standard ERC721 ownership VK first; fall back to DvP Destination VK.
+        // Both circuits share the same 5-element statement layout, so the VK determines
+        // which circuit generated the proof.
+        try IVerifier(_verifierContractAddress).verifyProof(
             VK_ID_ERC721_1,
             receipt.proof,
             receipt.statement
-        );
-        return true;
+        ) returns (bool) {
+            return true;
+        } catch {
+            IVerifier(_verifierContractAddress).verifyProof(
+                VK_ID_DVP_DESTINATION,
+                receipt.proof,
+                receipt.statement
+            );
+            return true;
+        }
     }
 }

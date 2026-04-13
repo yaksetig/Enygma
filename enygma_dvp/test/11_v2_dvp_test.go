@@ -219,7 +219,6 @@ func TestV2DvP(t *testing.T) {
 	// Alice expects the ticket (amount=1, tokenId=42) from Bob.
 	// ─────────────────────────────────────────────────────────────────────────
 	initiatorResult, err := gnarkClient.DvPInitiatorProof(
-		big.NewInt(0), // stMessage = 0 (standalone)
 		core.KeyPair{PrivateKey: aliceSpend.PrivateKey, PublicKey: aliceSpend.PublicKey},
 		aliceSaltField,  // Alice's ERC20 deposit salt
 		erc20Amount,     // Alice delivers amount=30

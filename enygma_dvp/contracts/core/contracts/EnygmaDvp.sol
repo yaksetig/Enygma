@@ -650,7 +650,9 @@ contract EnygmaDvp is IEnygmaDvp, AccessControl {
     function submitPartialSettlement(
         ProofReceipt memory receipt,
         uint256 vaultId,
-        uint256 groupId
+        uint256 groupId,
+        uint256 deadline,
+        uint256 revertCommitA
     ) public returns (bool) {
         // uint256 prootType = _proofType(receipt);
         // uint inputSize = receipt.numberOfInputs;
@@ -686,7 +688,11 @@ contract EnygmaDvp is IEnygmaDvp, AccessControl {
             _pendingTransactions[receiptMessage].targetReceiptId ==
             receiptUniqueId
         ) {
-            // if yes => do the settlement
+            // if yes => check deadline has not passed, then settle
+
+            if (block.timestamp > _pendingTransactions[receiptMessage].deadline) {
+                revert SwapDeadlineExpired();
+            }
 
             // TODO:: for now that both with-broker and without-broker
             // settlements are active, there should be a check here
@@ -702,6 +708,8 @@ contract EnygmaDvp is IEnygmaDvp, AccessControl {
             IAbstractCoinVault(_coinVaults[vaultId2]).unlockFromReceipt(
                 receipt2
             );
+
+            delete _pendingTransactions[receiptMessage];
 
             if (!IAssetGroup(_assetGroups[groupId2]).isFungible()) {
                 // Dvp with delivery submitted first
@@ -737,16 +745,39 @@ contract EnygmaDvp is IEnygmaDvp, AccessControl {
                 );
             }
         } else {
-            // if no => save the receipt for later settlement
+            // if no => validate deadline, compute swap_id, and save receipt for later settlement
 
-            _pendingTransactions[receiptUniqueId].vaultId = vaultId;
-            _pendingTransactions[receiptUniqueId].groupId = groupId;
-            _pendingTransactions[receiptUniqueId]
-                .targetReceiptId = receiptMessage;
+            if (deadline <= block.timestamp) {
+                revert SwapDeadlineMustBeInFuture();
+            }
+
+            // commitA = receiptUniqueId (Alice's output commitment)
+            // commitB = receiptMessage  (Bob's expected commitment, cross-referenced by Bob)
+            // nfA     = first nullifier in the statement
+            uint256 commitA = receiptUniqueId;
+            uint256 commitB = receiptMessage;
+            uint256 nfA     = receipt.statement[nullifiersIndex];
+
+            // swap_id = Poseidon( Poseidon4(commitA, revertCommitA, nfA, commitB), deadline )
+            uint256 innerHash = IPoseidonWrapper(_hashContractAddress).poseidon4(
+                [commitA, revertCommitA, nfA, commitB]
+            );
+            uint256 swapId = IPoseidonWrapper(_hashContractAddress).poseidon(
+                [innerHash, deadline]
+            );
+
+            _pendingTransactions[receiptUniqueId].vaultId        = vaultId;
+            _pendingTransactions[receiptUniqueId].groupId         = groupId;
+            _pendingTransactions[receiptUniqueId].targetReceiptId = receiptMessage;
+            _pendingTransactions[receiptUniqueId].deadline        = deadline;
+            _pendingTransactions[receiptUniqueId].swapId          = swapId;
+            _pendingTransactions[receiptUniqueId].revertCommitA   = revertCommitA;
 
             IAbstractCoinVault(_coinVaults[vaultId]).addPendingProofReceipt(
                 receipt
             );
+
+            emit SwapInitiated(swapId, commitA, commitB, deadline);
             emit PendingProofAddedToVault(
                 vaultId,
                 groupId,
@@ -754,6 +785,33 @@ contract EnygmaDvp is IEnygmaDvp, AccessControl {
                 receipt
             );
         }
+    }
+
+    // Reclaim a timed-out pending swap.
+    // Once the deadline stored in the pending transaction has passed,
+    // anyone can call this to unlock the initiator's nullifiers so
+    // the original note can be re-spent (e.g. via REVERT_COMMIT_A).
+    function claimSwapTimeout(uint256 pendingReceiptId) public returns (bool) {
+        TransactionMetadata storage meta = _pendingTransactions[pendingReceiptId];
+
+        if (meta.deadline == 0) {
+            revert SwapNotFound();
+        }
+
+        if (block.timestamp <= meta.deadline) {
+            revert SwapNotExpiredYet();
+        }
+
+        uint256 vaultId = meta.vaultId;
+        ProofReceipt memory receipt = IAbstractCoinVault(_coinVaults[vaultId])
+            .getPendingProofReceipt(pendingReceiptId);
+
+        IAbstractCoinVault(_coinVaults[vaultId]).unlockFromReceipt(receipt);
+
+        delete _pendingTransactions[pendingReceiptId];
+
+        emit SwapTimedOut(pendingReceiptId);
+        return true;
     }
 
     function swap(

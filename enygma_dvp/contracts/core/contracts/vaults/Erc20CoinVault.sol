@@ -19,6 +19,8 @@ contract Erc20CoinVault is AbstractCoinVault {
 
     uint256 public constant VK_ID_ERC20_JOINSPLIT = 0;
     uint256 public constant VK_ID_ERC20_10INPUT = 6;
+    // DvP Initiator circuit: circuit id=24 in enygmadvp.config.json → VK slot 23 (0-indexed)
+    uint256 public constant VK_ID_DVP_INITIATOR = 23;
 
     ///////////////////////////////////////////////
     //              Constructor
@@ -308,10 +310,19 @@ contract Erc20CoinVault is AbstractCoinVault {
             }
         }
 
-        if (receipt.numberOfInputs != 2 && receipt.numberOfInputs != 10) {
+        if (receipt.numberOfInputs != 1 && receipt.numberOfInputs != 2 && receipt.numberOfInputs != 10) {
             revert InvalidNumberOfInputs();
         }
-        if (receipt.numberOfInputs == 2) {
+        if (receipt.numberOfInputs == 1) {
+            // DvP Initiator: 1-input/3-output circuit with 7-element statement.
+            // numberOfOutputs is reported as 1 on-chain so only statement[4]=commitB
+            // is inserted into the vault; the full 7-element statement is used for VK verification.
+            IVerifier(_verifierContractAddress).verifyProof(
+                VK_ID_DVP_INITIATOR,
+                receipt.proof,
+                receipt.statement
+            );
+        } else if (receipt.numberOfInputs == 2) {
             IVerifier(_verifierContractAddress).verifyProof(
                 VK_ID_ERC20_JOINSPLIT,
                 receipt.proof,

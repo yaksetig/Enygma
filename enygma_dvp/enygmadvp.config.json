@@ -387,6 +387,29 @@
           "encryption",
           "fungible"
         ]
+      },
+      {
+        "id": 24,
+        "filename": "DvPInitiator",
+        "tags": [
+          "dvp",
+          "erc20",
+          "merkle",
+          "1-input",
+          "3-output",
+          "fungible"
+        ]
+      },
+      {
+        "id": 25,
+        "filename": "DvPDestination",
+        "tags": [
+          "dvp",
+          "erc721",
+          "merkle",
+          "1-input",
+          "1-output"
+        ]
       }
     ]
   },

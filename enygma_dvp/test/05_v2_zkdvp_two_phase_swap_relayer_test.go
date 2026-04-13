@@ -95,7 +95,7 @@ func TestV2ZkDvp_TwoPhaseSwapOnChain_WithRelayer(t *testing.T) {
 	merkleDepth   := 8
 	tokenIdUSDT   := big.NewInt(0)
 	amountUSDT    := big.NewInt(5)
-	tokenIdTicket := big.NewInt(25)
+	tokenIdTicket := big.NewInt(26)
 	amountTicket  := big.NewInt(1)
 	contractAddr  := big.NewInt(0)
 

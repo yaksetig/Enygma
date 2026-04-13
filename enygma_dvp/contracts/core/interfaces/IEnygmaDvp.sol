@@ -49,6 +49,9 @@ interface IEnygmaDvp {
         uint256 groupId;
         uint256 targetReceiptId; // the uniqueId of the proofReceipt of the other leg's transaction
         uint256 proofHash; // reserved to mitigate potential replay attacks
+        uint256 deadline;      // unix timestamp (seconds) after which the swap can be reclaimed
+        uint256 swapId;        // Poseidon(Poseidon4(commitA, revertCommitA, nfA, commitB), deadline)
+        uint256 revertCommitA; // Alice's revert commitment, inserted into tree on timeout
     }
 
     enum AuctionStateEnum {
@@ -133,6 +136,10 @@ interface IEnygmaDvp {
     error InvalidExchangeGroupPair();
 
     error InvalidPartialProofReceipt();
+    error SwapDeadlineExpired();
+    error SwapDeadlineMustBeInFuture();
+    error SwapNotFound();
+    error SwapNotExpiredYet();
 
     error BrokerAlreadyRegistered();
     error InvalidStatementSize();
@@ -233,6 +240,15 @@ interface IEnygmaDvp {
     );
 
     event Settled(uint256 indexed receiptId1, uint256 indexed receiptId2);
+    event SwapTimedOut(uint256 indexed pendingReceiptId);
+
+    // Emitted when Alice submits the first leg. Contains swap_id so Bob can reference it.
+    event SwapInitiated(
+        uint256 indexed swapId,
+        uint256 indexed commitA,
+        uint256 indexed commitB,
+        uint256 deadline
+    );
 
     event AuditorRegistered(
         uint256 indexed onchainId,
@@ -418,8 +434,14 @@ interface IEnygmaDvp {
     function submitPartialSettlement(
         ProofReceipt memory receipt,
         uint256 vaultId,
-        uint256 groupId
+        uint256 groupId,
+        uint256 deadline,
+        uint256 revertCommitA
     ) external returns (bool);
+
+    // Reclaim a timed-out pending swap. Callable by anyone once deadline has passed.
+    // Unlocks the initiator's nullifiers so the original note can be re-spent.
+    function claimSwapTimeout(uint256 pendingReceiptId) external returns (bool);
 
     // payment nullifies Alice's input note(s) and inserts all output commitments.
     // A Payment event is emitted per output so every recipient can scan independently.

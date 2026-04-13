@@ -1707,19 +1707,28 @@ func (c *GnarkClient) PaymentProof(
 
 // DvPInitiatorResult holds the output of DvPInitiatorProof.
 type DvPInitiatorResult struct {
-	Proof         []string   // 8-element Groth16 proof
-	Statement     []*big.Int // [msg, treeNum, root, nf_A, commitB, commitA, revertCommitA]
-	CipherText    []byte     // ML-KEM capsule for Bob (1088 bytes)
-	EncTxData     []byte     // AES-256-GCM ciphertext of (tokenIdIn || valueIn)
-	CommitB       *big.Int
-	CommitA       *big.Int
-	RevertCommitA *big.Int
-	SaltA         *big.Int // passed to Bob's DvPDestinationProof
+	Proof           []string   // 8-element Groth16 proof
+	Statement       []*big.Int // [commitA, treeNum, root, nf_A, commitB, commitA, revertCommitA] (7 elements)
+	NumberOfInputs  int        // always 1
+	NumberOfOutputs int        // reported as 1 on-chain (only commitB inserted; commitA goes to ERC721 vault via Bob's proof)
+	CipherText      []byte     // ML-KEM capsule for Bob (1088 bytes)
+	EncTxData       []byte     // AES-256-GCM ciphertext of (tokenIdIn || valueIn)
+	CommitB         *big.Int
+	CommitA         *big.Int
+	RevertCommitA   *big.Int
+	SaltA           *big.Int // passed to Bob's DvPDestinationProof
 }
 
 // DvPInitiatorProof generates Alice's side of the DvP proof.
+//
+// stMessage is automatically set to commitA (Alice's expected output from Bob) so that
+// the on-chain submitPartialSettlement cross-reference check works:
+//   _pendingTransactions[commitB].targetReceiptId = commitA = statement[0]
+//
+// On-chain receipt should use NumberOfOutputs=1 so only commitB (statement[4])
+// is inserted into the ERC20 vault. commitA goes into the ERC721 vault via
+// Bob's DvPDestinationProof; revertCommitA is only inserted on swap timeout.
 func (c *GnarkClient) DvPInitiatorProof(
-	stMessage *big.Int,
 	aliceKey KeyPair,
 	aliceSaltIn *big.Int,
 	valueIn *big.Int,
@@ -1784,6 +1793,11 @@ func (c *GnarkClient) DvPInitiatorProof(
 	pathElems := make([]*big.Int, merkleDepth)
 	copy(pathElems, merkleProof.Elements[:merkleDepth])
 
+	// stMessage = commitA for on-chain cross-referencing:
+	//   submitPartialSettlement stores _pendingTransactions[commitB].targetReceiptId = statement[0] = commitA
+	//   Bob's DvPDestinationProof uses stMessage=commitB, output=commitA, so the check resolves correctly.
+	stMessage := commitA
+
 	payload := map[string]interface{}{
 		"stMessage":       stMessage.String(),
 		"stTreeNumber":    stTreeNumber.String(),
@@ -1823,17 +1837,22 @@ func (c *GnarkClient) DvPInitiatorProof(
 		proofStrs[i] = n.String()
 	}
 
+	// Full 7-element statement for VK verification (DvP Initiator VK has IC[8]).
+	// On-chain NumberOfOutputs is reported as 1 so only commitB (statement[4])
+	// is inserted into the ERC20 vault during settlement.
 	statement := []*big.Int{stMessage, stTreeNumber, merkleProof.Root, nf, commitB, commitA, revertCommitA}
 
 	return &DvPInitiatorResult{
-		Proof:         proofStrs,
-		Statement:     statement,
-		CipherText:    cipherText,
-		EncTxData:     encTxData,
-		CommitB:       commitB,
-		CommitA:       commitA,
-		RevertCommitA: revertCommitA,
-		SaltA:         saltA,
+		Proof:           proofStrs,
+		Statement:       statement,
+		NumberOfInputs:  1,
+		NumberOfOutputs: 1, // only commitB counts as payment output; commitA goes to ERC721 via Bob's proof
+		CipherText:      cipherText,
+		EncTxData:       encTxData,
+		CommitB:         commitB,
+		CommitA:         commitA,
+		RevertCommitA:   revertCommitA,
+		SaltA:           saltA,
 	}, nil
 }
 
@@ -1843,8 +1862,10 @@ func (c *GnarkClient) DvPInitiatorProof(
 
 // DvPDestinationResult holds the output of DvPDestinationProof.
 type DvPDestinationResult struct {
-	Proof     []string   // 8-element Groth16 proof
-	Statement []*big.Int // [msg, treeNum, root, nf_B, commitA]
+	Proof           []string   // 8-element Groth16 proof
+	Statement       []*big.Int // [commitB, treeNum, root, nf_B, commitA]
+	NumberOfInputs  int        // always 1
+	NumberOfOutputs int        // always 1
 }
 
 // DvPDestinationProof generates Bob's side of the DvP proof.
@@ -1904,5 +1925,10 @@ func (c *GnarkClient) DvPDestinationProof(
 	}
 
 	statement := []*big.Int{stMessage, stTreeNumber, merkleProof.Root, nf, commitA}
-	return &DvPDestinationResult{Proof: proofStrs, Statement: statement}, nil
+	return &DvPDestinationResult{
+		Proof:           proofStrs,
+		Statement:       statement,
+		NumberOfInputs:  1,
+		NumberOfOutputs: 1,
+	}, nil
 }
