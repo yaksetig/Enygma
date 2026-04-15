@@ -1,43 +1,28 @@
-# EnygmaDvP — Source of Truth
+# Source of Truth
 
----
+## Shared Primitives
 
-## Why Poseidon Hash?
+### Why Poseidon Hash?
 
 ZK circuits count arithmetic operations. SHA-256 uses bitwise logic that is cheap on
 a CPU but costs ~25,000 operations inside a circuit. Poseidon's core step is `x^5` —
 one multiplication — so a full hash costs ~250 operations. 100x cheaper.
 
+**Where it is used in Enygma Payment**:
+
+- **Spend key derivation**: `pk = Hash(sk)` — ZK-friendly public key from private key
+- **Nullifier**: `Hash(sk, n_block)` — marks a note spent without revealing the sender
+- **Private messaging tags**: `Hash(shared_secret, n_block)` — recipient detection
+
 **Where it is used in EnygmaDvP**:
+
 - **Commitment**: `Poseidon(pk, salt, amount, tokenId)` — hides note contents on-chain
 - **Nullifier**: `Poseidon(sk, leafIndex)` — marks a note as spent without revealing it
 - **Merkle tree**: `Poseidon(left, right)` — each tree node, used in inclusion proofs
 
 ---
 
-## Why BabyJubJub Elliptic Curve?
-
-Ethereum's secp256k1 curve lives in a different number system than the ZK circuit.
-Using it inside a circuit requires emulation: ~30,000 operations per point addition.
-
-BabyJubJub is built to be native to the same number system as the circuit.
-A point addition costs 3–4 operations instead of 30,000.
-
-It has ~120-bit security vs secp256k1's 128-bit — acceptable since each key is
-tied to a single short-lived note, not a permanent identity.
-
-**Where it is used in EnygmaDvP**:
-- **Spend keys**: every user has a BabyJubJub private key. The public key is derived
-  via Poseidon so the circuit never needs curve arithmetic.
-- **Nullifiers**: the private key proves note ownership when computing the nullifier
-  inside the circuit.
-- **Auditor keys**: the auditor's encryption key is a BabyJubJub scalar multiplication
-  — feasible inside the circuit only because the curve is native to the circuit's
-  number system.
-
----
-
-## Why Groth16?
+### Why Groth16?
 
 On a blockchain, proof size and verification gas cost are what matter most.
 
@@ -48,7 +33,13 @@ kilobytes and not yet practical to verify on-chain.
 The trade-off is a one-time trusted setup per circuit. If any one participant
 discards their secret, the setup is secure.
 
+**Where it is used in Enygma Payment**:
+
+- **Every circuit**: the transfer circuit is compiled and set up using Groth16 over BN254.
+- **On-chain verifier**: the smart contract verifies the Groth16 proof on every transaction.
+
 **Where it is used in EnygmaDvP**:
+
 - **Every circuit**: all circuits — ERC20 JoinSplit, ERC721 Ownership, DvP Initiator,
   DvP Destination, Payment, Auditor — are compiled and set up using Groth16 over BN254.
 - **On-chain verifier**: a single Solidity contract verifies any Groth16/BN254 proof
@@ -56,7 +47,7 @@ discards their secret, the setup is secure.
 
 ---
 
-## Why BN254 (alt-bn128)?
+### Why BN254 (alt-bn128)?
 
 Groth16 requires a pairing-friendly elliptic curve — a curve that supports a special
 mathematical operation (a bilinear pairing) used to verify the proof. Not all curves
@@ -73,7 +64,15 @@ It has ~100-bit security — below the 128-bit standard. This is a known trade-o
 accepted by the Ethereum community when BN254 was standardized. For the threat model
 of private asset transfers, it remains sufficient today.
 
+**Where it is used in Enygma Payment**:
+
+- **Proof generation**: the transfer circuit is compiled over BN254's scalar field,
+  which is also why Poseidon and BabyJubJub are chosen — they are native to this field.
+- **On-chain verification**: the Groth16 verifier contract calls the BN254 pairing
+  precompile directly, keeping verification gas low for every proof submission.
+
 **Where it is used in EnygmaDvP**:
+
 - **Proof generation**: all circuits are compiled over BN254's scalar field, which is
   also why Poseidon and BabyJubJub are chosen — they are native to this same field.
 - **On-chain verification**: the Groth16 verifier contract calls the BN254 pairing
@@ -81,7 +80,153 @@ of private asset transfers, it remains sufficient today.
 
 ---
 
-## Why AES-256-GCM?
+## Enygma Payment
+
+### Why BabyJubJub Elliptic Curve?
+
+ZK circuits run inside BN254's scalar field. Curve arithmetic inside a
+circuit must use a curve native to that same field — otherwise every point
+addition requires field emulation (~30,000 constraints).
+
+BabyJubJub is native to BN254's field. A point addition costs 3–4
+constraints instead of 30,000.
+
+It has ~120-bit security — slightly below the 128-bit standard. Acceptable
+because each key is tied to a single note, not a permanent identity.
+
+**Where it is used in Enygma Payment**:
+
+- **Spend key**: the user's BabyJubJub private key proves ownership inside
+  the circuit. The public key is embedded in every output note.
+- **Stealth addresses**: a fresh one-time public key is derived per payment
+  from the recipient's BabyJubJub key, so on-chain notes from different
+  senders are unlinkable.
+
+---
+
+### Why Pedersen Commitment?
+
+In Enygma Payment, amounts must stay hidden on-chain. But the circuit still
+needs to prove that no value was created or destroyed.
+
+Pedersen commitments make both possible at once. A commitment to value `v`
+with blinding factor `r` is:
+
+```
+C = v·G + r·H
+```
+
+It hides `v` completely, and it is **additively homomorphic**:
+`C(v₁) + C(v₂) = C(v₁ + v₂)`. So instead of checking amounts directly,
+the circuit checks:
+
+```
+sum(input commitments) = sum(output commitments) + fee commitment
+```
+
+No amounts are revealed. Balance is proven by a single curve equation.
+
+The blinding factor `r` is derived per note from the shared secret between
+sender and recipient, unknown to anyone else.
+
+**Where it is used in Enygma Payment**:
+
+- **Output notes**: each note commits to its amount as `C(amount, r)`,
+  stored on-chain in the Merkle tree.
+- **Balance proof**: the circuit asserts input and output commitments
+  balance, proving conservation of value without revealing any amount.
+- **Range proof**: a sub-circuit proves each amount is non-negative,
+  preventing negative-value exploits.
+
+---
+
+### Why Range Proofs?
+
+Pedersen commitments hide amounts. That means the contract cannot check
+whether an output amount is negative — a malicious prover could commit
+to `-100` to inflate another output.
+
+A range proof is a ZK sub-circuit that proves `0 ≤ v < 2^n` without
+revealing `v`. It runs alongside the balance proof so the verifier
+confirms every output amount is valid without learning what it is.
+
+**Where it is used in Enygma Payment**:
+
+- Every output note in a JoinSplit carries a range proof bounding its
+  committed amount to a valid non-negative range.
+
+---
+
+### Why an Anonymity Set?
+
+Each transaction publishes `k` Pedersen commitments — one per participant
+in the anonymity set. One commitment is a debit (the sender), the rest are
+credits. An on-chain observer sees `k` commitments that sum to zero but
+cannot tell which one belongs to the sender and which are recipients.
+
+Without an anonymity set, every transaction would have one input and one
+or more outputs, immediately revealing who is spending.
+
+**Where it is used in Enygma Payment**:
+
+- Every transaction carries exactly `k` commitments. The sender's index
+  inside the set is known only to the sender, hidden from the contract
+  and any observer.
+
+---
+
+### Why Private Messaging Tags?
+
+After a transaction is posted, recipients need to detect if a payment was
+sent to them — without asking a server (which would leak who they are
+watching).
+
+Each transaction includes `k` tags, one per anonymity set member:
+
+```
+t_i = Hash(shared_secret(i, sender), n_block)
+```
+
+A recipient computes the tag they expect from each possible sender and
+compares it against the published tags. A match means there is a payment
+for them in that transaction. No match means they were just cover traffic.
+
+This lets every privacy node scan locally without revealing to anyone
+which transactions they are checking.
+
+**Where it is used in Enygma Payment**:
+
+- Every transaction carries `k` tags. Recipients brute-force scan them
+  locally each block to detect incoming payments.
+
+---
+
+### Why a Running Balance Model Instead of UTXO?
+
+In a UTXO model each payment creates and consumes individual notes.
+For financial institutions making frequent, high-volume payments this
+adds overhead — proofs must reference specific input notes and build
+Merkle inclusion paths for each one.
+
+Enygma Payment uses a running balance: each privacy node has a single
+shielded balance on-chain, updated atomically each block. A transaction
+debits the sender's balance and credits the recipients'. There are no
+individual notes to track or inclusion proofs to construct.
+
+This makes the circuit simpler and proof generation faster, which is
+the right trade-off for regulated institutions transacting continuously.
+
+**Where it is used in Enygma Payment**:
+
+- Each privacy node holds one Pedersen commitment on-chain representing
+  their current balance. Every transaction updates it in place.
+
+---
+
+## EnygmaDvP
+
+
+### Why AES-256-GCM?
 
 Once two parties share a secret key, they need a symmetric cipher to encrypt the
 actual payload. AES-256-GCM is the standard choice for this.
@@ -97,6 +242,7 @@ It is also hardware-accelerated on virtually every modern CPU (AES-NI instructio
 making encryption and decryption fast regardless of payload size.
 
 **Where it is used in EnygmaDvP**:
+
 - **Note payloads**: `tokenId || amount` is encrypted with AES-256-GCM so only the
   intended recipient can learn the value of a note sent to them.
 - **Payment and deposit flows**: each output note gets its own AES-256-GCM ciphertext,
@@ -104,7 +250,7 @@ making encryption and decryption fast regardless of payload size.
 
 ---
 
-## Why ML-KEM-768 (Kyber)?
+### Why ML-KEM-768 (Kyber)?
 
 AES-256-GCM encrypts the payload, but first both parties need to agree on a shared
 secret key. The classical approach is ECDH — each party has a keypair and they compute
@@ -117,6 +263,7 @@ hardness of the Module Learning With Errors (MLWE) problem, which has no known q
 attack. Security level: ~180-bit classical, ~180-bit quantum.
 
 The flow in EnygmaDvP is:
+
 1. Recipient publishes an ML-KEM public key (encapsulation key).
 2. Sender calls `Encapsulate(pk)` → gets a shared secret `ss` and a capsule (1088 bytes).
 3. Sender derives an AES-256-GCM key from `ss` via HKDF, encrypts the payload.
@@ -127,6 +274,7 @@ The sender never needs the recipient's private key, and an eavesdropper who reco
 capsule today cannot decrypt it later even with a future quantum computer.
 
 **Where it is used in EnygmaDvP**:
+
 - **depositV2 / transferV2**: sender encapsulates the recipient's view key to derive
   the AES key for the note payload, emitting the capsule alongside the ciphertext.
 - **DvP Initiator**: Alice encapsulates Bob's view key to encrypt the USDT note details
@@ -134,7 +282,7 @@ capsule today cannot decrypt it later even with a future quantum computer.
 
 ---
 
-## Why HKDF?
+### Why HKDF?
 
 ML-KEM outputs a shared secret `ss` — a random-looking 32-byte value. It is tempting
 to use it directly as an encryption key. The older swap flow does exactly this, keying
@@ -157,6 +305,7 @@ about `encKey`, and vice versa. This is standard practice whenever one shared se
 needs to serve multiple purposes.
 
 **Where it is used in EnygmaDvP**:
+
 - **V2 deposit and payment flows**: every output note derives its commitment salt and
   AES-256-GCM key independently from the same ML-KEM shared secret via HKDF.
 - The older swap flow skips HKDF and uses `ss` directly — a known limitation that V2
@@ -164,7 +313,7 @@ needs to serve multiple purposes.
 
 ---
 
-## Why Separate Spend Keys and View Keys?
+### Why Separate Spend Keys and View Keys?
 
 A private note has two operations: **spending** it (transferring ownership) and
 **viewing** it (learning its value and tokenId). These require different levels of trust.
@@ -187,6 +336,7 @@ This mirrors the design of Zcash's incoming viewing keys and is a standard patte
 in privacy-preserving payment systems.
 
 **Where it is used in EnygmaDvP**:
+
 - **Spend key**: committed to inside every circuit via the nullifier and commitment.
   Required to generate any valid proof.
 - **View key**: published (or shared selectively) so senders can encrypt notes to you.
@@ -194,7 +344,7 @@ in privacy-preserving payment systems.
 
 ---
 
-## Why a Merkle Tree?
+### Why a Merkle Tree?
 
 The ZK circuit needs to prove one thing: "this note exists and I own it." To do that
 without revealing which note it is, the circuit proves a Merkle inclusion — that the
@@ -207,6 +357,7 @@ passed in as witnesses. So the circuit needs a data structure it can verify with
 arithmetic alone.
 
 A Merkle tree fits exactly:
+
 - The **root** is a single public value stored on-chain. The circuit takes it as a
   public input and verifies the proof against it.
 - The **inclusion proof** (sibling hashes along the path from leaf to root) is passed
@@ -220,6 +371,7 @@ This means old Merkle roots remain valid — a proof generated against a past ro
 still accepted, because the contract stores all historical roots.
 
 **Where it is used in EnygmaDvP**:
+
 - **Each vault** has its own Merkle tree. ERC20 and ERC721 commitments live in
   separate trees so proofs across asset types cannot be mixed.
 - **Every spend circuit** — JoinSplit, Ownership, DvP Initiator, DvP Destination —
@@ -227,7 +379,7 @@ still accepted, because the contract stores all historical roots.
 
 ---
 
-## Why Is Each Token Standard Stored in Its Own Vault?
+### Why Is Each Token Standard Stored in Its Own Vault?
 
 The alternative is one shared vault for all assets. The problem with that is the
 commitment formula.
@@ -243,6 +395,7 @@ amount=1, effectively spending a non-fungible token as fungible balance. The cir
 alone cannot tell them apart — only the verifying key used to check the proof can.
 
 Separate vaults enforce a hard boundary:
+
 - Each vault has its own Merkle tree. A commitment inserted in the ERC20 vault can
   only be spent by an ERC20 circuit proof verified against that vault's VK.
 - The verifying key registered for a vault is specific to that asset type. A proof
@@ -255,6 +408,7 @@ This also has a practical benefit: each vault is independently upgradeable and n
 asset standards can be added by deploying a new vault without touching existing ones.
 
 **Where it is used in EnygmaDvP**:
+
 - `Erc20CoinVault` — holds ERC20 tokens, verifies JoinSplit and DvP Initiator proofs.
 - `Erc721CoinVault` — holds ERC721 tokens, verifies Ownership and DvP Destination proofs.
 - `EnygmaDvp` — the central registry that maps vault IDs to vault addresses and routes
@@ -262,7 +416,7 @@ asset standards can be added by deploying a new vault without touching existing 
 
 ---
 
-## Why Include a Salt in the Commitment?
+### Why Include a Salt in the Commitment?
 
 The commitment is `Poseidon(pk, salt, amount, tokenId)`. Without the salt it would be
 `Poseidon(pk, amount, tokenId)` — a deterministic value that anyone can compute from
@@ -288,6 +442,7 @@ The salt also ensures that even if a user receives the same amount from the same
 sender twice, the two commitments are unlinkable on-chain.
 
 **Where it is used in EnygmaDvP**:
+
 - `saltB` is derived via `HKDF(ss, "Bob salt")` from the ML-KEM shared secret, making
   it unique per note and unknown to anyone who did not participate in the encapsulation.
 - The circuit takes `salt` as a private witness and verifies the commitment matches —

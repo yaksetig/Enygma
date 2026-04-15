@@ -1,4 +1,4 @@
-package core
+package tests
 
 import (
 	"encoding/json"
@@ -6,6 +6,8 @@ import (
 	"math/big"
 	"os"
 	"testing"
+
+	"enygma_dvp/src_go/core"
 
 	"github.com/iden3/go-iden3-crypto/babyjub"
 )
@@ -27,7 +29,7 @@ func TestBuffer2BigInt(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := Buffer2BigInt(tt.input)
+			result := core.Buffer2BigInt(tt.input)
 			if result.Cmp(tt.expected) != 0 {
 				t.Errorf("Buffer2BigInt(%v) = %s, want %s", tt.input, result.String(), tt.expected.String())
 			}
@@ -47,7 +49,7 @@ func TestStringifyBigInts(t *testing.T) {
 		},
 	}
 
-	result := StringifyBigInts(input)
+	result := core.StringifyBigInts(input)
 
 	if result["a"] != "123" {
 		t.Errorf("Expected a=123, got %v", result["a"])
@@ -69,7 +71,7 @@ func TestStringifyBigInts(t *testing.T) {
 }
 
 func TestStringifyBigIntsEmpty(t *testing.T) {
-	result := StringifyBigInts(map[string]interface{}{})
+	result := core.StringifyBigInts(map[string]interface{}{})
 	if len(result) != 0 {
 		t.Errorf("Expected empty map, got %v", result)
 	}
@@ -78,7 +80,7 @@ func TestStringifyBigIntsEmpty(t *testing.T) {
 // --- RandomInField ---
 
 func TestRandomInField(t *testing.T) {
-	val, err := RandomInField()
+	val, err := core.RandomInField()
 	if err != nil {
 		t.Fatalf("RandomInField failed: %v", err)
 	}
@@ -87,7 +89,7 @@ func TestRandomInField(t *testing.T) {
 		t.Fatal("RandomInField returned nil")
 	}
 
-	if val.Cmp(SNARK_SCALAR_FIELD) >= 0 {
+	if val.Cmp(core.SNARK_SCALAR_FIELD) >= 0 {
 		t.Errorf("Value %s should be less than SNARK_SCALAR_FIELD", val.String())
 	}
 
@@ -97,8 +99,8 @@ func TestRandomInField(t *testing.T) {
 }
 
 func TestRandomInFieldUniqueness(t *testing.T) {
-	val1, _ := RandomInField()
-	val2, _ := RandomInField()
+	val1, _ := core.RandomInField()
+	val2, _ := core.RandomInField()
 
 	if val1.Cmp(val2) == 0 {
 		t.Error("Two random values should not be equal (extremely unlikely)")
@@ -108,7 +110,7 @@ func TestRandomInFieldUniqueness(t *testing.T) {
 // --- RandomNonce ---
 
 func TestRandomNonce(t *testing.T) {
-	nonce, err := RandomNonce()
+	nonce, err := core.RandomNonce()
 	if err != nil {
 		t.Fatalf("RandomNonce failed: %v", err)
 	}
@@ -123,8 +125,8 @@ func TestRandomNonce(t *testing.T) {
 }
 
 func TestRandomNonceUniqueness(t *testing.T) {
-	n1, _ := RandomNonce()
-	n2, _ := RandomNonce()
+	n1, _ := core.RandomNonce()
+	n2, _ := core.RandomNonce()
 
 	if n1.Cmp(n2) == 0 {
 		t.Error("Two random nonces should not be equal")
@@ -134,10 +136,7 @@ func TestRandomNonceUniqueness(t *testing.T) {
 // --- NewKeyPair ---
 
 func TestNewKeyPair(t *testing.T) {
-	// NOTE: NewKeyPair may fail with "inputs values not inside Finite Field"
-	// because the random 32-byte seed can exceed SNARK_SCALAR_FIELD.
-	// The seed should be reduced mod SNARK_SCALAR_FIELD before hashing.
-	privKey, pubKey, err := NewKeyPair()
+	privKey, pubKey, err := core.NewKeyPair()
 	if err != nil {
 		t.Skipf("NewKeyPair returned error (known issue - random seed may exceed field): %v", err)
 	}
@@ -159,12 +158,12 @@ func TestNewKeyPair(t *testing.T) {
 }
 
 func TestNewKeyPairDeterministicPublicKey(t *testing.T) {
-	privKey, pubKey, err := NewKeyPair()
+	privKey, pubKey, err := core.NewKeyPair()
 	if err != nil {
 		t.Skipf("NewKeyPair returned error (known issue): %v", err)
 	}
 
-	derivedPubKey, err := GetPublicKey(privKey)
+	derivedPubKey, err := core.GetPublicKey(privKey)
 	if err != nil {
 		t.Fatalf("GetPublicKey failed: %v", err)
 	}
@@ -179,12 +178,12 @@ func TestNewKeyPairDeterministicPublicKey(t *testing.T) {
 func TestGetPublicKey(t *testing.T) {
 	privKey := big.NewInt(12345)
 
-	pub1, err := GetPublicKey(privKey)
+	pub1, err := core.GetPublicKey(privKey)
 	if err != nil {
 		t.Fatalf("GetPublicKey failed: %v", err)
 	}
 
-	pub2, err := GetPublicKey(privKey)
+	pub2, err := core.GetPublicKey(privKey)
 	if err != nil {
 		t.Fatalf("GetPublicKey failed: %v", err)
 	}
@@ -200,7 +199,7 @@ func TestGetNullifier(t *testing.T) {
 	privKey := big.NewInt(111)
 	pathIndices := big.NewInt(5)
 
-	nullifier, err := GetNullifier(privKey, pathIndices)
+	nullifier, err := core.GetNullifier(privKey, pathIndices)
 	if err != nil {
 		t.Fatalf("GetNullifier failed: %v", err)
 	}
@@ -209,14 +208,12 @@ func TestGetNullifier(t *testing.T) {
 		t.Fatal("Nullifier should not be nil")
 	}
 
-	// Deterministic
-	nullifier2, _ := GetNullifier(privKey, pathIndices)
+	nullifier2, _ := core.GetNullifier(privKey, pathIndices)
 	if nullifier.Cmp(nullifier2) != 0 {
 		t.Error("GetNullifier should be deterministic")
 	}
 
-	// Different inputs -> different output
-	nullifier3, _ := GetNullifier(privKey, big.NewInt(6))
+	nullifier3, _ := core.GetNullifier(privKey, big.NewInt(6))
 	if nullifier.Cmp(nullifier3) == 0 {
 		t.Error("Different path indices should produce different nullifiers")
 	}
@@ -230,7 +227,7 @@ func TestGetCommitment(t *testing.T) {
 	uniqueId := big.NewInt(42)
 	pubKey := big.NewInt(9999)
 
-	commitment, err := GetCommitment(uniqueId, pubKey)
+	commitment, err := core.GetCommitment(uniqueId, pubKey)
 	if err != nil {
 		t.Fatalf("GetCommitment failed: %v", err)
 	}
@@ -239,8 +236,7 @@ func TestGetCommitment(t *testing.T) {
 		t.Fatal("Commitment should not be nil")
 	}
 
-	// Deterministic
-	commitment2, _ := GetCommitment(uniqueId, pubKey)
+	commitment2, _ := core.GetCommitment(uniqueId, pubKey)
 	if commitment.Cmp(commitment2) != 0 {
 		t.Error("GetCommitment should be deterministic")
 	}
@@ -253,7 +249,7 @@ func TestGetCommitment(t *testing.T) {
 func TestGetAuctionId(t *testing.T) {
 	commitment := big.NewInt(777)
 
-	auctionId, err := GetAuctionId(commitment)
+	auctionId, err := core.GetAuctionId(commitment)
 	if err != nil {
 		t.Fatalf("GetAuctionId failed: %v", err)
 	}
@@ -262,8 +258,7 @@ func TestGetAuctionId(t *testing.T) {
 		t.Fatal("AuctionId should not be nil")
 	}
 
-	// Deterministic
-	auctionId2, _ := GetAuctionId(commitment)
+	auctionId2, _ := core.GetAuctionId(commitment)
 	if auctionId.Cmp(auctionId2) != 0 {
 		t.Error("GetAuctionId should be deterministic")
 	}
@@ -276,7 +271,7 @@ func TestGetAuctionId(t *testing.T) {
 func TestBlindedPublicKey(t *testing.T) {
 	pubKey := big.NewInt(12345)
 
-	blinded, err := BlindedPublicKey(pubKey)
+	blinded, err := core.BlindedPublicKey(pubKey)
 	if err != nil {
 		t.Fatalf("BlindedPublicKey failed: %v", err)
 	}
@@ -298,7 +293,7 @@ func TestErc20UniqueId(t *testing.T) {
 	contractAddr := big.NewInt(1000)
 	amount := big.NewInt(500)
 
-	uid, err := Erc20UniqueId(contractAddr, amount)
+	uid, err := core.Erc20UniqueId(contractAddr, amount)
 	if err != nil {
 		t.Fatalf("Erc20UniqueId failed: %v", err)
 	}
@@ -307,14 +302,12 @@ func TestErc20UniqueId(t *testing.T) {
 		t.Fatal("UID should not be nil")
 	}
 
-	// Deterministic
-	uid2, _ := Erc20UniqueId(contractAddr, amount)
+	uid2, _ := core.Erc20UniqueId(contractAddr, amount)
 	if uid.Cmp(uid2) != 0 {
 		t.Error("Erc20UniqueId should be deterministic")
 	}
 
-	// Different amount -> different UID
-	uid3, _ := Erc20UniqueId(contractAddr, big.NewInt(501))
+	uid3, _ := core.Erc20UniqueId(contractAddr, big.NewInt(501))
 	if uid.Cmp(uid3) == 0 {
 		t.Error("Different amounts should produce different UIDs")
 	}
@@ -326,7 +319,7 @@ func TestErc721UniqueId(t *testing.T) {
 	contractAddr := big.NewInt(2000)
 	tokenId := big.NewInt(1)
 
-	uid, err := Erc721UniqueId(contractAddr, tokenId)
+	uid, err := core.Erc721UniqueId(contractAddr, tokenId)
 	if err != nil {
 		t.Fatalf("Erc721UniqueId failed: %v", err)
 	}
@@ -335,8 +328,7 @@ func TestErc721UniqueId(t *testing.T) {
 		t.Fatal("UID should not be nil")
 	}
 
-	// Deterministic
-	uid2, _ := Erc721UniqueId(contractAddr, tokenId)
+	uid2, _ := core.Erc721UniqueId(contractAddr, tokenId)
 	if uid.Cmp(uid2) != 0 {
 		t.Error("Erc721UniqueId should be deterministic")
 	}
@@ -349,7 +341,7 @@ func TestErc1155UniqueId(t *testing.T) {
 	tokenId := big.NewInt(10)
 	amount := big.NewInt(50)
 
-	uid, err := Erc1155UniqueId(contractAddr, tokenId, amount)
+	uid, err := core.Erc1155UniqueId(contractAddr, tokenId, amount)
 	if err != nil {
 		t.Fatalf("Erc1155UniqueId failed: %v", err)
 	}
@@ -358,14 +350,12 @@ func TestErc1155UniqueId(t *testing.T) {
 		t.Fatal("UID should not be nil")
 	}
 
-	// Deterministic
-	uid2, _ := Erc1155UniqueId(contractAddr, tokenId, amount)
+	uid2, _ := core.Erc1155UniqueId(contractAddr, tokenId, amount)
 	if uid.Cmp(uid2) != 0 {
 		t.Error("Erc1155UniqueId should be deterministic")
 	}
 
-	// Different amount -> different UID
-	uid3, _ := Erc1155UniqueId(contractAddr, tokenId, big.NewInt(51))
+	uid3, _ := core.Erc1155UniqueId(contractAddr, tokenId, big.NewInt(51))
 	if uid.Cmp(uid3) == 0 {
 		t.Error("Different amounts should produce different UIDs")
 	}
@@ -379,7 +369,7 @@ func TestPedersen(t *testing.T) {
 	amount := big.NewInt(100)
 	random := big.NewInt(999)
 
-	hash, err := Pedersen(amount, random)
+	hash, err := core.Pedersen(amount, random)
 	if err != nil {
 		t.Fatalf("Pedersen failed: %v", err)
 	}
@@ -388,14 +378,12 @@ func TestPedersen(t *testing.T) {
 		t.Fatal("Hash should not be nil")
 	}
 
-	// Deterministic
-	hash2, _ := Pedersen(amount, random)
+	hash2, _ := core.Pedersen(amount, random)
 	if hash.Cmp(hash2) != 0 {
 		t.Error("Pedersen should be deterministic")
 	}
 
-	// Different random -> different hash
-	hash3, _ := Pedersen(amount, big.NewInt(1000))
+	hash3, _ := core.Pedersen(amount, big.NewInt(1000))
 	if hash.Cmp(hash3) == 0 {
 		t.Error("Different random values should produce different hashes")
 	}
@@ -406,19 +394,17 @@ func TestPedersen(t *testing.T) {
 // --- Keccak256 ---
 
 func TestKeccak256(t *testing.T) {
-	result := Keccak256([]byte("ZkDvp"))
+	result := core.Keccak256([]byte("ZkDvp"))
 
 	if result == nil {
 		t.Fatal("Keccak256 result should not be nil")
 	}
 
-	// Should be in SNARK field
-	if result.Cmp(SNARK_SCALAR_FIELD) >= 0 {
+	if result.Cmp(core.SNARK_SCALAR_FIELD) >= 0 {
 		t.Error("Result should be less than SNARK_SCALAR_FIELD")
 	}
 
-	// Should match GetZeroValue
-	zeroVal := GetZeroValue()
+	zeroVal := core.GetZeroValue()
 	if result.Cmp(zeroVal) != 0 {
 		t.Error("Keccak256('ZkDvp') should match GetZeroValue()")
 	}
@@ -427,8 +413,8 @@ func TestKeccak256(t *testing.T) {
 }
 
 func TestKeccak256Deterministic(t *testing.T) {
-	h1 := Keccak256([]byte("hello"))
-	h2 := Keccak256([]byte("hello"))
+	h1 := core.Keccak256([]byte("hello"))
+	h2 := core.Keccak256([]byte("hello"))
 
 	if h1.Cmp(h2) != 0 {
 		t.Error("Keccak256 should be deterministic")
@@ -436,8 +422,8 @@ func TestKeccak256Deterministic(t *testing.T) {
 }
 
 func TestKeccak256DifferentInputs(t *testing.T) {
-	h1 := Keccak256([]byte("hello"))
-	h2 := Keccak256([]byte("world"))
+	h1 := core.Keccak256([]byte("hello"))
+	h2 := core.Keccak256([]byte("world"))
 
 	if h1.Cmp(h2) == 0 {
 		t.Error("Different inputs should produce different hashes")
@@ -445,15 +431,10 @@ func TestKeccak256DifferentInputs(t *testing.T) {
 }
 
 // --- BabyJubJub helpers ---
-// NOTE: mulPointEscalar uses babyjub.NewPoint().Mul() which currently returns
-// the identity point (0,1) for all inputs. This appears to be a library API
-// issue - the BabyJubJub scalar multiplication may need a different approach
-// (e.g., using babyjub.PrivateKey.ScalarBaseMult or the edwards curve API).
-// Tests below verify current behavior and flag the issue.
 
 func TestMulPointEscalar(t *testing.T) {
 	scalar := big.NewInt(5)
-	result := mulPointEscalar(babyjub.B8, scalar)
+	result := core.MulPointEscalar(babyjub.B8, scalar)
 
 	if result == nil {
 		t.Fatal("Result should not be nil")
@@ -463,24 +444,20 @@ func TestMulPointEscalar(t *testing.T) {
 		t.Fatal("Point coordinates should not be nil")
 	}
 
-	// NOTE: Currently returns identity (0,1) due to babyjub.Point.Mul behavior.
-	// If this starts returning a non-identity point, the fix has been applied.
 	fmt.Printf("5 * B8 = (%s, %s)\n", result.X.String(), result.Y.String())
 	if result.X.Cmp(big.NewInt(0)) == 0 && result.Y.Cmp(big.NewInt(1)) == 0 {
-		t.Log("WARNING: mulPointEscalar returns identity for all inputs - babyjub.Point.Mul may need a different API")
+		t.Log("WARNING: MulPointEscalar returns identity for all inputs - babyjub.Point.Mul may need a different API")
 	}
 }
 
 func TestAddPoints(t *testing.T) {
-	// Use the projective add directly with known points
 	p1 := &babyjub.Point{X: new(big.Int).Set(babyjub.B8.X), Y: new(big.Int).Set(babyjub.B8.Y)}
-	sum := addPoints(p1, p1)
+	sum := core.AddPoints(p1, p1)
 
 	if sum == nil {
-		t.Fatal("addPoints should not return nil")
+		t.Fatal("AddPoints should not return nil")
 	}
 
-	// B8 + B8 should not be identity (unless B8 has order 2, which it doesn't)
 	fmt.Printf("B8 + B8 = (%s, %s)\n", sum.X.String(), sum.Y.String())
 }
 
@@ -489,39 +466,32 @@ func TestNegatePoint(t *testing.T) {
 		X: new(big.Int).Set(babyjub.B8.X),
 		Y: new(big.Int).Set(babyjub.B8.Y),
 	}
-	neg := negatePoint(p)
+	neg := core.NegatePoint(p)
 
-	// Negation should flip X to (SNARK_SCALAR_FIELD - X)
-	expectedX := new(big.Int).Sub(SNARK_SCALAR_FIELD, p.X)
+	expectedX := new(big.Int).Sub(core.SNARK_SCALAR_FIELD, p.X)
 	if neg.X.Cmp(expectedX) != 0 {
 		t.Errorf("Negated X should be SNARK_SCALAR_FIELD - X, got %s", neg.X.String())
 	}
 
-	// Y should remain the same
 	if neg.Y.Cmp(p.Y) != 0 {
 		t.Error("Negated Y should equal original Y")
 	}
 
-	// p + (-p) should be the identity (0, 1)
-	identity := addPoints(p, neg)
+	identity := core.AddPoints(p, neg)
 	if identity.X.Cmp(big.NewInt(0)) != 0 || identity.Y.Cmp(big.NewInt(1)) != 0 {
 		t.Errorf("p + (-p) should be identity (0,1), got (%s, %s)", identity.X.String(), identity.Y.String())
 	}
 }
 
 // --- EncodeMessage / DecodeMessage ---
-// NOTE: EncodeMessage depends on mulPointEscalar, which has the issue above.
-// These tests verify the current behavior.
 
 func TestEncodeMessage(t *testing.T) {
-	// Encoding 0 should give the identity point (0, 1) since 0 * B8 = identity
-	zero := EncodeMessage(big.NewInt(0))
+	zero := core.EncodeMessage(big.NewInt(0))
 	if zero.X.Cmp(big.NewInt(0)) != 0 || zero.Y.Cmp(big.NewInt(1)) != 0 {
 		t.Errorf("EncodeMessage(0) should be identity, got (%s, %s)", zero.X.String(), zero.Y.String())
 	}
 
-	// Encoding non-zero should return a point (may be identity due to mulPointEscalar issue)
-	point := EncodeMessage(big.NewInt(42))
+	point := core.EncodeMessage(big.NewInt(42))
 	if point == nil {
 		t.Fatal("Encoded point should not be nil")
 	}
@@ -530,9 +500,8 @@ func TestEncodeMessage(t *testing.T) {
 }
 
 func TestDecodeMessageZero(t *testing.T) {
-	// Decoding identity point should give 0
-	point := EncodeMessage(big.NewInt(0))
-	decoded, err := DecodeMessage(point, big.NewInt(10))
+	point := core.EncodeMessage(big.NewInt(0))
+	decoded, err := core.DecodeMessage(point, big.NewInt(10))
 	if err != nil {
 		t.Fatalf("DecodeMessage failed: %v", err)
 	}
@@ -543,12 +512,9 @@ func TestDecodeMessageZero(t *testing.T) {
 }
 
 // --- BabyJubJub encryption/decryption ---
-// NOTE: BabyEncrypt/BabyDecrypt depend on mulPointEscalar working correctly.
-// Since mulPointEscalar currently returns identity for all inputs, the
-// encrypt/decrypt round-trip only works for message=0.
 
 func TestBabyEncryptDecryptZero(t *testing.T) {
-	privKey, pubKey, err := BabyKeyPair()
+	privKey, pubKey, err := core.BabyKeyPair()
 	if err != nil {
 		t.Fatalf("BabyKeyPair failed: %v", err)
 	}
@@ -556,13 +522,13 @@ func TestBabyEncryptDecryptZero(t *testing.T) {
 	message := big.NewInt(0)
 	randomness := big.NewInt(13)
 
-	c1, c2 := BabyEncrypt(message, randomness, pubKey)
+	c1, c2 := core.BabyEncrypt(message, randomness, pubKey)
 
 	if c1 == nil || c2 == nil {
 		t.Fatal("Ciphertext components should not be nil")
 	}
 
-	decrypted := BabyDecrypt(c1, c2, privKey, big.NewInt(10))
+	decrypted := core.BabyDecrypt(c1, c2, privKey, big.NewInt(10))
 	if decrypted == nil {
 		t.Fatal("Decryption returned nil")
 	}
@@ -573,12 +539,12 @@ func TestBabyEncryptDecryptZero(t *testing.T) {
 }
 
 func TestBabyEncryptProducesPoints(t *testing.T) {
-	_, pubKey, err := BabyKeyPair()
+	_, pubKey, err := core.BabyKeyPair()
 	if err != nil {
 		t.Fatalf("BabyKeyPair failed: %v", err)
 	}
 
-	c1, c2 := BabyEncrypt(big.NewInt(42), big.NewInt(7), pubKey)
+	c1, c2 := core.BabyEncrypt(big.NewInt(42), big.NewInt(7), pubKey)
 
 	if c1 == nil || c2 == nil {
 		t.Fatal("Ciphertext components should not be nil")
@@ -592,7 +558,7 @@ func TestBabyEncryptProducesPoints(t *testing.T) {
 // --- BabyKeyPair ---
 
 func TestBabyKeyPair(t *testing.T) {
-	privKey, pubKey, err := BabyKeyPair()
+	privKey, pubKey, err := core.BabyKeyPair()
 	if err != nil {
 		t.Fatalf("BabyKeyPair failed: %v", err)
 	}
@@ -605,7 +571,6 @@ func TestBabyKeyPair(t *testing.T) {
 		t.Error("Private key should be positive")
 	}
 
-	// Private key should be less than SubOrder
 	if privKey.Cmp(babyjub.SubOrder) >= 0 {
 		t.Error("Private key should be less than SubOrder")
 	}
@@ -615,8 +580,8 @@ func TestBabyKeyPair(t *testing.T) {
 }
 
 func TestBabyKeyPairUniqueness(t *testing.T) {
-	priv1, _, _ := BabyKeyPair()
-	priv2, _, _ := BabyKeyPair()
+	priv1, _, _ := core.BabyKeyPair()
+	priv2, _, _ := core.BabyKeyPair()
 
 	if priv1.Cmp(priv2) == 0 {
 		t.Error("Two key pairs should have different private keys")
@@ -626,26 +591,26 @@ func TestBabyKeyPairUniqueness(t *testing.T) {
 // --- PoseidonEncryptWrapper / PoseidonDecryptWrapper ---
 
 func TestPoseidonEncryptWrapperNotImplemented(t *testing.T) {
-	_, pubKey, err := BabyKeyPair()
+	_, pubKey, err := core.BabyKeyPair()
 	if err != nil {
 		t.Fatalf("BabyKeyPair failed: %v", err)
 	}
 
 	inputs := []*big.Int{big.NewInt(1), big.NewInt(2)}
-	_, err = PoseidonEncryptWrapper(inputs, pubKey)
+	_, err = core.PoseidonEncryptWrapper(inputs, pubKey)
 	if err == nil {
 		t.Error("PoseidonEncryptWrapper should return not-implemented error")
 	}
 }
 
 func TestPoseidonDecryptWrapperNotImplemented(t *testing.T) {
-	_, pubKey, err := BabyKeyPair()
+	_, pubKey, err := core.BabyKeyPair()
 	if err != nil {
 		t.Fatalf("BabyKeyPair failed: %v", err)
 	}
 
 	encrypted := []*big.Int{big.NewInt(1)}
-	_, err = PoseidonDecryptWrapper(encrypted, pubKey, big.NewInt(123), big.NewInt(456), 1)
+	_, err = core.PoseidonDecryptWrapper(encrypted, pubKey, big.NewInt(123), big.NewInt(456), 1)
 	if err == nil {
 		t.Error("PoseidonDecryptWrapper should return not-implemented error")
 	}
@@ -661,7 +626,7 @@ func TestWriteToJSON(t *testing.T) {
 		"num": 42,
 	}
 
-	err := WriteToJSON(tmpFile, data)
+	err := core.WriteToJSON(tmpFile, data)
 	if err != nil {
 		t.Fatalf("WriteToJSON failed: %v", err)
 	}
@@ -686,7 +651,7 @@ func TestWriteToJSONIndented(t *testing.T) {
 
 	data := map[string]string{"hello": "world"}
 
-	err := WriteToJSON(tmpFile, data)
+	err := core.WriteToJSON(tmpFile, data)
 	if err != nil {
 		t.Fatalf("WriteToJSON failed: %v", err)
 	}
@@ -697,7 +662,6 @@ func TestWriteToJSONIndented(t *testing.T) {
 	}
 
 	content := string(raw)
-	// Should be indented with 4 spaces
 	if len(content) < 10 {
 		t.Error("JSON output seems too short, expected indented output")
 	}

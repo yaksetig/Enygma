@@ -25,22 +25,22 @@ var BASE_POINT_ORDER, _ = new(big.Int).SetString(
 
 // --- BabyJubJub helpers ---
 
-// mulPointEscalar performs scalar multiplication: result = scalar * point
-func mulPointEscalar(point *babyjub.Point, scalar *big.Int) *babyjub.Point {
+// MulPointEscalar performs scalar multiplication: result = scalar * point
+func MulPointEscalar(point *babyjub.Point, scalar *big.Int) *babyjub.Point {
 	res := babyjub.NewPoint()
 	res.Mul(scalar, point)
 	return res
 }
 
-// addPoints adds two BabyJubJub points using projective coordinates
-func addPoints(p1, p2 *babyjub.Point) *babyjub.Point {
+// AddPoints adds two BabyJubJub points using projective coordinates
+func AddPoints(p1, p2 *babyjub.Point) *babyjub.Point {
 	res := babyjub.NewPointProjective()
 	res.Add(p1.Projective(), p2.Projective())
 	return res.Affine()
 }
 
-// negatePoint returns the negation of a BabyJubJub point (-x, y)
-func negatePoint(p *babyjub.Point) *babyjub.Point {
+// NegatePoint returns the negation of a BabyJubJub point (-x, y)
+func NegatePoint(p *babyjub.Point) *babyjub.Point {
 	negX := new(big.Int).Sub(SNARK_SCALAR_FIELD, p.X)
 	return &babyjub.Point{
 		X: negX,
@@ -430,7 +430,7 @@ func DecryptPayload(encKey, encTxData []byte) (tokenId, amount *big.Int, err err
 
 // EncodeMessage encodes an integer as a BabyJubJub point: m * Base8
 func EncodeMessage(m *big.Int) *babyjub.Point {
-	return mulPointEscalar(babyjub.B8, m)
+	return MulPointEscalar(babyjub.B8, m)
 }
 
 // DecodeMessage recovers the integer from a BabyJubJub point by brute-force search
@@ -451,16 +451,16 @@ func DecodeMessage(point *babyjub.Point, maxM *big.Int) (*big.Int, error) {
 // Returns (c1, c2) where c1 = r*G, c2 = m*G + r*pubKey
 func BabyEncrypt(m, r *big.Int, pubKey *babyjub.Point) (c1, c2 *babyjub.Point) {
 	// c1 = r * G
-	c1 = mulPointEscalar(babyjub.B8, r)
+	c1 = MulPointEscalar(babyjub.B8, r)
 
 	// rPub = r * publicKey
-	rPub := mulPointEscalar(pubKey, r)
+	rPub := MulPointEscalar(pubKey, r)
 
 	// mG = m * G
 	mG := EncodeMessage(m)
 
 	// c2 = mG + rPub
-	c2 = addPoints(mG, rPub)
+	c2 = AddPoints(mG, rPub)
 
 	return c1, c2
 }
@@ -473,11 +473,11 @@ func BabyDecrypt(c1, c2 *babyjub.Point, privateKey *big.Int, allowedRange *big.I
 	}
 
 	// rPub = privateKey * c1
-	rPub := mulPointEscalar(c1, privateKey)
+	rPub := MulPointEscalar(c1, privateKey)
 
 	// M_dec = c2 + (-rPub) = c2 - rPub
-	negRPub := negatePoint(rPub)
-	mDec := addPoints(c2, negRPub)
+	negRPub := NegatePoint(rPub)
+	mDec := AddPoints(c2, negRPub)
 
 	decrypted, err := DecodeMessage(mDec, allowedRange)
 	if err != nil {
@@ -499,7 +499,7 @@ func BabyKeyPair() (privateKey *big.Int, publicKey *babyjub.Point, err error) {
 			break
 		}
 	}
-	publicKey = mulPointEscalar(babyjub.B8, privateKey)
+	publicKey = MulPointEscalar(babyjub.B8, privateKey)
 	return privateKey, publicKey, nil
 }
 
@@ -543,14 +543,14 @@ func RandomAuditorScalar() (*big.Int, error) {
 
 // AuditorEncKey computes the shared encryption key for Poseidon encryption:
 //
-//	authKey = mulPointEscalar(auditorPublicKey, random)
+//	authKey = MulPointEscalar(auditorPublicKey, random)
 //
 // Returns (authKey.X, authKey.Y) — used as the key for NativePoseidonEncrypt / PoseidonDecrypt.
 // StAuditorAuthKey in the circuit is informational; the circuit re-derives it from
 // StAuditorPublickey and WtAuditorRandom.
 func AuditorEncKey(pubKeyX, pubKeyY, random *big.Int) (*big.Int, *big.Int) {
 	pk := &babyjub.Point{X: pubKeyX, Y: pubKeyY}
-	auth := mulPointEscalar(pk, random)
+	auth := MulPointEscalar(pk, random)
 	return auth.X, auth.Y
 }
 
@@ -579,8 +579,8 @@ func PoseidonEncryptWrapper(inputs []*big.Int, publicKey *babyjub.Point) (*Posei
 	}
 	randomValue.Div(randomValue, big.NewInt(10))
 
-	authKey := mulPointEscalar(babyjub.B8, randomValue)
-	sharedKey := mulPointEscalar(publicKey, randomValue)
+	authKey := MulPointEscalar(babyjub.B8, randomValue)
+	sharedKey := MulPointEscalar(publicKey, randomValue)
 
 	// TODO: implement poseidonEncrypt(inputs, sharedKey, nonce)
 	// This requires porting maci-crypto's Poseidon sponge encryption to Go.
@@ -595,7 +595,7 @@ func PoseidonEncryptWrapper(inputs []*big.Int, publicKey *babyjub.Point) (*Posei
 // PoseidonDecryptWrapper decrypts data using Poseidon sponge decryption
 // TODO: Requires a Go port of maci-crypto's poseidonDecrypt
 func PoseidonDecryptWrapper(encrypted []*big.Int, authKey *babyjub.Point, nonce, privateKey *big.Int, length int) ([]*big.Int, error) {
-	sharedKey := mulPointEscalar(authKey, privateKey)
+	sharedKey := MulPointEscalar(authKey, privateKey)
 
 	// TODO: implement poseidonDecrypt(encrypted, sharedKey, nonce, length)
 	// This requires porting maci-crypto's Poseidon sponge decryption to Go

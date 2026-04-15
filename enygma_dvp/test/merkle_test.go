@@ -1,14 +1,16 @@
-package core
+package tests
 
 import (
 	"fmt"
 	"math/big"
 	"testing"
+
+	"enygma_dvp/src_go/core"
 )
 
 func TestNewMerkleTree(t *testing.T) {
 	depth := 8
-	tree := NewMerkleTree(depth)
+	tree := core.NewMerkleTree(depth)
 
 	if tree.Depth() != depth {
 		t.Errorf("Expected depth %d, got %d", depth, tree.Depth())
@@ -22,7 +24,7 @@ func TestNewMerkleTree(t *testing.T) {
 }
 
 func TestInsertLeaf(t *testing.T) {
-	tree := NewMerkleTree(8)
+	tree := core.NewMerkleTree(8)
 
 	leaf1 := big.NewInt(12345)
 	tree.InsertLeaf(leaf1)
@@ -40,7 +42,7 @@ func TestInsertLeaf(t *testing.T) {
 }
 
 func TestInsertMultipleLeaves(t *testing.T) {
-	tree := NewMerkleTree(8)
+	tree := core.NewMerkleTree(8)
 
 	leaves := []*big.Int{
 		big.NewInt(100),
@@ -59,16 +61,14 @@ func TestInsertMultipleLeaves(t *testing.T) {
 }
 
 func TestGenerateProof(t *testing.T) {
-	tree := NewMerkleTree(8)
+	tree := core.NewMerkleTree(8)
 
-	// Insert some leaves
 	leaf1 := big.NewInt(111)
 	leaf2 := big.NewInt(222)
 	leaf3 := big.NewInt(333)
 
 	tree.InsertLeaves([]*big.Int{leaf1, leaf2, leaf3})
 
-	// Generate proof for leaf2
 	proof, err := tree.GenerateProof(leaf2)
 	if err != nil {
 		t.Fatalf("Failed to generate proof: %v", err)
@@ -92,7 +92,7 @@ func TestHashLeftRight(t *testing.T) {
 	left := big.NewInt(1)
 	right := big.NewInt(2)
 
-	hash := HashLeftRight(left, right)
+	hash := core.HashLeftRight(left, right)
 
 	if hash == nil {
 		t.Error("Hash should not be nil")
@@ -100,22 +100,20 @@ func TestHashLeftRight(t *testing.T) {
 
 	fmt.Printf("Poseidon hash of (1, 2): %s\n", hash.String())
 
-	// Hash should be deterministic
-	hash2 := HashLeftRight(left, right)
+	hash2 := core.HashLeftRight(left, right)
 	if hash.Cmp(hash2) != 0 {
 		t.Error("Hash should be deterministic")
 	}
 }
 
 func TestGetZeroValue(t *testing.T) {
-	zeroValue := GetZeroValue()
+	zeroValue := core.GetZeroValue()
 
 	if zeroValue == nil {
 		t.Error("Zero value should not be nil")
 	}
 
-	// Should be less than SNARK_SCALAR_FIELD
-	if zeroValue.Cmp(SNARK_SCALAR_FIELD) >= 0 {
+	if zeroValue.Cmp(core.SNARK_SCALAR_FIELD) >= 0 {
 		t.Error("Zero value should be less than SNARK_SCALAR_FIELD")
 	}
 
@@ -123,11 +121,10 @@ func TestGetZeroValue(t *testing.T) {
 }
 
 func TestProofNotFound(t *testing.T) {
-	tree := NewMerkleTree(8)
+	tree := core.NewMerkleTree(8)
 
 	tree.InsertLeaf(big.NewInt(100))
 
-	// Try to generate proof for non-existent element
 	_, err := tree.GenerateProof(big.NewInt(999))
 	if err == nil {
 		t.Error("Expected error for non-existent element")
@@ -137,7 +134,7 @@ func TestProofNotFound(t *testing.T) {
 }
 
 func TestTreeNumber(t *testing.T) {
-	tree := NewMerkleTree(8)
+	tree := core.NewMerkleTree(8)
 
 	if tree.TreeNumber() != 0 {
 		t.Errorf("Initial tree number should be 0, got %d", tree.TreeNumber())
@@ -146,10 +143,4 @@ func TestTreeNumber(t *testing.T) {
 	if tree.LastTreeNumber() != 0 {
 		t.Errorf("Initial last tree number should be 0, got %d", tree.LastTreeNumber())
 	}
-}
-
-// Run with: go test -v ./core/
-func TestAll(t *testing.T) {
-	fmt.Println("=== Merkle Tree Tests ===")
-	fmt.Println()
 }
