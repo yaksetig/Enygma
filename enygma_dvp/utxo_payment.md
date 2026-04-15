@@ -45,7 +45,7 @@ pk_A^{\text{spend}} = \mathrm{H}(sk_A^{\text{spend}})
 $$
 
 
-
+---
 ## Registration
 
 Upon completion of the key generation stage, each user registers both public keys. Therefore, each user publishes:
@@ -71,7 +71,7 @@ The output of this stage once different users register is a public-key record la
 
 
 
-## Transaction Creation
+## Transaction Structure
 We go over the case where Alice, who has an initial commitment $$C_{A}$$ sends Bob a payment. 
 The goal of the protocol is for Alice to non-interactively have the ability to send funds to Bob. 
 
@@ -81,40 +81,57 @@ $$
 Commitment = H(pk^{\text{spend}}, salt, token_{id}, amount) 
 $$
 
-### Transaction Structure
+### Transaction Payload
 Before proceeding with the description of the payment protocol, we higlight the tx structure of each payment that takes place in the network. 
 We assume that Alice 
 
 <div align="center">
 
 | Ciphertext (ML-KEM) | Destination Commitment | Change Commitment | Ciphertext (AES) | Nullifier | $\pi$ |
-|:-----------:|:---------------------:|:-----------------:|:--------:|:--:|:-----:|
+|:-------------------:|:----------------------:|:-----------------:|:----------------:|:---------:|:-----:|
 
 </div>
 
 ### Retrieving Destination Keys
-Before initiating a transfer, Alice must know the public keys associated with Bob. Therefore, Alice retrieves $pk_B^{\text{view}}$, $pk_B^{\text{spend}}$. 
+Before initiating a transfer, Alice must know the public keys associated with Bob. Therefore, Alice retrieves the pair $(pk_B^{\text{view}}$, $pk_B^{\text{spend}})$. 
 
 ### Transaction Amount(s)
 We assume that the commitment owned by Alice (i.e., $$C_{A}$$) contains a max amount $$v$$ that Alice can spend. 
 In our protocol, the sender (i.e., Alice) always sends the full amount in every transaction. The corresponding amount to the recipient and the remaining to a "change commitment". 
 
 
-We denote $$v_{1}$$ the amount being sent and $$v_{2}$$ the change amount. The amount $$v = v_{1} + v_{2}$$ is the amount owned by Alice in her commitment $$C_{A}$$.
+We denote $$v_{1}$$ the amount being sent and $$v_{2}$$ the change amount. The amount $$v = v_{1} + v_{2}$$ is the amount owned by Alice in $$C_{A}$$.
 
 ### Token IDs
-Each 
+Each transfer is related to a specific token ID. We enforce this by having each commitment linked to a token ID. In fact, the token ID is one of the inputs to the commitment. 
+
+
 ---
+## Transaction Creation
 
 ### Step 1 — ML-KEM Encapsulation
 
+Alice initiates a post-quantum key agreement step and obtains a ciphertext and a shared secret $$ss$$. 
+
 $$
-(\mathrm{ctxt}, ss_A) \leftarrow \mathrm{ML\text{-}KEM.Encaps}(pk_B^{\text{view}})
+(\mathrm{ctxt}, ss) \leftarrow \mathrm{ML\text{-}KEM.Encaps}(pk_B^{\text{view}})
 $$
 
 ---
 
 ### Step 2 — Key Derivation
+Upon generating the shared secret, Alice must derive two values: 
+
+* a salt, which is used to mask/randomize the destination commitment
+* a symmetric key, which is used to encrypt additional data that is appended to the transaction
+
+#### Deriving a symmetric key
+
+$$
+(\mathrm{salt}, k) = \mathrm{HKDF}(\mathrm{nil}, ss_A, \mathrm{info})
+$$
+
+#### Deriving a salt
 
 $$
 (\mathrm{salt}, k) = \mathrm{HKDF}(\mathrm{nil}, ss_A, \mathrm{info})
