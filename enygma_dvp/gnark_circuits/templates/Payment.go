@@ -14,30 +14,6 @@ type PaymentCircuitConfig struct {
 	TmRange         frontend.Variable // upper bound for range checks (e.g. 2^64)
 }
 
-// PaymentCircuit implements the ZK circuit for a private ERC20 payment with change.
-//
-// Alice spends TmNInputs notes and creates TmMOutputs notes:
-//   - Output 0 is the payment to Bob.
-//   - Output 1..TmMOutputs-1 are change notes back to Alice (or dummy zero-value outputs).
-//
-// The circuit proves:
-//
-//  1. For each input i: Alice knows sk_A[i] with pk_A[i] = Poseidon(sk_A[i]).
-//  2. For each input i: nullifier nf[i] = Poseidon(sk_A[i], leafIndex[i]).
-//  3. For each input i: input commitment = Poseidon(pk_A[i], saltIn[i], valueIn[i], tokenId).
-//  4. For each input i: Merkle path from commitment[i] at leafIndex[i] leads to MerkleRoot[i].
-//     (Merkle check is skipped for dummy zero-value inputs.)
-//  5. For each output j: output commitment = Poseidon(pkOut[j], saltOut[j], valueOut[j], tokenId).
-//  6. Conservation: sum(ValuesIn) == sum(ValuesOut).
-//
-// Off-chain, the sender uses ML-KEM + HKDF per output:
-//
-//	ss_j, ctxt_j  = ML-KEM.Encapsulate(view_pk_j)
-//	encKey_j      = HKDF(ss_j, "encryption key")   // AES-256-GCM key for ENC_TX_DATA_j
-//	salt_j        = HKDF(ss_j, "Bob salt")          // Poseidon witness WtSaltsOut[j]
-//	ENC_TX_DATA_j = AES-GCM-ENC(encKey_j, tokenId || valueOut[j])
-//
-// For change outputs sent back to Alice, Alice uses her own view key.
 type PaymentCircuit struct {
 	Config PaymentCircuitConfig
 
