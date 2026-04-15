@@ -128,13 +128,13 @@ Upon generating the shared secret, Alice must derive two values:
 #### Deriving a symmetric key
 
 $$
-(\mathrm{salt}, k) = \mathrm{HKDF}(\mathrm{nil}, ss_A, \mathrm{info})
+k = \mathrm{HKDF}(ss_A, context_{k}, len_{k})
 $$
 
 #### Deriving a salt
 
 $$
-(\mathrm{salt}, k) = \mathrm{HKDF}(\mathrm{nil}, ss_A, \mathrm{info})
+\mathrm{salt_{B}} = \mathrm{HKDF}(ss, context_{salt}, len_{salt})
 $$
 
 ---
