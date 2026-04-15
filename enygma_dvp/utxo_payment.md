@@ -14,10 +14,10 @@ flowchart LR
 ```
 
 ### Adversarial Model
-The goal of the adversary $$\mathcal{A}$$ is twofold: break the privacy of the system and disrupt the activity of the system. We assume that the adversary 
+The goal of the adversary $$\mathcal{A}$$ is twofold: break the privacy of the system and disrupt the activity of the system. We assume that the adversary ...
 
 
-
+---
 ## Key Generation
 
 In this step, each user generates two key pairs: a view key pair (i.e., ML-KEM) and a spend key pair (i.e., a hash-based key). 
@@ -141,17 +141,18 @@ $$
 
 ### Step 3 — Commitment
 
-Define:
+Alice calculates the destination commitment (for Bob):
 
 $$
-\mathrm{Commit}(pk^{\text{spend}}, r, t, v)
-= \mathrm{HASH}(pk^{\text{spend}} \parallel r \parallel t \parallel v)
+\mathrm{Commitment_{B}}
+= \mathrm{H}(pk_{B}^{\text{spend}} \parallel salt_{B} \parallel token_{id} \parallel v_{1})
 $$
 
-Alice computes:
+Alice calculates the change commitment (for Alice):
 
 $$
-\mathrm{commit} = \mathrm{Commit}(pk_B^{\text{spend}}, \mathrm{salt}, \mathrm{token\_id}, \mathrm{amount})
+\mathrm{Commitment_{A}}
+= \mathrm{H}(pk_{A}^{\text{spend}} \parallel salt_{A} \parallel token_{id} \parallel v_{2})
 $$
 
 ---
@@ -180,11 +181,18 @@ $$
 
 ### Step 6 — Submission
 
-Alice submits:
+Alice submits the following payload:
 
 $$
 (\mathrm{ctxt}, \mathrm{commit}, \mathrm{enc}, nf)
 $$
+
+<div align="center">
+
+| ML-KEM.CTXT | $$\mathrm{Commitment_{B}}$$ | $$\mathrm{Commitment_{A}}$$ | AES-GCM-ENC(k, m, _) | $$\mathrm{nf}$$ | $\pi$ |
+|:-----------:|:---------------------------:|:---------------------------:|:--------------------:|:---------------:|:-----:|
+
+</div>
 
 ---
 
