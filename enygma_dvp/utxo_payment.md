@@ -216,12 +216,10 @@ $$
 
 ### Step 3 — Decrypt
 
-$$
-m' = \mathrm{AEAD.Dec}(k', \mathrm{enc}, \mathrm{ctxt})
-$$
+Since this is an authenticated encryption (with associated data) scheme, Bob will know if the used key is correct as the authentication component of the cipher will succeed. 
 
 $$
-(t', v') = \mathrm{parse}(m')
+(token_{id}, v_{1}) = \mathrm{AEAD.Dec}(k', \mathrm{enc}, \mathrm{ctxt})
 $$
 
 ---
@@ -236,26 +234,6 @@ Accept iff:
 
 $$
 \mathrm{commit}' = \mathrm{commit}
-$$
-
----
-
-## 6. Correctness
-
-$$
-ss_A = ss_B
-$$
-
-$$
-(\mathrm{salt}, k) = (\mathrm{salt}', k')
-$$
-
-$$
-(\mathrm{token\_id}, \mathrm{amount}) = (t', v')
-$$
-
-$$
-\mathrm{commit} = \mathrm{commit}'
 $$
 
 ---
