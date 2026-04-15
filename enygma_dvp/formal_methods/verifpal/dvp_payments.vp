@@ -44,6 +44,7 @@ Blockchain -> Bob  : [spend_pk_A], [view_pk_A], [token_id], [info]
 
 // Alice creates the destination commitment
 principal Alice[
+	knows public index
 
 	generates ss_a		// shared secret to be used in this transaction 
 	generates amount 	// amount to be transacted
@@ -63,12 +64,15 @@ principal Alice[
 	// Encrypt tx data using an AEAD scheme. ctxt acts as the associated data (AD)
 	enc_tx_data = AEAD_ENC(k, msg, ctxt)
 
+	// Create nullifier
+	nf = HASH(spend_sk_A, index)
+
 	// TODO: ZK PROOF HERE
 
 ]
 
 // Alice submits the transaction
-Alice -> Blockchain: [ctxt], [commit], [enc_tx_data]
+Alice -> Blockchain: [ctxt], [commit], [enc_tx_data], [nf]
 
 principal Blockchain[
 	// TODO: checks the zk proof and registers the commitment
@@ -123,4 +127,8 @@ queries[
 	confidentiality? view_sk_B
 	confidentiality? spend_sk_A
 	confidentiality? spend_sk_B
+
+	// check that nullifier cannot be linked to Alice
+	unlinkability? nf, spend_sk_A
+	unlinkability? nf, spend_pk_A
 ]
