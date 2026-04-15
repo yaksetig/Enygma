@@ -183,10 +183,6 @@ $$
 
 Alice submits the following payload:
 
-$$
-(\mathrm{ctxt}, \mathrm{commit}, \mathrm{enc}, nf)
-$$
-
 <div align="center">
 
 | ML-KEM.CTXT | $$\mathrm{Commitment_{B}}$$ | $$\mathrm{Commitment_{A}}$$ | AES-GCM-ENC(k, m, _) | $$\mathrm{nf}$$ | $\pi$ |
