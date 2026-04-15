@@ -1,30 +1,33 @@
+// Attacker model (active or passive)
 attacker[active]
 
-principal Auditor[
-	generates msk
-
-	mpk = G^msk
-]
-
+// Setup of public parameters
 principal Blockchain[
 
-	generates token_id
+	generates token_id 	// token ID to be transacted (e.g., USDT)
+	generates info 		// context for HKDF
 ]
 
+// Alice creates two (view & spend) key pairs
 principal Alice[
 
+	// generates the "ML-KEM" key pair
 	generates view_sk_A
 	view_pk_A = G^view_sk_A
 
+	// generates the hash-based key pair
 	generates spend_sk_A
 	spend_pk_A = HASH(spend_sk_A)
 ]
 
+// Bob creates two (view & spend) key pairs
 principal Bob[
 
+	// generates the "ML-KEM" key pair
 	generates view_sk_B
 	view_pk_B = G^view_sk_B
 
+	// generates the hash-based key pair
 	generates spend_sk_B
 	spend_pk_B = HASH(spend_sk_B)
 ]
@@ -35,72 +38,89 @@ Bob   -> Blockchain: [view_pk_B], [spend_pk_B]
 
 
 // Alice and Bob retrieve the other party's public-key
-Blockchain -> Alice: [spend_pk_B], [view_pk_B], [token_id]
-Blockchain -> Bob  : [spend_pk_A], [view_pk_A], [token_id]
+Blockchain -> Alice: [spend_pk_B], [view_pk_B], [token_id], [info]
+Blockchain -> Bob  : [spend_pk_A], [view_pk_A], [token_id], [info]
 
 
 // Alice creates the destination commitment
 principal Alice[
 
-	generates salt
-	generates amount
+	generates ss_a		// shared secret to be used in this transaction 
+	generates amount 	// amount to be transacted
 
 	// This is the ML-KEM phase of the protocol
-	ctxt_i  = PKE_ENC(view_pk_B, salt)
+	ctxt  = PKE_ENC(view_pk_B, ss_a)
 	
+	// Derive salt and symmetric key from (ML-KEM) shared secret
+	salt, k = HKDF(nil, ss_a, info)
+
 	// creation of the commitment for Bob
-	commit = HASH(salt, spend_pk_B, token_id, amount)
+	commit = HASH(spend_pk_B, salt, token_id, amount)
 	
 	// transaction data
 	msg 	= CONCAT(token_id, amount)
 
-	// Encrypted tx data
-	ctxt_ii = AEAD_ENC(salt, msg, nil)
+	// Encrypt tx data using an AEAD scheme. ctxt acts as the associated data (AD)
+	enc_tx_data = AEAD_ENC(k, msg, ctxt)
 
 	// TODO: ZK PROOF HERE
 
 ]
 
-Alice -> Blockchain: [ctxt_i], [commit], [ctxt_ii]
+// Alice submits the transaction
+Alice -> Blockchain: [ctxt], [commit], [enc_tx_data]
 
 principal Blockchain[
-	// checks the zk proof and registers the commitment
+	// TODO: checks the zk proof and registers the commitment
 ]
 
-Blockchain -> Bob: [ctxt_i], [commit], [ctxt_ii]
+// Bob receives latest transaction event
+Blockchain -> Bob: [ctxt], [commit], [enc_tx_data]
 
 principal Bob[
 
 	// decrypt and obtain salt
-	salt_ = PKE_DEC(view_sk_B, ctxt_i)
+	ss_b = PKE_DEC(view_sk_B, ctxt)
+
+	// Derive salt and symmetric key from (ML-KEM) shared secret
+	salt_, k_ = HKDF(nil, ss_b, info)
 
 	// use salt to decrypt ciphertext
-	m = AEAD_DEC(salt_, ctxt_ii, nil)
+	m = AEAD_DEC(k_, enc_tx_data, ctxt)
 
-	// extract vars from plaintext
+	// extract tx data from decrypted plaintext
 	token_id_, amount_ = SPLIT(m)
 
 	// check if token id is correct
 	_ = ASSERT(token_id, token_id_)
 
-	// check if commitment opens
-	commit_ = HASH(salt_, spend_pk_B, token_id, amount_)
-
 	// check if Bob can open the commitment
+	commit_ = HASH(spend_pk_B, salt_, token_id, amount_)
 	_ = ASSERT(commit, commit_)
 
  ]
 
 queries[
+
+	// check if amount remains confidential
 	confidentiality? amount
-	confidentiality? salt
+	
+	// check if salt that acts as commitment randomness
+	confidentiality? salt	
 
+	// check if Alice and Bob both obtain the same shared secret (and derived values)
+	equivalence? ss_a, ss_b	
+	equivalence? k, k_				
 	equivalence? salt, salt_
+	
+	// check if Bob obtains the same commitment and tx data as the one Alice sent
 	equivalence? commit, commit_
+	equivalence? token_id, token_id_
+	equivalence? amount, amount_
 
+	// Check that all secret keys remain confidential
 	confidentiality? view_sk_A
 	confidentiality? view_sk_B
-
 	confidentiality? spend_sk_A
 	confidentiality? spend_sk_B
 ]
