@@ -1,5 +1,56 @@
 # Source of Truth
 
+This document explains the design decisions behind Enygma Payment and EnygmaDvP.
+Each section answers a single "why" question — the problem it solves, why this
+primitive was chosen over alternatives, and where it appears in the codebase.
+
+---
+
+## Table of Contents
+
+**Shared Primitives**
+
+- [Why Poseidon Hash?](#why-poseidon-hash)
+- [Why Groth16?](#why-groth16)
+- [Why BN254 (alt-bn128)?](#why-bn254-alt-bn128)
+- [Why gnark?](#why-gnark)
+
+**Enygma Payment**
+
+- [Why BabyJubJub Elliptic Curve?](#why-babyjubjub-elliptic-curve)
+- [Why Pedersen Commitment?](#why-pedersen-commitment)
+- [Why Range Proofs?](#why-range-proofs)
+- [Why an Anonymity Set?](#why-an-anonymity-set)
+- [Why Private Messaging Tags?](#why-private-messaging-tags)
+- [Why a Running Balance Model Instead of UTXO?](#why-a-running-balance-model-instead-of-utxo)
+
+**EnygmaDvP**
+
+- [Source of Truth](#source-of-truth)
+  - [Table of Contents](#table-of-contents)
+  - [Shared Primitives](#shared-primitives)
+    - [Why Poseidon Hash?](#why-poseidon-hash)
+    - [Why Groth16?](#why-groth16)
+    - [Why BN254 (alt-bn128)?](#why-bn254-alt-bn128)
+    - [Why gnark?](#why-gnark)
+  - [Enygma Payment](#enygma-payment)
+    - [Why BabyJubJub Elliptic Curve?](#why-babyjubjub-elliptic-curve)
+    - [Why Pedersen Commitment?](#why-pedersen-commitment)
+    - [Why Range Proofs?](#why-range-proofs)
+    - [Why an Anonymity Set?](#why-an-anonymity-set)
+    - [Why Private Messaging Tags?](#why-private-messaging-tags)
+    - [Why a Running Balance Model Instead of UTXO?](#why-a-running-balance-model-instead-of-utxo)
+  - [EnygmaDvP](#enygmadvp)
+    - [Why AES-256-GCM?](#why-aes-256-gcm)
+    - [Why ML-KEM-768 (Kyber)?](#why-ml-kem-768-kyber)
+    - [Why HKDF?](#why-hkdf)
+    - [Why Separate Spend Keys and View Keys?](#why-separate-spend-keys-and-view-keys)
+    - [Why a Merkle Tree?](#why-a-merkle-tree)
+    - [Why Is Each Token Standard Stored in Its Own Vault?](#why-is-each-token-standard-stored-in-its-own-vault)
+    - [Why Include a Salt in the Commitment?](#why-include-a-salt-in-the-commitment)
+
+---
+
 ## Shared Primitives
 
 ### Why Poseidon Hash?
@@ -77,6 +128,28 @@ of private asset transfers, it remains sufficient today.
   also why Poseidon and BabyJubJub are chosen — they are native to this same field.
 - **On-chain verification**: the Groth16 verifier contract calls the BN254 pairing
   precompile directly, keeping verification gas low for every proof submission.
+
+---
+
+### Why gnark?
+
+ZK circuits need a proving framework — a library that compiles the circuit,
+runs the trusted setup, and generates proofs. The main options are Circom
+(compiles to WebAssembly, proven in JS/browser) and gnark (Go-native, runs
+server-side).
+
+Enygma is a server-side system used by regulated financial institutions.
+There is no browser prover. The prover runs as a Go service alongside the
+rest of the backend. gnark fits this exactly — it is a Go library, proofs
+are generated in-process, and there is no JavaScript dependency or
+WebAssembly runtime to manage.
+
+gnark also compiles circuits directly to Go structs. The circuit definition,
+witness assignment, and proof generation all live in the same language and
+toolchain as the rest of the server code. This makes the circuit easier to
+audit, test, and integrate.
+
+Besides that gnark has far superior performance on proof generation time comparing to Circom and other Zk Snarks proof tested.
 
 ---
 
@@ -224,7 +297,6 @@ the right trade-off for regulated institutions transacting continuously.
 ---
 
 ## EnygmaDvP
-
 
 ### Why AES-256-GCM?
 
