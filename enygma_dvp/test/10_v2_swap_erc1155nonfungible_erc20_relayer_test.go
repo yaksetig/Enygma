@@ -1,3 +1,4 @@
+// Deprecated: This file is legacy and will not be used in the current version.
 package tests
 
 // Relayer variant of 10_v2_swap_erc1155nonfungible_erc20_onchain_test.go.

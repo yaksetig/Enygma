@@ -1,3 +1,4 @@
+// Deprecated: This file is legacy and will not be used in the current version.
 package tests
 
 // Relayer variant of 05_v2_zkdvp_two_phase_swap_test.go.

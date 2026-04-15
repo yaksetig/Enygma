@@ -1,3 +1,4 @@
+// Deprecated: This file is legacy and will not be used in the current version.
 package tests
 
 // On-chain V2 ERC20 consolidation using the 10-input / 2-output circuit:

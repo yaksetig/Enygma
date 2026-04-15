@@ -1,3 +1,4 @@
+// Deprecated: This file is legacy and will not be used in the current version.
 package tests
 
 // On-chain ZkDvP two-phase atomic swap: Alice swaps 5 USDT (ERC20) for Bob's concert ticket (ERC721).

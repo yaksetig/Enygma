@@ -1,3 +1,4 @@
+// Deprecated: This file is legacy and will not be used in the current version.
 package tests
 
 // On-chain integration test for the V2 ERC20 non-interactive flow:

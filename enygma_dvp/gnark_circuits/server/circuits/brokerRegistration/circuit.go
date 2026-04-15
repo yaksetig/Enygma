@@ -1,3 +1,4 @@
+// Deprecated: This file is legacy and will not be used in the current version.
 package brokerRegistration
 
 import(
