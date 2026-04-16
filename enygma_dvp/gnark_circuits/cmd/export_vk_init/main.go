@@ -54,32 +54,43 @@ type circomVK struct {
 
 // circuitMapping maps circuit names (used in enygmadvp.config.json) to VK key files
 // (relative to the gnark_circuits/ directory).
+//
+// All 25 entries must be present because the vault contracts use hardcoded VK
+// indices: VK_ID_ERC20_JOINSPLIT=0, VK_ID_DVP_INITIATOR=23, VK_ID_DVP_DESTINATION=24.
+// Entries at unused positions (1–22) use pre-existing keys so the index numbering
+// is maintained; those VKs are never exercised by integration tests (test/01–04).
 var circuitMapping = map[string]string{
-	"JoinSplitErc20":                      "scripts/keys/JoinErc20VK.key",
-	"OwnershipErc721":                     "scripts/keys/OwnershipERC721VK.key",
-	"OwnershipErc1155NonFungible":         "scripts/keys/OwnershipERC1155NonFungibleVK.key",
-	"OwnershipErc1155Fungible":            "scripts/keys/OwnershipERC1155FungibleVK.key",
-	"JoinSplitErc1155":                    "scripts/keys/JoiSplitERC1155VK.key",
-	"BatchErc1155":                        "scripts/keys/ERC1155BatchVK.key",
-	"JoinSplitErc20_10_2":                 "scripts/keys/JoinErc20_10_2VK.key",
-	"AuctionInit":                         "scripts/keys/AuctionInitVK.key",
-	"AuctionBid":                          "scripts/keys/AuctionBidVK.key",
-	"AuctionNotWinningBid":                "scripts/keys/AuctionNotWinningVK.key",
-	"AuctionPrivateOpening":               "scripts/keys/AuctionPrivateOpeningVK.key",
-	"BrokerRegistration":                  "scripts/keys/BrokerRegistrationVK.key",
-	"LegitBroker":                         "scripts/keys/LegitBrokerVK.key",
-	"JoinSplitErc20WithBrokerV1":          "scripts/keys/JoinERC20WithBrokerVK.key",
-	"JoinSplitErc1155WithBrokerV1":        "scripts/keys/JoiSplitERC1155WithBrokerVK.key",
-	"JoinSplitErc1155WithAuditor":         "scripts/keys/JoinSplitERC1155AuditorVK.key",
+	// index 0 — covered by test/02 (Payment uses VK_ID_ERC20_JOINSPLIT=0)
+	"Payment": "scripts/keys/PaymentVK.key",
+
+	// indices 1–22 — NOT covered by integration tests; old keys kept for index alignment
+	"OwnershipErc721":                        "scripts/keys/OwnershipERC721VK.key",
+	"OwnershipErc1155NonFungible":            "scripts/keys/OwnershipERC1155NonFungibleVK.key",
+	"OwnershipErc1155Fungible":               "scripts/keys/OwnershipERC1155FungibleVK.key",
+	"JoinSplitErc1155":                       "scripts/keys/JoiSplitERC1155VK.key",
+	"BatchErc1155":                           "scripts/keys/ERC1155BatchVK.key",
+	"JoinSplitErc20_10_2":                    "scripts/keys/JoinErc20_10_2VK.key",
+	"AuctionInit":                            "scripts/keys/AuctionInitVK.key",
+	"AuctionBid":                             "scripts/keys/AuctionBidVK.key",
+	"AuctionNotWinningBid":                   "scripts/keys/AuctionNotWinningVK.key",
+	"AuctionPrivateOpening":                  "scripts/keys/AuctionPrivateOpeningVK.key",
+	"BrokerRegistration":                     "scripts/keys/BrokerRegistrationVK.key",
+	"LegitBroker":                            "scripts/keys/LegitBrokerVK.key",
+	"JoinSplitErc20WithBrokerV1":             "scripts/keys/JoinERC20WithBrokerVK.key",
+	"JoinSplitErc1155WithBrokerV1":           "scripts/keys/JoiSplitERC1155WithBrokerVK.key",
+	"JoinSplitErc1155WithAuditor":            "scripts/keys/JoinSplitERC1155AuditorVK.key",
 	"OwnershipErc1155NonFungibleWithAuditor": "scripts/keys/OwnershipERC1155NonFungibleAuditorVK.key",
-	"BatchErc1155NonFungibleWithAuditor":  "scripts/keys/ERC1155BatchAuditorVK.key",
-	"OwnershipErc721WithAuditor":          "scripts/keys/OwnershipERC721AuditorVK.key",
-	"JoinSplitErc20WithAuditor":           "scripts/keys/JoinERC20AuditorVK.key",
-	"JoinSplitErc20_10_2_WithAuditor":     "scripts/keys/JoinERC20_10_2AuditorVK.key",
-	"AuctionInit_Auditor":                 "scripts/keys/AuctionInitAuditorVK.key",
-	"AuctionBid_Auditor":                  "scripts/keys/AuctionBidAuditorVK.key",
-	"DvPInitiator":                        "scripts/keys/DvPInitiatorVK.key",
-	"DvPDestination":                      "scripts/keys/DvPDestinationVK.key",
+	"BatchErc1155NonFungibleWithAuditor":     "scripts/keys/ERC1155BatchAuditorVK.key",
+	"OwnershipErc721WithAuditor":             "scripts/keys/OwnershipERC721AuditorVK.key",
+	"JoinSplitErc20WithAuditor":              "scripts/keys/JoinERC20AuditorVK.key",
+	"JoinSplitErc20_10_2_WithAuditor":        "scripts/keys/JoinERC20_10_2AuditorVK.key",
+	"AuctionInit_Auditor":                    "scripts/keys/AuctionInitAuditorVK.key",
+	"AuctionBid_Auditor":                     "scripts/keys/AuctionBidAuditorVK.key",
+
+	// index 23 — covered by test/03 and test/04 (VK_ID_DVP_INITIATOR=23)
+	"DvPInitiator": "scripts/keys/DvPInitiatorVK.key",
+	// index 24 — covered by test/03 and test/04 (VK_ID_DVP_DESTINATION=24)
+	"DvPDestination": "scripts/keys/DvPDestinationVK.key",
 }
 
 func g1Fields(x, y *big.Int) []string {

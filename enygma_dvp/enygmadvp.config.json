@@ -145,9 +145,9 @@
     "circuits": [
       {
         "id": 1,
-        "filename": "JoinSplitErc20",
+        "filename": "Payment",
         "tags": [
-          "default",
+          "payment",
           "erc20",
           "merkle",
           "2-input",
