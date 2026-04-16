@@ -1,0 +1,427 @@
+theory pq_payments
+begin
+
+builtins: hashing, asymmetric-encryption
+
+functions: note_commit/4, nullifier/2, zk_prove/6, derive_salt/2, derive_key/2, aead_enc/3
+
+
+/*************************************************************/
+/* Assumptions / abstraction boundary                        */
+/*************************************************************/
+/*
+  zk_prove(tx_id, rt, oldc, nf, cb, cc) abstracts a proof system that is
+  assumed to be:
+
+  - sound,
+  - binding to all public inputs,
+  - non-malleable enough for this protocol.
+
+  Semantically, zk_prove(...) is intended to prove knowledge of a witness
+  such that:
+
+  - oldc is included in a note tree with valid root rt,
+  - oldc opens to Alice's input note,
+  - nf is the correct nullifier for that input,
+  - cb is Bob's output note,
+  - cc is Alice's change note,
+  - tx_id is bound into the statement,
+  - balance conservation holds:
+      amt_old = amt_B + amt_change
+
+  We deliberately DO NOT model arithmetic balance conservation inside this
+  Tamarin theory. It is part of the abstract ZK assumption here and is meant
+  to be discharged elsewhere (e.g. in the Lean artifact).
+*/
+
+
+/*************************************************************/
+/* Setup                                                     */
+/*************************************************************/
+
+rule Setup:
+  [ Fr(~token_id), Fr(~info), Fr(~rt0) ]
+  --[ ParamsCreated(~token_id, ~info),
+      RootPublished(~rt0) ]->
+  [ !Token(~token_id),
+    !Info(~info),
+    !ValidRoot(~rt0) ]
+
+
+/*************************************************************/
+/* Registration                                              */
+/*************************************************************/
+
+rule RegisterAlice:
+  [ Fr(~view_sk_A), Fr(~spend_sk_A) ]
+  --[ AliceRegistered(pk(~view_sk_A), h(~spend_sk_A)) ]->
+  [ !AliceKeys(~view_sk_A, ~spend_sk_A),
+    !AlicePub(pk(~view_sk_A), h(~spend_sk_A)) ]
+
+
+rule RegisterBob:
+  [ Fr(~view_sk_B), Fr(~spend_sk_B) ]
+  --[ BobRegistered(pk(~view_sk_B), h(~spend_sk_B)) ]->
+  [ !BobKeys(~view_sk_B, ~spend_sk_B),
+    !BobPub(pk(~view_sk_B), h(~spend_sk_B)) ]
+
+
+/*************************************************************/
+/* Initial funding note for Alice                            */
+/*************************************************************/
+/*
+  This model starts from a spendable note for Alice.
+  It is a spend/transfer model, not a mint/issuance soundness model.
+*/
+
+rule FundAlice:
+  [ Fr(~salt_old), Fr(~amt_old),
+    !AliceKeys(view_sk_A, spend_sk_A),
+    !Token(t)
+  ]
+  --[ WalletCreated(
+        note_commit(h(spend_sk_A), ~salt_old, t, ~amt_old),
+        h(spend_sk_A),
+        t,
+        ~amt_old,
+        ~salt_old
+      ) ]->
+  [ Note(note_commit(h(spend_sk_A), ~salt_old, t, ~amt_old), h(spend_sk_A), t, ~amt_old, ~salt_old),
+    Wallet(note_commit(h(spend_sk_A), ~salt_old, t, ~amt_old), h(spend_sk_A), t, ~amt_old, ~salt_old) ]
+
+
+/*************************************************************/
+/* Spend                                                     */
+/*************************************************************/
+
+rule Spend:
+  [ Wallet(oldc, pkA, t, amt_old, salt_old),
+    !AliceKeys(view_sk_A, spend_sk_A),
+    !BobPub(view_pk_B, pkB),
+    !Info(info),
+    !ValidRoot(rt),
+    Fr(~ss),
+    Fr(~amt_B),
+    Fr(~amt_change),
+    Fr(~salt_change),
+    Fr(~tx_id)
+  ]
+  --[ SpendAttempt(
+        ~tx_id,
+        rt,
+        oldc,
+        nullifier(spend_sk_A, salt_old),
+        ~amt_B,
+        ~amt_change
+      ),
+      SpendUsesWallet(
+        ~tx_id,
+        rt,
+        oldc,
+        pkA,
+        t,
+        amt_old,
+        salt_old
+      ),
+      PendingCreated(
+        ~tx_id,
+        rt,
+        oldc,
+        nullifier(spend_sk_A, salt_old)
+      ) ]->
+  [ Out(<
+        ~tx_id,
+        rt,
+        aenc(~ss, view_pk_B),
+        oldc,
+        nullifier(spend_sk_A, salt_old),
+        note_commit(pkB, derive_salt(~ss, info), t, ~amt_B),
+        note_commit(pkA, ~salt_change, t, ~amt_change),
+        aead_enc(<~tx_id, t, ~amt_B>, derive_key(~ss, info), aenc(~ss, view_pk_B)),
+        zk_prove(
+          ~tx_id,
+          rt,
+          oldc,
+          nullifier(spend_sk_A, salt_old),
+          note_commit(pkB, derive_salt(~ss, info), t, ~amt_B),
+          note_commit(pkA, ~salt_change, t, ~amt_change)
+        )
+      >),
+
+    Pending(
+      ~tx_id,
+      rt,
+      oldc,
+      pkA,
+      t,
+      amt_old,
+      salt_old,
+      nullifier(spend_sk_A, salt_old),
+      note_commit(pkB, derive_salt(~ss, info), t, ~amt_B),
+      pkB,
+      ~amt_B,
+      derive_salt(~ss, info),
+      note_commit(pkA, ~salt_change, t, ~amt_change),
+      ~amt_change,
+      ~salt_change,
+      aenc(~ss, view_pk_B),
+      aead_enc(<~tx_id, t, ~amt_B>, derive_key(~ss, info), aenc(~ss, view_pk_B))
+    )
+  ]
+
+
+/*************************************************************/
+/* Accept                                                    */
+/*************************************************************/
+
+rule Accept:
+  [ Pending(tx_id, rt, oldc, pkA, t, amt_old, salt_old, nf, cb, pkB, amt_B, salt_B, cc, amt_change, salt_change, ctxt, encdata),
+    In(<tx_id, rt, ctxt, oldc, nf, cb, cc, encdata, zk_prove(tx_id, rt, oldc, nf, cb, cc)>),
+    Note(oldc, pkA, t, amt_old, salt_old),
+    !ValidRoot(rt),
+    Fr(~rt_new)
+  ]
+  --[ Accepted(tx_id, rt, oldc, nf, amt_old, amt_B, amt_change),
+      AcceptConsumes(tx_id, rt, oldc, nf),
+      RootPublished(~rt_new),
+      SpentRecorded(nf),
+      SpentInput(oldc),
+      InputNullifier(oldc, nf),
+      SeenTxRecorded(tx_id),
+      BobNoteCreated(cb, pkB, t, amt_B, salt_B),
+      ChangeNoteCreated(cc, pkA, t, amt_change, salt_change),
+      AcceptedTxRecorded(tx_id, rt, ctxt, pkB, t, amt_B, salt_B, cb, encdata) ]->
+  [ Spent(nf),
+    SpentNote(oldc),
+    SeenTx(tx_id),
+    Note(cb, pkB, t, amt_B, salt_B),
+    Note(cc, pkA, t, amt_change, salt_change),
+    AcceptedTx(tx_id, rt, ctxt, pkB, t, amt_B, salt_B, cb, encdata),
+    !ValidRoot(~rt_new) ]
+
+
+/*************************************************************/
+/* Bob receives and successfully decrypts                    */
+/*************************************************************/
+/*
+  Successful receipt is enforced by matching the accepted transaction against
+  the successful decapsulation / key-derivation / AEAD path in the premise.
+*/
+
+rule BobReceive:
+  [ AcceptedTx(
+      tx_id,
+      rt,
+      aenc(ss, pk(view_sk_B)),
+      pkB,
+      t,
+      amt_B,
+      derive_salt(ss, info),
+      note_commit(pkB, derive_salt(ss, info), t, amt_B),
+      aead_enc(<tx_id, t, amt_B>, derive_key(ss, info), aenc(ss, pk(view_sk_B)))
+    ),
+    !BobPub(pk(view_sk_B), pkB),
+    !BobKeys(view_sk_B, spend_sk_B),
+    !Info(info)
+  ]
+  --[ BobAccepted(
+        tx_id,
+        rt,
+        pkB,
+        t,
+        amt_B,
+        derive_salt(ss, info),
+        note_commit(pkB, derive_salt(ss, info), t, amt_B)
+      ),
+      BobRecovered(tx_id, t, amt_B) ]->
+  [ ]
+
+
+/*************************************************************/
+/* Sources lemma (consumed during preprocessing)             */
+/*************************************************************/
+/*
+  Tells Tamarin that every AcceptConsumes traces back to a prior
+  PendingCreated. This cuts the combinatorial backward search on
+  Accept's 9-tuple input message and is the main efficiency lever.
+*/
+
+lemma accept_sources [sources]:
+  "All tx_id rt oldc nf #i.
+     AcceptConsumes(tx_id, rt, oldc, nf) @ i
+     ==> (Ex #j. PendingCreated(tx_id, rt, oldc, nf) @ j & #j < #i)"
+
+
+/*************************************************************/
+/* Executable                                                */
+/*************************************************************/
+
+lemma executable:
+  exists-trace
+  "Ex oldc pkA t amt salt #i.
+     WalletCreated(oldc, pkA, t, amt, salt) @ i"
+
+
+/*************************************************************/
+/* Attempt and wallet chain                                  */
+/*************************************************************/
+
+lemma accepted_implies_attempt [reuse]:
+  "All tx_id rt oldc nf amt_old amt_B amt_change #i.
+     Accepted(tx_id, rt, oldc, nf, amt_old, amt_B, amt_change) @ i
+     ==> (Ex #j.
+           SpendAttempt(tx_id, rt, oldc, nf, amt_B, amt_change) @ j
+           & #j < #i)"
+
+lemma spend_uses_created_wallet [reuse]:
+  "All tx_id rt oldc pkA t amt_old salt_old #i.
+     SpendUsesWallet(tx_id, rt, oldc, pkA, t, amt_old, salt_old) @ i
+     ==> (Ex #j.
+           WalletCreated(oldc, pkA, t, amt_old, salt_old) @ j
+           & #j < #i)"
+
+lemma accepted_has_spend_wallet [reuse, use_induction]:
+  "All tx_id rt oldc nf amt_old amt_B amt_change #i.
+     Accepted(tx_id, rt, oldc, nf, amt_old, amt_B, amt_change) @ i
+     ==> (Ex pkA t salt_old #j.
+           SpendUsesWallet(tx_id, rt, oldc, pkA, t, amt_old, salt_old) @ j
+           & #j < #i)"
+
+/*
+  Corollary chaining the two reusable lemmas above: every accepted
+  transaction's input was a previously created wallet note.
+*/
+lemma accepted_input_was_created:
+  "All tx_id rt oldc nf amt_old amt_B amt_change #i.
+     Accepted(tx_id, rt, oldc, nf, amt_old, amt_B, amt_change) @ i
+     ==> (Ex pkA t salt #j.
+           WalletCreated(oldc, pkA, t, amt_old, salt) @ j
+           & #j < #i)"
+
+
+/*************************************************************/
+/* Uniqueness and replay properties (by induction)           */
+/*************************************************************/
+
+lemma input_nullifier_unique [reuse, use_induction]:
+  "All oldc nf1 nf2 #i #j.
+     InputNullifier(oldc, nf1) @ i
+     & InputNullifier(oldc, nf2) @ j
+     ==> nf1 = nf2"
+
+lemma no_double_spend [use_induction]:
+  "All nf #i #j.
+     SpentRecorded(nf) @ i
+     & SpentRecorded(nf) @ j
+     ==> #i = #j"
+
+lemma no_replay_seen_tx [use_induction]:
+  "All tx_id #i #j.
+     SeenTxRecorded(tx_id) @ i
+     & SeenTxRecorded(tx_id) @ j
+     ==> #i = #j"
+
+/*
+  At most one Accept per tx_id. Follows from Fr(~tx_id) and linear
+  Pending consumption; induction closes it quickly.
+*/
+lemma accept_unique_per_tx_id [reuse, use_induction]:
+  "All tx_id rt1 oldc1 nf1 amt_old1 amt_B1 amt_change1
+       rt2 oldc2 nf2 amt_old2 amt_B2 amt_change2 #i #j.
+     Accepted(tx_id, rt1, oldc1, nf1, amt_old1, amt_B1, amt_change1) @ i
+     & Accepted(tx_id, rt2, oldc2, nf2, amt_old2, amt_B2, amt_change2) @ j
+     ==> #i = #j"
+
+
+/*************************************************************/
+/* Root / anchor consistency                                 */
+/*************************************************************/
+
+lemma accepted_uses_published_root:
+  "All tx_id rt oldc nf amt_old amt_B amt_change #i.
+     Accepted(tx_id, rt, oldc, nf, amt_old, amt_B, amt_change) @ i
+     ==> (Ex #j.
+           RootPublished(rt) @ j
+           & #j < #i)"
+
+
+/*************************************************************/
+/* AcceptedTx ↔ Accept correspondence                        */
+/*************************************************************/
+
+lemma acceptedtx_has_accept [reuse]:
+  "All tx_id rt ctxt pkB t amt_B salt_B cb encdata #i.
+     AcceptedTxRecorded(tx_id, rt, ctxt, pkB, t, amt_B, salt_B, cb, encdata) @ i
+     ==> (Ex oldc nf amt_old amt_change #j.
+           Accepted(tx_id, rt, oldc, nf, amt_old, amt_B, amt_change) @ j
+           & #j = #i)"
+
+/*
+  Same-timepoint uniqueness, proved by induction. The component-wise
+  version is a trivial corollary below.
+*/
+lemma accepted_tx_same_timepoint [reuse, use_induction]:
+  "All tx_id rt1 ctxt1 pkB1 t1 amt1 salt1 cb1 enc1
+       rt2 ctxt2 pkB2 t2 amt2 salt2 cb2 enc2 #i #j.
+     AcceptedTxRecorded(tx_id, rt1, ctxt1, pkB1, t1, amt1, salt1, cb1, enc1) @ i
+     & AcceptedTxRecorded(tx_id, rt2, ctxt2, pkB2, t2, amt2, salt2, cb2, enc2) @ j
+     ==> #i = #j"
+
+lemma accepted_tx_tuple_unique:
+  "All tx_id rt1 ctxt1 pkB1 t1 amt1 salt1 cb1 enc1
+       rt2 ctxt2 pkB2 t2 amt2 salt2 cb2 enc2 #i #j.
+     AcceptedTxRecorded(tx_id, rt1, ctxt1, pkB1, t1, amt1, salt1, cb1, enc1) @ i
+     & AcceptedTxRecorded(tx_id, rt2, ctxt2, pkB2, t2, amt2, salt2, cb2, enc2) @ j
+     ==> rt1 = rt2
+       & ctxt1 = ctxt2
+       & pkB1 = pkB2
+       & t1 = t2
+       & amt1 = amt2
+       & salt1 = salt2
+       & cb1 = cb2
+       & enc1 = enc2"
+
+
+/*************************************************************/
+/* Bob properties                                            */
+/*************************************************************/
+
+lemma bob_accepts_only_valid [reuse]:
+  "All tx_id rt pkB t amt_B salt_B cb #i.
+     BobAccepted(tx_id, rt, pkB, t, amt_B, salt_B, cb) @ i
+     ==> (Ex oldc nf amt_old amt_change #j.
+           Accepted(tx_id, rt, oldc, nf, amt_old, amt_B, amt_change) @ j
+           & #j < #i)"
+
+lemma bob_output_is_chain_output [reuse]:
+  "All tx_id rt pkB t amt_B salt_B cb #i.
+     BobAccepted(tx_id, rt, pkB, t, amt_B, salt_B, cb) @ i
+     ==> (Ex #j.
+           BobNoteCreated(cb, pkB, t, amt_B, salt_B) @ j
+           & #j < #i)"
+
+lemma bob_commitment_consistency:
+  "All tx_id rt pkB t amt_B salt_B cb #i.
+     BobAccepted(tx_id, rt, pkB, t, amt_B, salt_B, cb) @ i
+     ==> cb = note_commit(pkB, salt_B, t, amt_B)"
+
+lemma bob_recovered_matches_accept [reuse]:
+  "All tx_id t amt_B #i.
+     BobRecovered(tx_id, t, amt_B) @ i
+     ==> (Ex rt pkB salt_B cb #j.
+           BobAccepted(tx_id, rt, pkB, t, amt_B, salt_B, cb) @ j
+           & #j = #i)"
+
+/*
+  Direct recovery-soundness: Bob's recovered amount equals a chain-
+  accepted amount. Chains through bob_recovered_matches_accept
+  and bob_accepts_only_valid.
+*/
+lemma bob_recovery_matches_chain:
+  "All tx_id t amt_B #i.
+     BobRecovered(tx_id, t, amt_B) @ i
+     ==> (Ex rt oldc nf amt_old amt_change #j.
+           Accepted(tx_id, rt, oldc, nf, amt_old, amt_B, amt_change) @ j
+           & #j < #i)"
+
+end
