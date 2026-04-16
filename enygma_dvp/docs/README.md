@@ -1,27 +1,38 @@
-# zkDVP — Flow Documentation
+# Enygma DvP — Documentation
 
-This directory contains a detailed description of every flow supported by the Enygma DvP system,
-including sequence diagrams, step-by-step function call traces with example values, and contract
-references.
+This directory contains documentation for the Enygma DvP system.
 
 ---
 
-## Flows
+## Integration Tests
 
-| #                                                | Flow                 | Asset                | Circuit                          | Status |
-| ------------------------------------------------ | -------------------- | -------------------- | -------------------------------- | ------ |
-| [01](./flows/01_deposit.md)                      | Deposit              | ERC20                | None                             | ✅     |
-| [02](./flows/02_private_mint.md)                 | Private Mint         | ERC20                | privateMint                      | ✅     |
-| [03](./flows/03_transfer_erc20.md)               | Transfer (JoinSplit) | ERC20                | joinSplitERC20                   | ✅     |
-| [04](./flows/04_withdraw_erc20.md)               | Withdraw             | ERC20                | joinSplitERC20                   | ✅     |
-| [05](./flows/05_transfer_erc721.md)              | Transfer             | ERC721               | ownershipERC721                  | ✅     |
-| [06](./flows/06_swap_erc721_erc20.md)            | Atomic DVP Swap      | ERC721 ↔ ERC20       | ownershipERC721 + joinSplitERC20 | ✅     |
-| [07](./flows/07_transfer_erc1155_fungible.md)    | Transfer (JoinSplit) | ERC1155 Fungible     | erc1155Fungible                  | ✅     |
-| [08](./flows/08_transfer_erc1155_nonfungible.md) | Transfer             | ERC1155 Non-Fungible | erc1155NonFungible               | ✅     |
-| [09](./flows/09_swap_erc1155nonfungible_erc20.md) | Atomic DVP Swap     | ERC1155 NFT ↔ ERC20  | erc1155NonFungible + joinSplitERC20 | ✅  |
-| [10](./flows/10_zkdvp_two_phase_swap_relayer.md) | Atomic DVP Swap (Relayer) | ERC20 ↔ ERC721  | joinSplitERC20 + ownershipERC721 | ✅     |
-| [11](./flows/11_swap_erc721_erc20_relayer.md)    | Atomic DVP Swap (Relayer) | ERC721 ↔ ERC20  | ownershipERC721 + joinSplitERC20 | ✅     |
-| [12](./flows/12_swap_erc1155nonfungible_erc20_relayer.md) | Atomic DVP Swap (Relayer) | ERC1155 NFT ↔ ERC20 | erc1155NonFungible + joinSplitERC20 | ✅ |
+All integration tests live in `test/`. They require a running Hardhat node and gnark server.
+Run with:
+
+```bash
+cd test && CC=/usr/bin/clang go test . -v -timeout 600s
+```
+
+| File | Test | Flow | Description |
+|------|------|------|-------------|
+| `01_v2_erc20_private_mint_test.go` | `TestV2Erc20OnChain_PrivateMint` | [diagram](./flows/01_private_mint.md) | Alice privately mints 100 USDT into the ERC20 vault without a public deposit. Proves a V2 commitment on-chain via the hardcoded `PrivateMintVerifier`. Alice then scans the emitted `PrivateMint` event and confirms the note is spendable. |
+| `02_v2_erc20_payment_test.go` | `TestV2Erc20Payment` | [diagram](./flows/02_erc20_payment.md) | Alice deposits 40 USDT, then pays 30 USDT to Bob and receives 10 USDT change. Uses the Payment JoinSplit circuit (2 inputs, 2 outputs). Bob and Alice both scan the on-chain events and decrypt their respective notes via ML-KEM. |
+| `03_v2_dvp_test.go` | `TestV2DvP` | [diagram](./flows/03_dvp.md) | Alice and Bob perform an atomic DvP swap: Alice delivers 30 USDT (ERC20), Bob delivers an ERC721 ticket (tokenId=42). Uses the DvPInitiator + DvPDestination circuits. Bob scans Alice's encrypted output to confirm he receives the USDT note. |
+| `04_v2_dvp_deadline_test.go` | `TestV2DvP_WithDeadline` | [diagram](./flows/04_dvp_deadline.md) | Three sub-scenarios for the deadline-protected DvP swap (Alice 50 USDT ↔ Bob ERC721): |
+| | `→ FullSwap` | | Happy path — both legs submitted before deadline, swap settles atomically. |
+| | `→ DeadlineExpired` | | Bob never responds. Hardhat time advances past deadline. Alice calls `claimSwapTimeout`; revert commitment is recoverable. |
+| | `→ InvalidProof` | | Bob submits a zeroed (invalid) proof — rejected on-chain. Deadline passes. Alice reclaims via `claimSwapTimeout`. |
+
+---
+
+## Unit Tests
+
+Unit tests live alongside the integration tests in `test/` (no server required):
+
+| File | Covers |
+|------|--------|
+| `merkle_test.go` | Incremental Merkle tree: insert, prove, root computation |
+| `utils_test.go` | Crypto primitives: Poseidon, nullifier, commitment, BabyJubJub, ML-KEM, key derivation |
 
 ---
 
@@ -29,18 +40,18 @@ references.
 
 All flows share the same cryptographic building blocks:
 
-| Primitive                   | Purpose                                                   | Implementation                    |
-| --------------------------- | --------------------------------------------------------- | --------------------------------- |
-| **Poseidon hash**           | Commitment and nullifier computation                      | `src/core/utils.go`               |
-| **ML-KEM-768**              | Non-interactive note delivery (encapsulate / decapsulate) | `src/core/utils.go:216`           |
-| **ChaCha20-Poly1305**       | Encrypt tokenId and amount inside `ctII`                  | `src/core/utils.go:317`           |
-| **Groth16**                 | ZK proof generation and verification                      | `gnark_circuits/server/circuits/` |
-| **Incremental Merkle tree** | On-chain membership proofs (depth 8)                      | `contracts/core/`                 |
+| Primitive | Purpose | Implementation |
+|-----------|---------|----------------|
+| **Poseidon hash** | Commitment and nullifier computation | `src/core/utils.go` |
+| **ML-KEM-768** | Non-interactive note delivery (encapsulate / decapsulate) | `src/core/utils.go` |
+| **ChaCha20-Poly1305** | Encrypt tokenId and amount inside encrypted note payload | `src/core/utils.go` |
+| **Groth16** | ZK proof generation and on-chain verification | `gnark_circuits/server/circuits/` |
+| **Incremental Merkle tree** | On-chain membership proofs (depth 8) | `contracts/core/` |
 
-### Commitment formula (Any token type)
+### Commitment formula
 
 ```
-commitment = Poseidon4(pk_spend, saltBField, amount, tokenId)
+commitment = Poseidon4(pk_spend, saltB, amount, tokenId)
 ```
 
 ### Nullifier formula
@@ -54,12 +65,15 @@ without revealing which commitment it corresponds to.
 
 ---
 
-## How to read these docs
+## Key Source Files
 
-Each flow document contains:
-
-1. **Overview** — what the flow does and why
-2. **Participants** — who is involved and in what role
-3. **Diagram** — Mermaid sequence diagram with example values
-4. **Step-by-step** — every function called, with file path, line number, and concrete inputs/outputs
-5. **Contract references** — table of every Solidity function and event touched
+| Path | Purpose |
+|------|---------|
+| `src/core/prover.go` | `GnarkClient`, `ProofResult`, shared types, HTTP transport |
+| `src/core/prover_erc.go` | Typed provers: ERC20, ERC721, ERC1155, Payment, PrivateMint |
+| `src/core/prover_auction.go` | Typed provers: Auction circuits, DvP circuits |
+| `src/core/utils.go` | Key derivation, ML-KEM, Poseidon, Merkle helpers |
+| `gnark_circuits/server/circuits/` | gnark circuit definitions and HTTP handlers |
+| `contracts/core/contracts/` | Solidity: `EnygmaDvp.sol`, `PrivateMintVerifier.sol`, vaults |
+| `scripts/deploy.go` | Deploy all contracts; writes `build/receipts.json` |
+| `scripts/init.go` | Register VKs, coin vaults, asset groups |
