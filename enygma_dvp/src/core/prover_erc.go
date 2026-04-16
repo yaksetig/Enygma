@@ -1932,3 +1932,218 @@ func (c *GnarkClient) DvPDestinationProof(
 		NumberOfOutputs: 1,
 	}, nil
 }
+
+// --- legacy map-based provers (used by GnarkProver dispatch) ---
+
+// Erc20Proof generates a JoinSplitERC20 proof (map-based pass-through).
+func (c *GnarkClient) Erc20Proof(inputs map[string]interface{}, zkeyPath string) (*ProofResponse, error) {
+	endpoint := "/proof/joinSplitERC20"
+	if zkeyPath == "./build/JoinSplitErc20_10_2.zkey" {
+		endpoint = "/proof/joinSplitERC20_10_2"
+	}
+
+	chunks := SplitPathElements(inputs)
+
+	payload := map[string]interface{}{
+		"StMessage":              toString(inputs["st_message"]),
+		"StTreeNumber":           toStringSlice(inputs["st_treeNumbers"]),
+		"StMerkleRoots":          inputs["st_merkleRoots"],
+		"StNullifiers":           inputs["st_nullifiers"],
+		"StCommitmentOut":        inputs["st_commitmentsOut"],
+		"WtPrivateKeysIn":        inputs["wt_privateKeysIn"],
+		"WtPublicKeysOut":        inputs["wt_publicKeysOut"],
+		"WtPathElements":         chunks,
+		"WtPathIndices":          toStringSlice(inputs["wt_pathIndices"]),
+		"WtValuesIn":             inputs["wt_valuesIn"],
+		"WtValuesOut":            inputs["wt_valuesOut"],
+		"WtErc20ContractAddress": toString(inputs["wt_erc20ContractAddress"]),
+	}
+
+	_, err := c.PostProof(endpoint, payload)
+	if err != nil {
+		return nil, err
+	}
+	return &ProofResponse{Status: 200, Message: "ok"}, nil
+}
+
+// Erc721Proof generates an OwnershipERC721 proof (map-based pass-through).
+func (c *GnarkClient) Erc721Proof(inputs map[string]interface{}) (*ProofResponse, error) {
+	payload := map[string]interface{}{
+		"StMessage":       inputs["st_message"],
+		"StTreeNumbers":   toStringSlice(inputs["st_treeNumbers"]),
+		"StMerkleRoots":   toStringSlice(inputs["st_merkleRoots"]),
+		"StNullifiers":    inputs["st_nullifiers"],
+		"StCommitmentOut": inputs["st_commitmentsOut"],
+		"WtPrivateKeysIn": inputs["wt_privateKeysIn"],
+		"WtValues":        inputs["wt_values"],
+		"WtPathElements":  []interface{}{inputs["wt_pathElements"]},
+		"WtPathIndices":   inputs["wt_pathIndices"],
+		"WtPublicKeysOut": inputs["wt_publicKeysOut"],
+	}
+
+	_, err := c.PostProof("/proof/ownershipERC721", payload)
+	if err != nil {
+		return nil, err
+	}
+	return &ProofResponse{Status: 200, Message: "ok"}, nil
+}
+
+// Erc1155FungibleProof generates an ERC1155 fungible proof (map-based pass-through).
+func (c *GnarkClient) Erc1155FungibleProof(inputs map[string]interface{}) (*ProofResponse, error) {
+	pathElements := toInterfaceSlice(inputs["wt_pathElements"])
+	split1, split2 := splitIntoTwo(pathElements, 8)
+
+	payload := map[string]interface{}{
+		"StMessage":                inputs["st_message"],
+		"StTreeNumbers":            toStringSlice(inputs["st_treeNumbers"]),
+		"StMerkleRoots":            inputs["st_merkleRoots"],
+		"StCommitmentOut":          inputs["st_commitmentsOut"],
+		"StNullifiers":             inputs["st_nullifiers"],
+		"StAssetGroupMerkleRoot":   toString(inputs["st_assetGroup_merkleRoot"]),
+		"StAssetGroupTreeNumber":   toString(inputs["st_assetGroup_treeNumber"]),
+		"WtPrivateKeysIn":          inputs["wt_privateKeysIn"],
+		"WtValuesIn":               toStringSlice(inputs["wt_valuesIn"]),
+		"WtPathElements":           []interface{}{split1, split2},
+		"WtPathIndices":            toStringSlice(inputs["wt_pathIndices"]),
+		"WtErc1155ContractAddress": inputs["wt_erc1155ContractAddress"],
+		"WtErc1155TokenId":         inputs["wt_erc1155TokenId"],
+		"WtPublicKeysOut":          inputs["wt_publicKeysOut"],
+		"WtValuesOut":              toStringSlice(inputs["wt_valuesOut"]),
+		"WtAssetGroupPathElements": toStringSlice(inputs["wt_assetGroup_pathElements"]),
+		"WtAssetGroupPathIndices":  inputs["wt_assetGroup_pathIndices"],
+	}
+
+	_, err := c.PostProof("/proof/erc155Fungible", payload)
+	if err != nil {
+		return nil, err
+	}
+	return &ProofResponse{Status: 200, Message: "ok"}, nil
+}
+
+// Erc1155FungibleAuditorMapProof generates an ERC1155 fungible proof with auditor fields (map-based).
+func (c *GnarkClient) Erc1155FungibleAuditorMapProof(inputs map[string]interface{}) (*ProofResponse, error) {
+	pathElements := toInterfaceSlice(inputs["wt_pathElements"])
+	split1, split2 := splitIntoTwo(pathElements, 8)
+
+	payload := map[string]interface{}{
+		"StMessage":                inputs["st_message"],
+		"StTreeNumbers":            toStringSlice(inputs["st_treeNumbers"]),
+		"StMerkleRoots":            inputs["st_merkleRoots"],
+		"StCommitmentOut":          inputs["st_commitmentsOut"],
+		"StNullifiers":             inputs["st_nullifiers"],
+		"StAssetGroupMerkleRoot":   toString(inputs["st_assetGroup_merkleRoot"]),
+		"StAssetGroupTreeNumber":   toString(inputs["st_assetGroup_treeNumber"]),
+		"WtPrivateKeysIn":          inputs["wt_privateKeysIn"],
+		"WtValuesIn":               toStringSlice(inputs["wt_valuesIn"]),
+		"WtPathElements":           []interface{}{split1, split2},
+		"WtPathIndices":            toStringSlice(inputs["wt_pathIndices"]),
+		"WtErc1155ContractAddress": inputs["wt_erc1155ContractAddress"],
+		"WtErc1155TokenId":         inputs["wt_erc1155TokenId"],
+		"WtPublicKeysOut":          inputs["wt_publicKeysOut"],
+		"WtValuesOut":              toStringSlice(inputs["wt_valuesOut"]),
+		"WtAssetGroupPathElements": toStringSlice(inputs["wt_assetGroup_pathElements"]),
+		"WtAssetGroupPathIndices":  inputs["wt_assetGroup_pathIndices"],
+		"StAuditorPublickey":       inputs["st_auditor_publicKey"],
+		"StAuditorAuthKey":         inputs["st_auditor_authKey"],
+		"StAuditorNonce":           inputs["st_auditor_nonce"],
+		"StAuditorEncryptedValues": inputs["st_auditor_encryptedValues"],
+		"WtAuditorRandom":          inputs["wt_auditor_random"],
+	}
+
+	_, err := c.PostProof("/proof/erc1155FungibleAuditor", payload)
+	if err != nil {
+		return nil, err
+	}
+	return &ProofResponse{Status: 200, Message: "ok"}, nil
+}
+
+// Erc1155NonFungibleProof generates an ERC1155 non-fungible proof (map-based pass-through).
+func (c *GnarkClient) Erc1155NonFungibleProof(inputs map[string]interface{}) (*ProofResponse, error) {
+	payload := map[string]interface{}{
+		"StMessage":                toString(inputs["st_message"]),
+		"StTreeNumbers":            toStringSlice(inputs["st_treeNumbers"]),
+		"StMerkleRoots":            inputs["st_merkleRoots"],
+		"StNullifiers":             inputs["st_nullifiers"],
+		"StCommitmentOut":          inputs["st_commitmentsOut"],
+		"StAssetGroupTreeNumber":   toStringSlice(inputs["st_assetGroup_treeNumbers"]),
+		"StAssetGroupMerkleRoot":   inputs["st_assetGroup_merkleRoots"],
+		"WtPrivateKeysIn":          inputs["wt_privateKeysIn"],
+		"WtValues":                 inputs["wt_values"],
+		"WtPathElements":           []interface{}{inputs["wt_pathElements"]},
+		"WtPathIndices":            inputs["wt_pathIndices"],
+		"WtErc1155TokenId":         inputs["wt_erc1155TokenIds"],
+		"WtPublicKeysOut":          inputs["wt_publicKeysOut"],
+		"WtErc1155ContractAddress": inputs["wt_erc1155ContractAddress"],
+		"WtAssetGroupPathElements": toNestedStringSlice(inputs["wt_assetGroup_pathElements"]),
+		"WtAssetGroupPathIndices":  inputs["wt_assetGroup_pathIndices"],
+	}
+
+	_, err := c.PostProof("/proof/erc1155NonFungible", payload)
+	if err != nil {
+		return nil, err
+	}
+	return &ProofResponse{Status: 200, Message: "ok"}, nil
+}
+
+// Erc1155NonFungibleWithAuditorProof generates an ERC1155 non-fungible proof with auditor (map-based pass-through).
+func (c *GnarkClient) Erc1155NonFungibleWithAuditorProof(inputs map[string]interface{}) (*ProofResponse, error) {
+	payload := map[string]interface{}{
+		"StMessage":                toString(inputs["st_message"]),
+		"StTreeNumbers":            toStringSlice(inputs["st_treeNumbers"]),
+		"StMerkleRoots":            inputs["st_merkleRoots"],
+		"StNullifiers":             inputs["st_nullifiers"],
+		"StCommitmentOut":          inputs["st_commitmentsOut"],
+		"StAssetGroupTreeNumber":   toStringSlice(inputs["st_assetGroup_treeNumbers"]),
+		"StAssetGroupMerkleRoot":   inputs["st_assetGroup_merkleRoots"],
+		"WtPrivateKeysIn":          inputs["wt_privateKeysIn"],
+		"WtValues":                 inputs["wt_values"],
+		"WtPathElements":           []interface{}{inputs["wt_pathElements"]},
+		"WtPathIndices":            inputs["wt_pathIndices"],
+		"WtErc1155TokenIds":        inputs["wt_erc1155TokenIds"],
+		"WtPublicKeysOut":          inputs["wt_publicKeysOut"],
+		"WtErc1155ContractAddress": inputs["wt_erc1155ContractAddress"],
+		"WtAssetGroupPathElements": toNestedStringSlice(inputs["wt_assetGroup_pathElements"]),
+		"WtAssetGroupPathIndices":  inputs["wt_assetGroup_pathIndices"],
+		"StAuditorPublickey":       inputs["st_auditor_publicKey"],
+		"StAuditorAuthKey":         inputs["st_auditor_authKey"],
+		"StAuditorNonce":           inputs["st_auditor_nonce"],
+		"StAuditorEncryptedValues": inputs["st_auditor_encryptedValues"],
+		"WtAuditorRandom":          inputs["wt_auditor_random"],
+	}
+
+	_, err := c.PostProof("/proof/erc1155NonFungibleAuditor", payload)
+	if err != nil {
+		return nil, err
+	}
+	return &ProofResponse{Status: 200, Message: "ok"}, nil
+}
+
+// PrivateMintProof generates a private mint proof and returns the proof and public signals.
+func (c *GnarkClient) PrivateMintProof(inputs map[string]interface{}) (*PrivateMintProofResponse, error) {
+	salt := "0"
+	if s, ok := inputs["salt"]; ok && s != nil {
+		salt = toString(s)
+	}
+
+	payload := map[string]interface{}{
+		"commitment":      toString(inputs["commitment"]),
+		"contractAddress": toString(inputs["contractAddress"]),
+		"tokenId":         toString(inputs["tokenId"]),
+		"salt":            salt,
+		"amount":          toString(inputs["amount"]),
+		"publicKey":       toString(inputs["publicKey"]),
+		"cipherText":      toString(inputs["cipherText"]),
+	}
+
+	body, err := c.PostProof("/proof/privateMint", payload)
+	if err != nil {
+		return nil, fmt.Errorf("PrivateMint proof generation failed: %w", err)
+	}
+
+	var resp PrivateMintProofResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, fmt.Errorf("failed to parse PrivateMint response: %w", err)
+	}
+
+	return &resp, nil
+}

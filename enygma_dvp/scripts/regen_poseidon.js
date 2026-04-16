@@ -1,4 +1,4 @@
-const { poseidon_gencontract } = require('circomlibjs');
+const { poseidonContract: poseidon_gencontract } = require('circomlibjs');
 const fs = require('fs');
 
 const bc3 = poseidon_gencontract.createCode(2);
