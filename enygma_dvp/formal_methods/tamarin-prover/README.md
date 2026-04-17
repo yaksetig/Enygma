@@ -1,7 +1,7 @@
 # Overview
-This theory models a minimal shielded payment protocol in which
+This theory models a minimal shielded payment protocol in which Alice spends one of her private notes and pays Bob. 
 
-Alice spends one of her private notes and pays Bob. Conceptually:
+Conceptually:
 
     1. Alice holds a note commitment commit_a together with the
        secrets (amount_a, salt_a) that open it, plus a
@@ -29,12 +29,7 @@ Alice spends one of her private notes and pays Bob. Conceptually:
        and learns which note is now his. In this model Bob does
        not re-spend; Bob's acceptance is terminal.
 
-  Serial numbers vs salts: these are deliberately separated in this
-  model. salt_a is the blinding randomness inside commit_a
-  (for commitment hiding); serial_alice is a chain-assigned tree
-  index used in nullifier derivation. This matches modern shielded
-  protocols (e.g. Zcash Orchard) where the nullifier-derivation
-  input is distinct from the commitment blinding.
+Serial numbers vs salts: these are deliberately separated in this model. salt_a is the blinding randomness inside commit_a (for commitment hiding); serial_alice is a chain-assigned tree index used in nullifier derivation. This matches modern shielded protocols (e.g. Zcash Orchard) where the nullifier-derivation input is distinct from the commitment blinding.
 
   Public parameters: token_id and info are public system parameters,
   output by the Setup rule. The adversary knows both. This matches
