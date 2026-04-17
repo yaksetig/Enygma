@@ -21,7 +21,7 @@ import (
     // "gnark_server/server/circuits/legitBroker"
     // "gnark_server/server/circuits/erc1155Fungible"
     // "gnark_server/server/circuits/erc1155FungibleAuditor"
-    // serverutils "gnark_server/server/utils"
+    serverutils "gnark_server/server/utils"
 
     // covered by test/01–04
     "gnark_server/server/circuits/privateMint"
@@ -80,7 +80,13 @@ func NewServer(cfg *config.Config) *gin.Engine {
     r.POST("/proof/dvpInitiator",    dvpInit.NewHandler(cfg.DvPInitiatorPk, cfg.DvPInitiatorVk))
     // covered by test/03_v2_dvp_test.go (TestV2DvP) and test/04_v2_dvp_deadline_test.go (TestV2DvP_WithDeadline)
     r.POST("/proof/dvpDestination",  dvpDestination.NewHandler(cfg.DvPDestinationPk, cfg.DvPDestinationVk))
-  
+
+    // Merkle tree status: rebuilds each vault's tree from on-chain Commitment events
+    // and verifies the local root matches the vault's currentRoot().
+    r.POST("/util/merkleStatus", serverutils.MerkleStatusHandler())
+    // Merkle tree for a single vault — identified by name or vaultId.
+    r.POST("/util/merkleVault", serverutils.MerkleVaultHandler())
+
     return r
 }
 
