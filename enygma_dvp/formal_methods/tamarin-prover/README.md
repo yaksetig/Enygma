@@ -31,10 +31,7 @@ Conceptually:
 
 Serial numbers vs salts: these are deliberately separated in this model. salt_a is the blinding randomness inside commit_a (for commitment hiding); serial_alice is a chain-assigned tree index used in nullifier derivation. This matches modern shielded protocols (e.g. Zcash Orchard) where the nullifier-derivation input is distinct from the commitment blinding.
 
-  Public parameters: token_id and info are public system parameters,
-  output by the Setup rule. The adversary knows both. This matches
-  real deployments where asset identifiers and KDF domain-separation
-  tags are part of the protocol specification, not secrets.
+Public parameters: token_id and info are public system parameters, output by the Setup rule. The adversary knows both. This matches real deployments where asset identifiers and KDF domain-separation tags are part of the protocol specification, not secrets.
 
   This minimal model deliberately omits:
     * explicit anchor-root / Merkle membership proofs (serials
@@ -47,12 +44,8 @@ Serial numbers vs salts: these are deliberately separated in this model. salt_a 
 ## Threat model:
     * Standard Dolev-Yao network attacker, also given token_id and
       info as public parameters.
-    * Optionally, the adversary may compromise Bob's viewing key
-      view_sk_B via the RevealBobViewKey rule. This models the
-      scenario where Bob's auditor or a backup is leaked. The
-      spend key spend_sk_B is not compromisable in this model
-      because Bob does not spend; its compromise would not enable
-      any additional attack in scope.
+      
+    * Optionally, the adversary may compromise Bob's viewing key view_sk_B via the RevealBobViewKey rule. This models the scenario where Bob's auditor or a backup is leaked. The spend key spend_sk_B is not compromisable in this model because Bob does not spend; its compromise would not enable any additional attack in scope.
 
  ## What the model does prove:
     * validity (every accepted transaction was authorised),
@@ -77,37 +70,13 @@ Serial numbers vs salts: these are deliberately separated in this model. salt_a 
       game-based reasoning or explicit equational modelling of
       commitment hiding.
 
-  Abstraction of zk_prove:
+## Abstraction of zk_prove:
 
-    zk_prove(tx_id, commit_a, commit_b) abstracts a proof
-    system assumed to be sound, binding to all three public inputs,
-    and non-malleable. It stands in for a proof of knowledge that:
+    zk_prove(tx_id, commit_a, commit_b) abstracts a proof system assumed to be sound, binding to all three public inputs, and non-malleable. It stands in for a proof of knowledge that:
       * commit_a opens to Alice's input note,
       * commit_b is the correct commitment for Bob,
       * the nullifier is correctly derived from Alice's spend key
         and her note's serial number,
       * balance conservation holds (discharged in Lean).
 
-  Because zk_prove has no equations in this model, the Dolev-Yao
-  adversary cannot construct a zk_prove term except by replay.
-
-  Naming conventions:
-    * spend_pk_A / spend_pk_B : h(spend_sk_X), the payment address
-      (hash-derived, not a raw public key).
-    * view_pk_B             : pk(view_sk_B), Bob's viewing public
-      key used for asymmetric encryption of the shared secret.
-    * commit_X              : note_commit(...), the chain-level
-      commitment to a note.
-    * salt_X                : blinding randomness in the commitment.
-    * amount_X              : the note value.
-    * serial_X              : chain-assigned tree index used as
-      nullifier-derivation input.
-    * shared_secret         : ephemeral secret Alice generates per
-      transaction, encapsulated under view_pk_B.
-    * ctxt                  : aenc(shared_secret, view_pk_B).
-    * k / salt_b   : AEAD key / commitment-salt derived
-      from shared_secret.
-    * enc_tx_data           : AEAD-encrypted memo carrying
-      (tx_id, token_id, amount_b) for Bob.
-    * zkp              : zk_prove(...) term.
-*/
+  Because zk_prove has no equations in this model, the Dolev-Yao adversary cannot construct a zk_prove term except by replay.
