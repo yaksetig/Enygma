@@ -192,8 +192,8 @@ Alice submits the following payload:
 
 <div align="center">
 
-| ML-KEM.CTXT | $$\mathrm{Commitment_{B}}$$ | $$\mathrm{Commitment_{A}}$$ | \mathrm{[[TX_{DATA}]]_{k}} | $$\mathrm{nf}$$ | $\pi$ |
-|:-----------:|:---------------------------:|:---------------------------:|:--------------------------:|:---------------:|:-----:|
+| ML-KEM.CTXT | $$\mathrm{Commitment_{B}}$$ | $$\mathrm{Commitment_{A}}$$ | $$\mathrm{[[TX_{DATA}]]_{k}}$$ | $$\mathrm{nf}$$ | $\pi$ |
+|:-----------:|:---------------------------:|:---------------------------:|:------------------------------:|:---------------:|:-----:|
 
 </div>
 
@@ -275,8 +275,13 @@ Upon successful equality, Bob is now able to open the commitment and can spend t
 
 - View keys are **ML-KEM keys (not Diffie–Hellman)**
 - Single-input spend (no anonymity set)
-- No balance / sum constraints
 - Recipient detection is implicit via decapsulation + AEAD check
-- ZK proof must enforce:
-  - knowledge of $sk_A^{\text{spend}}$
-  - correct nullifier construction
+
+### Zero-Knowledge Proof Remarks
+The ZK proof submitted by Alice must include the following clauses:
+
+* I am spending a commitment in the tree
+* Here's a (private) Merkle Proof of inclusion to show that this commitment is part of the tree
+* I know the spend key associated with the commitment being spent
+* The nullifier $$nf_A$$ is obtained by hashing the spend key and the leafIndex where this commitment is located in the tree
+* The destination amount is the same as the amount that I'm spending
