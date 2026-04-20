@@ -161,9 +161,13 @@ $$
 ### Step 4 — Encrypt Transaction Data
 We use $$[[m]]_{k}$$ to denote the symmetric encryption of message $$m$$ using key $$k$$. 
 
+In this context, the message $$m$$ contains the information regarding the token id and the amount being transferred. As seen below: 
+
 $$
 m = \mathrm{token\_id} \parallel \mathrm{amount}
 $$
+
+To make the variable more explicit in context, we denote the encryption of this transaction data as $$\mathrm{[[TX_{DATA}]]_{k}}$$
 
 $$
 \mathrm{[[TX_{DATA}]]_{k}} = \mathrm{AEAD.Enc}(k, m)
