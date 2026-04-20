@@ -124,8 +124,8 @@ Upon generating the shared secret, Alice must derive two values:
 * a salt, which is used to mask/randomize the destination commitment
 * a symmetric key, which is used to encrypt additional data that is appended to the transaction
 
-We assume the existence of global system parameters: $$context_{k}$$ and $$context_{salt}$$, to be used as inputs to the Hash-based Key Derivation function to produce independent values to be used for encryption and randomness of the commitments. 
-
+We assume the existence of global system parameters: $$context_{k}$$ and $$context_{salt}$$. These parameters are simply domain-separation strings to be used as inputs to the Hash-based Key Derivation function to produce independent values to be used for encryption and randomness of the commitments.
+ 
 #### Deriving a symmetric key
 
 $$
