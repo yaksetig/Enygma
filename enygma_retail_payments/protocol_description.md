@@ -1,4 +1,4 @@
-# Private Payment Protocol
+# Enygma Retail Payments Protocol
 
 ## System Entites
 We assume a simple setting with three entities:
