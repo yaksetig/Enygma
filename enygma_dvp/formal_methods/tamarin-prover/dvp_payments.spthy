@@ -1,0 +1,463 @@
+theory pq_payments_minimal
+begin
+
+builtins: hashing, asymmetric-encryption
+
+functions: note_commit/4, nullifier/2, zk_prove/4, derive_salt/2, derive_key/2, aead_enc/3
+
+
+
+
+/*************************************************************/
+/* Setup                                                     */
+/*************************************************************/
+/*
+  One-shot initialisation. Publishes a token identifier and a
+  KDF domain-separation tag as system parameters. Both are
+  released to the network (via Out) since they are public.
+*/
+
+rule Setup:
+  [ 
+    Fr(~token_id),  // create a token ID
+    Fr(~info)       // public parameter for HKDF
+  ]
+  --[ 
+      ParamsCreated(~token_id, ~info) 
+    ]->
+  [ 
+    !Token(~token_id),
+    !Info(~info),
+    
+    // params are released to the network since they are public.
+    Out(<~token_id, ~info>)
+  ]
+
+
+/*************************************************************/
+/* Registration                                              */
+/*************************************************************/
+
+// Alice creates and registers two (view and spend) key pairs
+rule RegisterAlice:
+  let
+    spend_pk_A = h(~spend_sk_A)
+    view_pk_A  = pk(~view_sk_A)
+  in
+  [ 
+    Fr(~view_sk_A), // create view secret key
+    Fr(~spend_sk_A) // create spend secret key
+  ]
+  --[ AliceRegistered(view_pk_A, spend_pk_A) ]->
+  [ 
+    !AliceSecretKeys(~view_sk_A, ~spend_sk_A), // state that Alice keeps to store her secret keys
+    !AlicePublicKeys(view_pk_A, spend_pk_A),   // state that Alice keeps to store her public keys
+    
+    // release public key material for the network to see
+    Out(<view_pk_A, spend_pk_A>)
+  ]
+
+// Bob creates and registers two (view and spend) key pairs
+rule RegisterBob:
+  let
+    spend_pk_B  = h(~spend_sk_B) // hash-based spend key
+    view_pk_B   = pk(~view_sk_B) // "ML-KEM" key
+  in
+  [ 
+    Fr(~view_sk_B), // create view secret key
+    Fr(~spend_sk_B) // create spend secret key
+  ]
+  --[ BobRegistered(view_pk_B, spend_pk_B) ]->
+  [ 
+    !BobSecretKeys(~view_sk_B, ~spend_sk_B), // state that Bob keeps to store his secret keys
+    !BobPublicKeys(view_pk_B, spend_pk_B),   // state that Bob keeps to store his public keys
+    
+    // release public key material for the network to see
+    Out(<view_pk_B, spend_pk_B>) 
+  ]
+
+
+/*************************************************************/
+/* Key compromise (confidentiality threat model)            */
+/*************************************************************/
+/*
+  Compromise of Bob's viewing key. The rule exposes view_sk_B to
+  the network and records an action fact RevealedBobViewKey that
+  the confidentiality lemmas reference.
+*/
+
+rule RevealBobViewKey:
+  [ 
+    !BobSecretKeys(~view_sk_B, ~spend_sk_B) 
+  ]
+  --[ RevealedBobViewKey(~view_sk_B) ]->
+  [ 
+    Out(~view_sk_B) 
+  ]
+
+
+/*************************************************************/
+/* Initial funding note for Alice                            */
+/*************************************************************/
+
+rule FundAlice:
+  let
+    spend_pk_A  = h(spend_sk_A)
+    commit_a    = note_commit(spend_pk_A, ~salt_a, token_id, ~amount_a)
+  in
+  [ 
+    Fr(~salt_a), 
+    Fr(~amount_a), 
+    Fr(~serial_alice),
+    !AliceSecretKeys(view_sk_A, spend_sk_A),
+    !Token(token_id)
+  ]
+  --[ 
+      WalletCreated(commit_a, spend_pk_A, token_id, ~amount_a, ~salt_a, ~serial_alice) 
+    ]->
+  [ 
+    Note(commit_a, spend_pk_A, token_id, ~amount_a, ~salt_a, ~serial_alice),
+    Wallet(commit_a, spend_pk_A, token_id, ~amount_a, ~salt_a, ~serial_alice) 
+  ]
+
+
+/*************************************************************/
+/* Spend                                                     */
+/*************************************************************/
+
+rule Spend:
+  let
+    nf            = nullifier(spend_sk_A, serial_alice)
+    ctxt          = aenc(~shared_secret, view_pk_B)
+    salt_b        = derive_salt(~shared_secret, info)
+    k             = derive_key(~shared_secret, info)
+    commit_b      = note_commit(spend_pk_B, salt_b, token_id, ~amount_b)
+    enc_tx_data   = aead_enc(<~tx_id, token_id, ~amount_b>, k, ctxt)
+    zkp           = zk_prove(~tx_id, commit_a, commit_b, nf)
+  in
+  [ 
+    Wallet(commit_a, spend_pk_A, token_id, amount_a, salt_a, serial_alice),
+    !AliceSecretKeys(view_sk_A, spend_sk_A),
+    !BobPublicKeys(view_pk_B, spend_pk_B),
+    !Info(info),
+    Fr(~shared_secret),
+    Fr(~amount_b),
+    Fr(~tx_id)
+  ]
+  --[ 
+      SpendAttempt(~tx_id, commit_a, nf, ~amount_b),
+      SpendUsesWallet(~tx_id, commit_a, spend_pk_A, token_id, amount_a, salt_a, serial_alice),
+      PendingCreated(~tx_id, commit_a, nf),
+      SentTx(~tx_id, ~shared_secret, view_pk_B, ~amount_b) 
+    ]->
+  [ 
+    Out(<~tx_id, ctxt, commit_a, nf, commit_b, enc_tx_data, zkp>),
+    Pending(~tx_id, commit_a, spend_pk_A, token_id, amount_a, salt_a, serial_alice, nf, commit_b, spend_pk_B, ~amount_b, salt_b, ctxt, enc_tx_data)
+  ]
+
+
+/*************************************************************/
+/* Accept                                                    */
+/*************************************************************/
+
+rule Accept:
+  let
+    zkp = zk_prove(tx_id, commit_a, commit_b, nf)
+  in
+  [ 
+    Pending(tx_id, commit_a, spend_pk_A, token_id, amount_a, salt_a, serial_alice, nf, commit_b, spend_pk_B, amount_b, salt_b, ctxt, enc_tx_data),
+    In(<tx_id, ctxt, commit_a, nf, commit_b, enc_tx_data, zkp>),
+    Note(commit_a, spend_pk_A, token_id, amount_a, salt_a, serial_alice),
+    Fr(~serial_bob)
+  ]
+  --[ 
+      Accepted(tx_id, commit_a, nf, amount_a, amount_b),
+      AcceptConsumes(tx_id, commit_a, nf),
+      SpentRecorded(nf),
+      InputNullifier(commit_a, nf),
+      SeenTxRecorded(tx_id),
+      BobNoteCreated(commit_b, spend_pk_B, token_id, amount_b, salt_b, ~serial_bob),
+      AcceptedTxRecorded(tx_id, ctxt, spend_pk_B, token_id, amount_b, salt_b, commit_b, enc_tx_data, ~serial_bob) 
+    ]->
+  [ 
+    Spent(nf),
+    Note(commit_b, spend_pk_B, token_id, amount_b, salt_b, ~serial_bob),
+    AcceptedTx(tx_id, ctxt, spend_pk_B, token_id, amount_b, salt_b, commit_b, enc_tx_data, ~serial_bob) 
+  ]
+
+
+/*************************************************************/
+/* Bob receives and successfully decrypts                    */
+/*************************************************************/
+
+rule BobReceive:
+  let
+    view_pk_B   = pk(view_sk_B)
+    ctxt        = aenc(shared_secret, view_pk_B)
+    salt_b      = derive_salt(shared_secret, info)
+    k           = derive_key(shared_secret, info)
+    commit_b    = note_commit(spend_pk_B, salt_b, token_id, amount_b)
+    enc_tx_data = aead_enc(<tx_id, token_id, amount_b>, k, ctxt)
+  in
+  [ 
+    AcceptedTx(tx_id, ctxt, spend_pk_B, token_id, amount_b, salt_b, commit_b, enc_tx_data, serial_bob),
+    !BobPublicKeys(view_pk_B, spend_pk_B),
+    !BobSecretKeys(view_sk_B, spend_sk_B),
+    !Info(info)
+  ]
+  --[ 
+      BobAccepted(tx_id, spend_pk_B, token_id, amount_b, salt_b, commit_b, serial_bob),
+      BobRecovered(tx_id, token_id, amount_b) 
+    ]->
+  []
+
+
+/*************************************************************/
+/* Sources lemma (preprocessing)                             */
+/*************************************************************/
+
+lemma accept_sources [sources]:
+  "All tx_id commit_a nf #i.
+     AcceptConsumes(tx_id, commit_a, nf) @ i
+     ==> (Ex #j. PendingCreated(tx_id, commit_a, nf) @ j
+                 & #j < #i)"
+
+
+/*************************************************************/
+/* Executability                                             */
+/*************************************************************/
+
+lemma executable:
+  exists-trace
+  "Ex commit_a spend_pk_A token_id amt salt serial #i.
+     WalletCreated(commit_a, spend_pk_A, token_id,
+                   amt, salt, serial) @ i"
+
+lemma executable_accept:
+  exists-trace
+  "Ex tx_id commit_a nf amount_a amount_b #i.
+     Accepted(tx_id, commit_a, nf,
+              amount_a, amount_b) @ i"
+
+lemma executable_bob:
+  exists-trace
+  "Ex tx_id token_id amount_b #i.
+     BobRecovered(tx_id, token_id, amount_b) @ i"
+
+
+/*************************************************************/
+/* Chain-of-custody properties                               */
+/*************************************************************/
+
+lemma accepted_implies_attempt [reuse]:
+  "All tx_id commit_a nf amount_a amount_b #i.
+     Accepted(tx_id, commit_a, nf, amount_a, amount_b) @ i
+     ==> (Ex #j.
+           SpendAttempt(tx_id, commit_a, nf, amount_b) @ j
+           & #j < #i)"
+
+lemma spend_uses_created_wallet [reuse]:
+  "All tx_id commit_a spend_pk_A token_id amount_a salt_a serial_alice #i.
+     SpendUsesWallet(tx_id, commit_a, spend_pk_A, token_id, amount_a, salt_a, serial_alice) @ i
+     ==> (Ex #j.
+           WalletCreated(commit_a, spend_pk_A, token_id, amount_a, salt_a, serial_alice) @ j
+           & #j < #i)"
+
+lemma accepted_has_spend_wallet [reuse, use_induction]:
+  "All tx_id commit_a nf amount_a amount_b #i.
+     Accepted(tx_id, commit_a, nf, amount_a, amount_b) @ i
+     ==> (Ex spend_pk_A token_id salt_a serial_alice #j.
+           SpendUsesWallet(tx_id, commit_a, spend_pk_A, token_id, amount_a, salt_a, serial_alice) @ j
+           & #j < #i)"
+
+lemma accepted_input_was_created:
+  "All tx_id commit_a nf amount_a amount_b #i.
+     Accepted(tx_id, commit_a, nf, amount_a, amount_b) @ i
+     ==> (Ex spend_pk_A token_id salt serial #j. 
+          WalletCreated(commit_a, spend_pk_A, token_id, amount_a, salt, serial) @ j
+          & #j < #i)"
+
+lemma accepted_has_pending:
+  "All tx_id commit_a nf amount_a amount_b #i.
+     Accepted(tx_id, commit_a, nf, amount_a, amount_b) @ i
+     ==> (Ex #j. 
+            PendingCreated(tx_id, commit_a, nf) @ j 
+            & #j < #i)"
+
+
+/*************************************************************/
+/* Uniqueness and replay resistance                          */
+/*************************************************************/
+
+lemma input_nullifier_unique [reuse, use_induction]:
+  "All commit_a nf1 nf2 #i #j.
+     InputNullifier(commit_a, nf1) @ i 
+     & InputNullifier(commit_a, nf2) @ j
+     ==> nf1 = nf2"
+
+lemma no_double_spend [use_induction]:
+  "All nf #i #j.
+     SpentRecorded(nf) @ i
+     & SpentRecorded(nf) @ j
+     ==> #i = #j"
+
+lemma no_replay_seen_tx [use_induction]:
+  "All tx_id #i #j.
+     SeenTxRecorded(tx_id) @ i
+     & SeenTxRecorded(tx_id) @ j
+     ==> #i = #j"
+
+lemma accept_unique_per_tx_id [reuse, use_induction]:
+  "All tx_id commit1 nf1 amount_old1 amount_b1 commit2 nf2 amount_old2 amount_b2 #i #j.
+     Accepted(tx_id, commit1, nf1, amount_old1, amount_b1) @ i
+     & Accepted(tx_id, commit2, nf2, amount_old2, amount_b2) @ j
+     ==> #i = #j"
+
+lemma accept_unique_per_input [reuse, use_induction]:
+  "All tx_id1 commit_a nf1 tx_id2 nf2 #i #j.
+     AcceptConsumes(tx_id1, commit_a, nf1) @ i
+     & AcceptConsumes(tx_id2, commit_a, nf2) @ j
+     ==> #i = #j"
+
+
+/*************************************************************/
+/* Accepted-transaction consistency                          */
+/*************************************************************/
+
+lemma acceptedtx_has_accept [reuse]:
+  "All tx_id ctxt spend_pk_B token_id amount_b salt_b commit_b enc_tx_data serial_bob #i.
+     AcceptedTxRecorded(tx_id, ctxt, spend_pk_B, token_id, amount_b, salt_b, commit_b, enc_tx_data, serial_bob) @ i
+     ==> (Ex commit_a nf amount_a #j.
+           Accepted(tx_id, commit_a, nf, amount_a, amount_b) @ j
+           & #j = #i)"
+
+lemma acceptedtx_unique_per_tx_id:
+  "All tx_id ctxt1 spend_pk_B1 token_id1 amt1 salt1 cb1 enc1 ser1 ctxt2 spend_pk_B2 token_id2 amt2 salt2 cb2 enc2 ser2 #i #j.
+     AcceptedTxRecorded(tx_id, ctxt1, spend_pk_B1, token_id1, amt1, salt1, cb1, enc1, ser1) @ i
+     & AcceptedTxRecorded(tx_id, ctxt2, spend_pk_B2, token_id2, amt2, salt2, cb2, enc2, ser2) @ j
+     ==> #i = #j"
+
+
+/*************************************************************/
+/* Bob-side properties                                       */
+/*************************************************************/
+
+lemma bob_accepts_only_valid [reuse]:
+  "All tx_id spend_pk_B token_id amount_b salt_b commit_b serial_bob #i.
+     BobAccepted(tx_id, spend_pk_B, token_id, amount_b, salt_b, commit_b, serial_bob) @ i
+     ==> (Ex commit_a nf amount_a #j.
+           Accepted(tx_id, commit_a, nf, amount_a, amount_b) @ j
+           & #j < #i)"
+
+lemma bob_commitment_consistency:
+  "All tx_id spend_pk_B token_id amount_b salt_b commit_b serial_bob #i.
+     BobAccepted(tx_id, spend_pk_B, token_id, amount_b, salt_b, commit_b, serial_bob) @ i
+     ==> commit_b = note_commit(spend_pk_B, salt_b, token_id, amount_b)"
+
+lemma bob_output_is_chain_output [reuse]:
+  "All tx_id spend_pk_B token_id amount_b salt_b commit_b serial_bob #i.
+     BobAccepted(tx_id, spend_pk_B, token_id, amount_b, salt_b, commit_b, serial_bob) @ i
+     ==> (Ex #j.
+           BobNoteCreated(commit_b, spend_pk_B, token_id, amount_b, salt_b, serial_bob) @ j
+           & #j < #i)"
+
+lemma bob_recovery_matches_chain:
+  "All tx_id token_id amount_b #i.
+     BobRecovered(tx_id, token_id, amount_b) @ i
+     ==> (Ex commit_a nf amount_a #j.
+           Accepted(tx_id, commit_a, nf, amount_a, amount_b) @ j
+           & #j < #i)"
+
+lemma accepted_has_bob_note:
+  "All tx_id commit_a nf amount_a amount_b #i.
+     Accepted(tx_id, commit_a, nf, amount_a, amount_b) @ i
+     ==> (Ex commit_b spend_pk_B token_id salt_b serial_bob #j.
+           BobNoteCreated(commit_b, spend_pk_B, token_id, amount_b, salt_b, serial_bob) @ j
+           & #j = #i)"
+
+
+/*************************************************************/
+/* Confidentiality properties                                */
+/*************************************************************/
+/*
+  Three layered theorems:
+
+    - Theorem 1 (KEM layer): shared_secret leaks only via
+      view_sk_B compromise. This captures confidentiality of
+      Alice's key encapsulation to Bob.
+
+    - Theorem 2 (AEAD layer): amount_b leaks only if
+      shared_secret leaks. This captures confidentiality of the
+      AEAD memo construction, independent of how shared_secret
+      is obtained.
+
+    - Theorem 3 (composed): amount_b leaks only via view_sk_B
+      compromise. This is the end-to-end result, provable as
+      composition of Theorems 1 and 2.
+
+  The separation matters because it isolates the security of each
+  cryptographic layer: even if a future extension introduced a new
+  path to shared_secret (e.g., session-key escrow), Theorem 2
+  would remain valid and only Theorem 3 would need re-deriving.
+*/
+
+/*
+  Theorem 1 — KEM-layer secrecy.
+
+  If Alice sent a transaction with shared_secret ~s to a recipient
+  with viewing public key pk(~view_sk_B), and the adversary knows
+  ~s, then the adversary must have revealed ~view_sk_B.
+
+  Proof intuition: ~s appears in Out only inside aenc(~s, view_pk_B).
+  Opening requires view_sk_B, available only via RevealBobViewKey.
+*/
+lemma shared_secret_secret [reuse]:
+  "All tx_id shared_secret view_sk_B amount_b #i #k.
+     SentTx(tx_id, shared_secret, pk(view_sk_B), amount_b) @ i
+     & K(shared_secret) @ k
+     ==> (Ex #r. RevealedBobViewKey(view_sk_B) @ r)"
+
+/*
+  Theorem 2 — AEAD-layer secrecy.
+
+  If Alice sent a transaction with amount_b under shared_secret
+  ~s, and the adversary knows amount_b, then the adversary knows
+  ~s.
+
+  Proof intuition: amount_b appears in Out inside
+    - commit_b = note_commit(spend_pk_B, salt_b,
+                               token_id, amount_b),
+    - enc_tx_data = aead_enc(<tx_id, token_id, amount_b>,
+                             derive_key(~s, info), ctxt),
+    - zkp, which wraps commit_b.
+  note_commit and zk_prove are free symbols, so the adversary
+  cannot extract amount_b from them. The AEAD path requires
+  k = derive_key(~s, info), which requires ~s.
+
+  This theorem is independent of how ~s was obtained; it captures
+  the structural security of the AEAD construction alone.
+*/
+lemma amount_b_secret_via_shared_secret [reuse]:
+  "All tx_id shared_secret view_pk_B amount_b #i #k.
+     SentTx(tx_id, shared_secret, view_pk_B, amount_b) @ i
+     & K(amount_b) @ k
+     ==> (Ex #m. K(shared_secret) @ m)"
+
+/*
+  Theorem 3 — end-to-end amount secrecy (composed).
+
+  If Alice sent a transaction with amount_b to a recipient whose
+  viewing key view_sk_B was not compromised, the adversary does
+  not learn amount_b.
+
+  Provable by composition of Theorem 2 (amount_b knowledge
+  implies shared_secret knowledge) and Theorem 1 (shared_secret
+  knowledge implies view_sk_B reveal).
+*/
+lemma amount_b_secret:
+  "All tx_id shared_secret view_sk_B amount_b #i #k.
+     SentTx(tx_id, shared_secret, pk(view_sk_B), amount_b) @ i
+     & K(amount_b) @ k
+     ==> (Ex #r. RevealedBobViewKey(view_sk_B) @ r)"
+
+end

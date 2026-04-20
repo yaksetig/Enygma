@@ -1,8 +1,14 @@
 # Enygma Delivery-vs-Payment (DvP)
 
-## System Architecture
-Our system is simple: **users** (e.g., a bank customers) are directly connected to **privacy nodes** (i.e., a high-performance single-node EVM blockchain). Each of the privacy nodes, is connected to a **private network hub**, which effectively acts as a bulletin board for all privacy nodes to leverage as a universal (encrypted) messaging layer and verification layer. **Issuer(s)** are the managers/admins of specific assets on the private network hub. Optionally, there is an **auditor** that oversees (some of) the transactions that take place in the network. A more formal protocol description is documented [here](./protocol_description.md).
+## Motivation
 
+TBD
+
+## Protocol Properties
+
+## System Architecture
+
+Our system is simple: **users** (e.g., a bank customers) are directly connected to **privacy nodes** (i.e., a high-performance single-node EVM blockchain). Each of the privacy nodes, is connected to a **private network hub**, which effectively acts as a bulletin board for all privacy nodes to leverage as a universal (encrypted) messaging layer and verification layer. **Issuer(s)** are the managers/admins of specific assets on the private network hub. Optionally, there is an **auditor** that oversees (some of) the transactions that take place in the network. A more formal protocol description is documented [here](./protocol_description.md).
 
 ```mermaid
 ---
@@ -23,7 +29,7 @@ flowchart LR
     B(["Blockchain"])
     I(["Issuer"])
     A(["Auditor"])
-    
+
 
     PLA & PLB & PLC <-.-> B <-.-> I & A
 
@@ -32,6 +38,10 @@ flowchart LR
     UC <-.-> PLC
 
 ```
+
+## Protocol Overview
+
+TBD
 
 ## Cryptographic Primitives
 
@@ -44,11 +54,16 @@ config:
 ---
 flowchart TD
     A(["Enygma DvP"])
-    
-    Asymmetric("Asymmetric Crypto")
 
-    A -->  Asymmetric & ZK("Zero-Knowledge Proofs") & Commits("Commitments")
-    
+    Asymmetric("Asymmetric Crypto")
+    Symmetric("Symmetric Crypto")
+    ZK("Zero-Knowledge Proofs")
+    Commits("Commitments")
+
+    A -->  Asymmetric & Commits & Symmetric & ZK
+
+    Symmetric --> aes("AES-GCM")
+
     Asymmetric --> View("View Keypair") & Spend("Spend Keypair")
 
     View --> MLKEM("Lattice-based<br>(ML-KEM)")
@@ -59,7 +74,7 @@ flowchart TD
 ```
 
 Note: We intend to update the ZK module to use a quantum-secure ZK scheme, which will make the entire system quantum-secure (as opposed to quantum-private). We also intend to leverage the ability of having [Single-Server Private Outsourcing of zk-SNARKs
-](https://eprint.iacr.org/2025/2113) to allow clients to submit ZK proofs to the Private Network Hub component of the system without incurring in unnecessary hardware costs. 
+](https://eprint.iacr.org/2025/2113) to allow clients to submit ZK proofs to the Private Network Hub component of the system without incurring in unnecessary hardware costs.
 
 ## Repository Structure
 
@@ -81,26 +96,28 @@ enygma_dvp/
 
 Four independent Go modules — no shared `go.work`, each must be built from its own directory.
 
-| Directory | Module name | Depends on |
-|-----------|-------------|------------|
-| `src/` | `enygma_dvp/src_go` | external only |
-| `test/` | `enygma_dvp/test` | `enygma_dvp/src_go` (via `replace => ../src`) |
-| `scripts/` | `enygma_dvp` | `enygma_dvp/src_go` (via `replace => ../src`) |
-| `gnark_circuits/` | `gnark_server` | external only (gnark, no dependency on src/) |
+| Directory         | Module name         | Depends on                                    |
+| ----------------- | ------------------- | --------------------------------------------- |
+| `src/`            | `enygma_dvp/src_go` | external only                                 |
+| `test/`           | `enygma_dvp/test`   | `enygma_dvp/src_go` (via `replace => ../src`) |
+| `scripts/`        | `enygma_dvp`        | `enygma_dvp/src_go` (via `replace => ../src`) |
+| `gnark_circuits/` | `gnark_server`      | external only (gnark, no dependency on src/)  |
 
 The `_go` suffix in `enygma_dvp/src_go` disambiguates the Go module from the Solidity
 contracts at the same repo root. The folder on disk is `src/`, not `src_go/`.
 
 ## Implementation Details
+
 TBD
 
-
 ## Performance
-To show that our protocol runs on commodity hardware and does not come with extreme hardware requirements, we measured the performance of our design using a Mac mini M1 from 2020 with 16GB of memory. We obtained the following numbers: 
 
-* **Constraints:** TBD
-* **(Groth16) Prover time:** TBD
-* **(Groth16) Verifier cost:** TBD
+To show that our protocol runs on commodity hardware and does not come with extreme hardware requirements, we measured the performance of our design using a Mac mini M1 from 2020 with 16GB of memory. We obtained the following numbers:
+
+- **Constraints:** TBD
+- **(Groth16) Prover time:** TBD
+- **(Groth16) Verifier cost:** TBD
 
 ## Peer-Reviewed Publications
+
 TBD
