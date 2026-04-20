@@ -165,7 +165,7 @@ m = \mathrm{token\_id} \parallel \mathrm{amount}
 $$
 
 $$
-\mathrm{ENC TX DATA} = \mathrm{AEAD.Enc}(k, m)
+\mathrm{[[TX_{DATA}]]} = \mathrm{AEAD.Enc}(k, m)
 $$
 
 ---
