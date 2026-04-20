@@ -248,7 +248,7 @@ $$
 
 ---
 
-### Step 4 — Recompute Commitment
+### Step 5 — Recompute Commitment
 
 $$
 \mathrm{Commit}' = \mathrm{Commit}(pk_B^{\text{spend}}, \mathrm{salt}', \mathrm{token\_id}, v')
@@ -259,6 +259,8 @@ Accept iff:
 $$
 \mathrm{Commit}' = \mathrm{Commitment_{B}}
 $$
+
+Upon successful equality, Bob is now able to open the commitment and can spend the commitment using his spend key. 
 
 ---
 
