@@ -332,130 +332,128 @@ sequenceDiagram
     participant Chain as Blockchain
     participant Bob
 
-    note over Alice: Has commmitment<br><br>Commitment_A = H(spend_pkA, saltA, amount_1, token_id_1)
-
-    note over Bob: Has commitment<br><br>Commitment_B = H(spend_pkB, saltB, amount_2, token_id_2)
-
     note over Chain: runs DvP Smart Contract
 
+
+    note over Alice: Has commitment<br><br>Commitment_A = H(spend_pk_A, saltA, amount_1, token_id_1)
+
+    note over Bob: Has commitment<br><br>Commitment_B = H(spend_pk_B, saltB, amount_2, token_id_2)
+
+
+    note over Alice, Bob: Agree on trade parameters.<br>Swap 5 USDT (token_id = 10) for 1 concert ticket (token_id = 25)
     note over Alice, Bob: DvP can now start
 
     note over Alice: Alice initiates the DvP
 
     rect rgb(191, 223, 255)
 
-        note left of Alice: Create TX payload for Bob
+        note left of Alice: Create encrypted payload<br>and output commitments
 
-        note over Alice: Generate new ('encrypted') salt:<br><br>ss_B, CTXT = ML-KEM.Encapsulate(view_pk)
+        note over Alice: Encapsulate to Bob's view key:<br><br>ss_B, CTXT = ML-KEM.Encapsulate(view_pk_B)
 
-        note over Alice: Set TX DATA: <br><br>m = (token_id || amount)<br><br>k = HKDF(ss_B, "encryption key")
+        note over Alice: Set transaction data:<br><br>m = (token_id_1 || amount_1)<br><br>k = HKDF(ss_B, "encryption key")
 
-        note over Alice: Encrypt TX Data: <br><br> ENC_TX_DATA = AES-GCM-ENC(k, m)
+        note over Alice: Encrypt transaction data:<br><br>ENC_TX_DATA = AES-GCM.Enc(k, m)
 
-        note over Alice: Derive salt_B: <br><br> salt_B = HKDF(ss_B, "Bob salt")
+        note over Alice: Derive Bob output salt:<br><br>salt_B = HKDF(ss_B, "Bob salt")
 
-        note over Alice: Create destination commitment:<br><br>COMMIT_B = H(spend_pk_B, salt_B, amount_1, token_id_1)
+        note over Alice: Create Bob output commitment:<br><br>OUTPUT_COMMIT_B = H(spend_pk_B, salt_B, amount_1, token_id_1)
 
-        note over Alice: Generate new salt:<br><br>salt_A = HKDF(ss_B, "Alice salt")
+        note over Alice: Derive Alice output salt:<br><br>salt_A = HKDF(ss_B, "Alice salt")
 
-        %% Bob also needs to be able to generate the value of salt_A in order to prove that token_ids and amounts match across commitments
-
-        note over Alice: Create (self) destination commitment:<br><br>COMMIT_A = H(spend_pk_A, salt_A, amount_2, token_id_2)
+        note over Alice: Create Alice output commitment:<br><br>OUTPUT_COMMIT_A = H(spend_pk_A, salt_A, amount_2, token_id_2)
 
     end
 
-
     rect rgb(191, 223, 255)
 
-        note left of Alice: Creation of Revert Commitment<br>(if TX fails, should revert to new commit)
+        note left of Alice: Create revert commitment<br>for timeout recovery
 
-        note over Alice: Generate new (revert) salt:<br><br>revert_salt_A
+        note over Alice: Generate revert salt:<br><br>revert_salt_A
+
         note over Alice: Create revert commitment:<br><br>REVERT_COMMIT_A = H(spend_pk_A, revert_salt_A, amount_1, token_id_1)
 
     end
 
-
-
     rect rgb(191, 223, 255)
 
-        note left of Alice: Create the ZKP for the transaction
+        note left of Alice: Create the zero-knowledge proof
 
-        note over Alice: Create nullifier for tx: <br><br>nf_A = H(spend_sk_A, leafIndex_A)
+        note over Alice: Create nullifier:<br><br>nf_A = H(spend_sk_A, leafIndex_A)
 
-        note over Alice: Create zero-knowledge proof (π_A):<br><br> - "I know the spend secret key for this commit"<br><br> - "This nullifier is well-formed"<br><br>- "The revert commit has the same amount and token_id as commit I'm spending"<br><br>- "The nullifier, the (self) destination commitment (COMMIT_A), and the REVERT_COMMIT_A are all associated with the same spend pk"<br><br>-"The destination (COMMIT_B) has the same token_id_1 and amount_1 as the commit I'm spending"<br><br>-"I know a merkle path that proves that the commitment I'm spending is in the tree"
+        note over Alice: Create zero-knowledge proof (π_A):<br><br>- "I know the spend secret key for the input commitment"<br><br>- "This nullifier is well-formed"<br><br>- "The revert commitment has the same amount and token_id as the input commitment being spent"<br><br>- "The nullifier, OUTPUT_COMMIT_A, and REVERT_COMMIT_A are all associated with the same spend public key"<br><br>- "OUTPUT_COMMIT_B has the same token_id_1 and amount_1 as the input commitment being spent"<br><br>- "I know a Merkle path proving that the input commitment is in the tree"
 
     end
 
+    Alice->>Chain: < π_A, CTXT, OUTPUT_COMMIT_B, ENC_TX_DATA, OUTPUT_COMMIT_A, REVERT_COMMIT_A, nf_A, deadline >
 
-    Alice->>Chain: < π_A, CTXT, COMMIT_B, ENC_TX_DATA, COMMIT_A, REVERT_COMMIT_A, nf_A, deadline>
+    note over Chain: Check if:<br><br>- deadline field is well-formed<br>- current time is before deadline<br>- nf_A is not already locked or spent<br>- zero-knowledge proof π_A is valid
 
+    alt (current time <= deadline) && (Verify(π_A) = TRUE) && (nf_A fresh)
 
-    note over Chain: Check if<br>deadline is valid
+        note over Chain: Create swap_id<br><br>swap_id = H(OUTPUT_COMMIT_A, REVERT_COMMIT_A, nf_A, OUTPUT_COMMIT_B, deadline)
 
-    note over Chain: Check if nf_A<br>has been spent
-    note over Chain: Verify ZK Proof
-
-
-    alt (Verify(π_A) = TRUE) && (nf_A NOT MARKED AS SPENT) && (DEADLINE IS VALID)
-
-        note over Chain: Create swap_id<br><br>swap_id = H(COMMIT_A, REVERT_COMMIT_A, nf_A, COMMIT_B, deadline)
         note over Chain: Mark nf_A as locked
-        Chain ->> Alice: TX OK
 
+        Chain->>Alice: TX OK
 
-    else (Verify(π_A) = FALSE) || (nf_A IS MARKED AS SPENT) || (DEADLINE IS NOT VALID)
-      note over Chain: Reject TX
-      Chain ->> Alice: TX ERROR
+    else invalid proof, invalid deadline, or nf_A not fresh
+
+        note over Chain: Reject transaction
+
+        Chain->>Alice: TX ERROR
 
     end
 
+    Chain->>Bob: < CTXT, OUTPUT_COMMIT_B, ENC_TX_DATA, OUTPUT_COMMIT_A, swap_id >
 
-    Chain ->> Bob: < CTXT, COMMIT_B, ENC_TX_DATA, COMMIT_A, swap_id >
+    note over Bob: Decapsulate CTXT:<br><br>ss_B = ML-KEM.Decapsulate(sk_view_B, CTXT)
 
-    note over Bob: Decapsulate CTXT and<br>obtain ss_B
+    note over Bob: Derive symmetric key:<br><br>k = HKDF(ss_B, "encryption key")
 
+    note over Bob: Derive Bob output salt:<br><br>salt_B = HKDF(ss_B, "Bob salt")
 
-    note over Bob: Obtain symmetric key:<br><br> k = HKDF(ss_B, "encryption key")
+    note over Bob: Decrypt transaction data:<br><br>(token_id_1, amount_1) = AES-GCM.Dec(k, ENC_TX_DATA)
 
-    note over Bob: Obtain salt:<br><br> salt_B = HKDF(ss_B, "Bob salt")
+    note over Bob: Recompute expected Bob output commitment:<br><br>OBTAINED_COMMIT_B = H(spend_pk_B, salt_B, amount_1, token_id_1)
 
+    note over Bob: Derive Alice output salt:<br><br>salt_A = HKDF(ss_B, "Alice salt")
 
-    note over Bob: Decrypt ENC_TX_DATA<br>(using symmetric key k)<br><br>obtain token_id_1 & amount_1
+    note over Bob: Recompute expected Alice output commitment:<br><br>OBTAINED_COMMIT_A = H(spend_pk_A, salt_A, amount_2, token_id_2)
 
-    note over Bob: Obtain commitment<br><br>C = H(spend_pk_B, salt_B, amount_1, token_id_1)
-    note over Bob: Check if commitments match: <br><br>C == COMMIT_B
+    alt (OBTAINED_COMMIT_B != OUTPUT_COMMIT_B) || <br> (OBTAINED_COMMIT_A != OUTPUT_COMMIT_A)
 
-    note over Bob: Obtain salt_A<br><br>salt_A = HKDF(ss_B, "Alice salt")
-
-    note over Bob: Obtain (Alice's) commitment:<br><br>C* = H(spent_pk_A, salt_A, amount_2, token_id_2)
-
-    note over Bob: Check if commitments match:<br><br>C* == COMMIT_A
-
-    note over Bob: Create nullifier for tx: <br><br>nf_B = H(spend_sk_B, leafIndex_B)
-
-    note over Bob: Create zero-knowledge proof (π_B):<br><br> - "I know the spend sk for this commitment"<br><br> - "This nullifier is well-formed"<br><br>- "The destination commit (COMMIT_A) has the same token_id<br>and amount as the commit I'm spending"<br><br>-"I know a merkle path that proves that the commitment I'm spending is in the tree"
+        note over Bob: Abort
+        
+    else (OBTAINED_COMMIT_B == OUTPUT_COMMIT_B) &&<br> (OBTAINED_COMMIT_A == OUTPUT_COMMIT_A)
 
 
+        note over Bob: Create nullifier:<br><br>nf_B = H(spend_sk_B, leafIndex_B)
 
+        note over Bob: Create zero-knowledge proof (π_B):<br><br>- "I know the spend secret key for the input commitment"<br><br>- "This nullifier is well-formed"<br><br>- "OUTPUT_COMMIT_A has the same token_id_2 and amount_2 as Bob's input commitment"<br><br>- "I know a Merkle path proving that the input commitment is in the tree"
 
-    alt (TX On Time) && (Verify(π_B) = TRUE) && (nf_B NOT MARKED AS SPENT)
+        Bob->>Chain: < π_B, OUTPUT_COMMIT_A, nf_B, swap_id >
 
-      Bob->>Chain: < π_B, COMMIT_A, nf_B, swap_id >
+    end
 
-      note over Chain: Mark nf_A as spent
-      note over Chain: Mark nf_B as spent
-      note over Chain: Insert COMMIT_A into tree
-      note over Chain: Insert COMMIT_B into tree
+    note over Chain: Check if:<br><br>- current time is before deadline<br>- nf_B is not already spent<br>- swap_id is active<br>- zero-knowledge proof π_B is valid
 
-      note over Chain: Mark DvP TX as completed
+    alt (current time < deadline) && (Verify(π_B) = TRUE) && (nf_B fresh)
 
+        note over Chain: - Mark nf_A as spent<br><br>- Mark nf_B as spent<br><br>- Insert OUTPUT_COMMIT_A into the tree<br><br>- Insert OUTPUT_COMMIT_B into the tree
 
-    else (TX Timeout)
-      note over Chain: Mark nf_A as spent
-      note over Chain: Insert REVERT_COMMIT_A into tree
-      note over Chain: Mark DvP TX as failed (i.e., timeout)
+        note over Chain: Mark DvP transaction as completed
 
-      Chain ->> Alice: TX Reverted
+    else timeout
+
+        note over Chain: Mark nf_A as spent
+
+        note over Chain: Insert REVERT_COMMIT_A into the tree
+
+        note over Chain: Mark DvP transaction as failed
+
+        Chain->>Alice: TX reverted<br>(funds sent to REVERT_COMMIT_A)
+
     end
 
 
