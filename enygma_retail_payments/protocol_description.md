@@ -201,7 +201,7 @@ Alice submits the following payload:
 
 ## 5. Transaction Processing (Bob)
 
-Given $(\mathrm{ctxt}, \mathrm{commit}, \mathrm{enc})$:
+The above mentioned payload is published (and verified) by the blockchain. 
 
 ### Step 1 — Private Information Retrieval
 Bob performs a simple trivial private information retrieval protocol. Concretely, Bob downloads every single transaction that takes place in the network. Effectively, Bob is going to try to decrypt all transactions in the network and see if any contains funds for him. 
