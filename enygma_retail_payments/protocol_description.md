@@ -82,8 +82,7 @@ Commitment = H(pk^{\text{spend}}, salt, token_{id}, amount)
 $$
 
 ### Transaction Payload
-Before proceeding with the description of the payment protocol, we higlight the tx structure of each payment that takes place in the network. 
-We assume that Alice 
+Before proceeding with the description of the payment protocol, we higlight the tx structure of each private payment.
 
 <div align="center">
 
@@ -125,10 +124,12 @@ Upon generating the shared secret, Alice must derive two values:
 * a salt, which is used to mask/randomize the destination commitment
 * a symmetric key, which is used to encrypt additional data that is appended to the transaction
 
+We assume the existence of global system parameters: $$context_{k}$$ and $$context_{salt}$$, to be used as inputs to the Hash-based Key Derivation function to produce independent values to be used for encryption and randomness of the commitments. 
+
 #### Deriving a symmetric key
 
 $$
-k = \mathrm{HKDF}(ss_A, context_{k}, len_{k})
+k = \mathrm{HKDF}(ss, context_{k}, len_{k})
 $$
 
 #### Deriving a salt
@@ -164,7 +165,7 @@ m = \mathrm{token\_id} \parallel \mathrm{amount}
 $$
 
 $$
-\mathrm{enc} = \mathrm{AEAD.Enc}(k, m, \mathrm{ctxt})
+\mathrm{ENC_TX_DATA} = \mathrm{AEAD.Enc}(k, m)
 $$
 
 ---
@@ -174,7 +175,7 @@ $$
 Let $\mathrm{index}$ be the spent note index:
 
 $$
-nf = \mathrm{HASH}(sk_A^{\text{spend}} \parallel \mathrm{index})
+nf = \mathrm{HASH}(sk_A^{\text{spend}} \parallel \mathrm{leafIndex}_{A})
 $$
 
 ---
