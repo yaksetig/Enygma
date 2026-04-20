@@ -208,7 +208,7 @@ sequenceDiagram
     participant Chain as Blockchain
     participant Bob
 
-    note over Alice: Has commmitment<br><br>Commitment_A = H(spend_pkA, saltA, amount_1, token_id_1)
+    note over Alice: Has commitment<br><br>Commitment_A = H(spend_pkA, saltA, amount_1, token_id_1)
 
     note over Bob: Has commitment<br><br>Commitment_B = H(spend_pkB, saltB, amount_2, token_id_2)
 
@@ -222,7 +222,7 @@ sequenceDiagram
 
         note left of Alice: Create TX payload for Bob
 
-        note over Alice: Generate new ('encrypted') salt:<br><br>ss_B, CTXT = ML-KEM.Encapsulate(view_pk)
+        note over Alice: Generate new ('encrypted') salt:<br><br>ss_B, CTXT = ML-KEM.Encapsulate(view_pk_B)
 
         note over Alice: Set TX DATA: <br><br>m = (token_id || amount)<br><br>k = HKDF(ss_B, "encryption key")
 
@@ -303,7 +303,7 @@ sequenceDiagram
 
     note over Bob: Obtain salt_A<br><br>salt_A = HKDF(ss_B, "Alice salt")
 
-    note over Bob: Obtain (Alice's) commitment:<br><br>C* = H(spent_pk_A, salt_A, amount_2, token_id_2)
+    note over Bob: Obtain (Alice's) commitment:<br><br>C* = H(spend_pk_A, salt_A, amount_2, token_id_2)
 
     note over Bob: Check if commitments match:<br><br>C* == COMMIT_A
 
