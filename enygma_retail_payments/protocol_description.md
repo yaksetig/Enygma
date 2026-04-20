@@ -199,7 +199,18 @@ Alice submits the following payload:
 
 ---
 
-## 5. Transaction Processing (Bob)
+## Transaction Processing (Blockchain)
+The blockchain, upon receiving a transaction payload, checks if the nullifier does not appear on the spent list and checks if 
+
+$$
+\mathrm{Verify}(\pi) = TRUE
+$$
+
+If both clauses pass, then the transaction gets added to the blockchain and both commitments are inserted into the Merkle Tree. 
+
+---
+
+## Transaction Scanning (Bob)
 
 The above mentioned payload is published (and verified) by the blockchain. 
 
