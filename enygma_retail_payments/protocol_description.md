@@ -212,7 +212,7 @@ Bob performs a simple trivial private information retrieval protocol. Concretely
 Upon downloading a transaction, Bob runs the ML-KEM Decapsulation algorithm to obtain the shared secret. We note that this operation will always return an output value. However, Bob will not be able to infer whether or not this value is valid. We address this subsequently in the protocol. 
 
 $$
-ss_B \leftarrow \mathrm{ML\text{-}KEM.Decaps}(sk_B^{\text{view}}, \mathrm{ctxt})
+ss' \leftarrow \mathrm{ML\text{-}KEM.Decaps}(sk_B^{\text{view}}, \mathrm{ctxt})
 $$
 
 ---
@@ -224,13 +224,13 @@ Similarly to Alice, Bob must now derive the symmetric key and the salt from the 
 #### Deriving a symmetric key
 
 $$
-k' = \mathrm{HKDF}(ss, context_{k}, len_{k})
+k' = \mathrm{HKDF}(ss', context_{k}, len_{k})
 $$
 
 #### Deriving a salt
 
 $$
-\mathrm{salt'} = \mathrm{HKDF}(ss, context_{salt}, len_{salt})
+\mathrm{salt'} = \mathrm{HKDF}(ss', context_{salt}, len_{salt})
 $$
 
 
@@ -238,10 +238,12 @@ $$
 
 ### Step 4 — Decrypt
 
-We introduce a step to inform Bob if the shared secret is valid for this specific transaction or not. Since this is an authenticated encryption (with associated data) scheme, Bob will know if the key used to decrypt is correct as the authentication component of the cipher will succeed. Upon successful decryption, Bob obtains the information needed to open the received commitment (i.e., token id and received amount).
+We introduce a step to inform Bob if the shared secret is valid for this specific transaction or not. Since this is an authenticated encryption (with associated data) scheme, Bob will know if the key used to decrypt is correct as the authentication component of the cipher will succeed. 
+
+Upon successful decryption, Bob obtains the information needed to open the received commitment (i.e., token id and received amount).
 
 $$
-(token_{id}, v_{1}) = \mathrm{AEAD.Dec}(k', \mathrm{enc}, \mathrm{ctxt})
+(token_{id}, v') = \mathrm{AEAD.Dec}(k', \mathrm{enc}, \mathrm{ctxt})
 $$
 
 ---
@@ -249,13 +251,13 @@ $$
 ### Step 4 — Recompute Commitment
 
 $$
-\mathrm{commit}' = \mathrm{Commit}(pk_B^{\text{spend}}, \mathrm{salt}', \mathrm{token\_id}, v')
+\mathrm{Commit}' = \mathrm{Commit}(pk_B^{\text{spend}}, \mathrm{salt}', \mathrm{token\_id}, v')
 $$
 
 Accept iff:
 
 $$
-\mathrm{commit}' = \mathrm{commit}
+\mathrm{Commit}' = \mathrm{Commitment_{B}}
 $$
 
 ---
