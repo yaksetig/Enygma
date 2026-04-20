@@ -2,7 +2,6 @@ package payment
 
 import (
 	"fmt"
-	"log"
 	"math/big"
 	"net/http"
 
@@ -103,25 +102,30 @@ func NewHandler(pkPath, vkPath string) gin.HandlerFunc {
 
 		ccs, err := frontend.Compile(ecc.BN254.ScalarField(), r1cs.NewBuilder, &circuit)
 		if err != nil {
-			log.Fatal(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("compile circuit: %v", err)})
+			return
 		}
 
 		witnessFull, err := frontend.NewWitness(&witness, ecc.BN254.ScalarField())
 		if err != nil {
-			log.Fatal(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("build witness: %v", err)})
+			return
 		}
 
 		proof, err := groth16.Prove(ccs, pk, witnessFull)
 		if err != nil {
-			log.Fatal(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("prove: %v", err)})
+			return
 		}
 
 		witnessPublic, err := frontend.NewWitness(&witness, ecc.BN254.ScalarField(), frontend.PublicOnly())
 		if err != nil {
-			log.Fatal(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("build public witness: %v", err)})
+			return
 		}
 		if err := groth16.Verify(proof, vk, witnessPublic); err != nil {
-			panic(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("verify: %v", err)})
+			return
 		}
 		fmt.Println("Payment proof verified successfully!")
 
