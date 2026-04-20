@@ -118,7 +118,7 @@ $$
 
 ---
 
-### Step 2 — Key Derivation
+### Step 2 — Hash-based Key Derivation
 Upon generating the shared secret, Alice must derive two values: 
 
 * a salt, which is used to mask/randomize the destination commitment
@@ -161,13 +161,13 @@ $$
 ### Step 4 — Encrypt Transaction Data
 We use $$[[m]]_{k}$$ to denote the symmetric encryption of message $$m$$ using key $$k$$. 
 
-In this context, the message $$m$$ contains the information regarding the token id and the amount being transferred. As seen below: 
+In this context, the message $$m$$ contains the information regarding the token id and the amount being transferred as demonstrated below:
 
 $$
 m = \mathrm{token\_id} \parallel \mathrm{amount}
 $$
 
-To make the variable more explicit in context, we denote the encryption of this transaction data as $$\mathrm{[[TX_{DATA}]]_{k}}$$
+To make the variable more explicit in context, we denote the encryption of this transaction data as written below:
 
 $$
 \mathrm{[[TX_{DATA}]]_{k}} = \mathrm{AEAD.Enc}(k, m)
@@ -178,10 +178,10 @@ $$
 
 ### Step 5 — Nullifier
 
-Let $\mathrm{index}$ be the spent note index:
+Let $\mathrm{leafIndex_{A}}$ be the index of the spent note $$C_{A}$$:
 
 $$
-nf = \mathrm{HASH}(sk_A^{\text{spend}} \parallel \mathrm{leafIndex}_{A})
+nf = \mathrm{H}(sk_A^{\text{spend}} \parallel \mathrm{leafIndex}_{A})
 $$
 
 ---
@@ -192,8 +192,8 @@ Alice submits the following payload:
 
 <div align="center">
 
-| ML-KEM.CTXT | $$\mathrm{Commitment_{B}}$$ | $$\mathrm{Commitment_{A}}$$ | AES-GCM-ENC(k, m, _) | $$\mathrm{nf}$$ | $\pi$ |
-|:-----------:|:---------------------------:|:---------------------------:|:--------------------:|:---------------:|:-----:|
+| ML-KEM.CTXT | $$\mathrm{Commitment_{B}}$$ | $$\mathrm{Commitment_{A}}$$ | \mathrm{[[TX_{DATA}]]_{k}} | $$\mathrm{nf}$$ | $\pi$ |
+|:-----------:|:---------------------------:|:---------------------------:|:--------------------------:|:---------------:|:-----:|
 
 </div>
 
@@ -203,9 +203,13 @@ Alice submits the following payload:
 
 Given $(\mathrm{ctxt}, \mathrm{commit}, \mathrm{enc})$:
 
+### Step 1 — Private Information Retrieval
+Bob performs a simple trivial private information retrieval protocol. Concretely, Bob downloads every single transaction that takes place in the network. Effectively, Bob is going to try to decrypt all transactions in the network and see if any contains funds for him. 
+
 ---
 
-### Step 1 — ML-KEM Decapsulation
+### Step 2 — ML-KEM Decapsulation
+Upon downloading a transaction, Bob runs the ML-KEM Decapsulation algorithm to obtain the shared secret. We note that this operation will always return an output value. However, Bob will not be able to infer whether or not this value is valid. We address this subsequently in the protocol. 
 
 $$
 ss_B \leftarrow \mathrm{ML\text{-}KEM.Decaps}(sk_B^{\text{view}}, \mathrm{ctxt})
@@ -213,17 +217,28 @@ $$
 
 ---
 
-### Step 2 — Key Derivation
+### Step 3 — Hash-based Key Derivation
+
+Similarly to Alice, Bob must now derive the symmetric key and the salt from the shared secret value. 
+
+#### Deriving a symmetric key
 
 $$
-(\mathrm{salt}', k') = \mathrm{HKDF}(\mathrm{nil}, ss_B, \mathrm{info})
+k' = \mathrm{HKDF}(ss, context_{k}, len_{k})
 $$
+
+#### Deriving a salt
+
+$$
+\mathrm{salt'} = \mathrm{HKDF}(ss, context_{salt}, len_{salt})
+$$
+
 
 ---
 
-### Step 3 — Decrypt
+### Step 4 — Decrypt
 
-Since this is an authenticated encryption (with associated data) scheme, Bob will know if the used key is correct as the authentication component of the cipher will succeed. 
+We introduce a step to inform Bob if the shared secret is valid for this specific transaction or not. Since this is an authenticated encryption (with associated data) scheme, Bob will know if the key used to decrypt is correct as the authentication component of the cipher will succeed. Upon successful decryption, Bob obtains the information needed to open the received commitment (i.e., token id and received amount).
 
 $$
 (token_{id}, v_{1}) = \mathrm{AEAD.Dec}(k', \mathrm{enc}, \mathrm{ctxt})
@@ -247,38 +262,8 @@ $$
 
 ## 7. Security Goals
 
-### Confidentiality
-
-$$
-\mathrm{amount}, \mathrm{salt} \text{ remain hidden without } sk_B^{\text{view}}
-$$
-
----
-
-### Key Privacy
-
-$$
-sk_A^{\text{view}},\; sk_B^{\text{view}},\; sk_A^{\text{spend}},\; sk_B^{\text{spend}} \text{ remain secret}
-$$
-
----
-
-### Binding
-
-$$
-\mathrm{commit} \text{ binds } (pk_B^{\text{spend}}, \mathrm{salt}, \mathrm{token\_id}, \mathrm{amount})
-$$
-
----
-
-### Nullifier
-
-$$
-nf = \mathrm{HASH}(sk_A^{\text{spend}} \parallel \mathrm{index})
-$$
-
-- prevents double-spend  
-- unlinkable to $pk_A^{\text{spend}}$
+* Privacy
+* Auditability
 
 ---
 
@@ -288,6 +273,6 @@ $$
 - Single-input spend (no anonymity set)
 - No balance / sum constraints
 - Recipient detection is implicit via decapsulation + AEAD check
-- ZK proof is omitted and must enforce:
+- ZK proof must enforce:
   - knowledge of $sk_A^{\text{spend}}$
   - correct nullifier construction
