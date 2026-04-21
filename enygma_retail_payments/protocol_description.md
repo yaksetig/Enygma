@@ -1,6 +1,6 @@
 # Enygma Retail Payments Protocol
 
-## System Entites
+## System Entities
 We assume a simple setting with three entities:
 * Alice (the sender)
 * Blockchain (the verification layer)
@@ -284,7 +284,17 @@ Upon successful equality, Bob is now able to open the commitment and can spend t
 
 ---
 
-## 7. Security Goals
+## Auditing
+This construction provides different types of auditing properties. 
+
+
+### Long-Term Auditing
+
+### Long-Term Auditing
+
+---
+
+## Security Goals
 
 * Privacy
 * Auditability
@@ -311,3 +321,6 @@ TBD: Do we want to enforce that the change commitment has the sender as the owne
 - View keys are **ML-KEM keys (not Diffie–Hellman)**
 - Single-input spend (no anonymity set)
 - Recipient detection is implicit via decapsulation + AEAD check
+
+### Confidential Compliance
+This protocol supports an additional extension: the ability to prove that each transaction falls under a specific threshold (e.g., an AML limit)
