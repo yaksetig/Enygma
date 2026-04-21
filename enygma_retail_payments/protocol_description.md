@@ -288,9 +288,11 @@ Upon successful equality, Bob is now able to open the commitment and can spend t
 This construction provides different types of auditing properties. 
 
 
-### Long-Term Auditing
+### Single Transaction Auditing
+TBD
 
 ### Long-Term Auditing
+TBD
 
 ---
 
