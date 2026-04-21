@@ -5,11 +5,11 @@ go 1.24.0
 toolchain go1.24.12
 
 require (
-	enygma_dvp/src_go v0.0.0
+	 github.com/raylsnetwork/enygma_dvp/src v0.0.0
 	github.com/ethereum/go-ethereum v1.16.8
 )
 
-replace enygma_dvp/src_go => ../src
+replace github.com/raylsnetwork/enygma_dvp/src => ../src
 
 require (
 	github.com/Microsoft/go-winio v0.6.2 // indirect

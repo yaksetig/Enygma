@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"enygma_dvp/src_go/core"
+	"github.com/raylsnetwork/enygma_dvp/src/core"
 )
 
 // --- Utility Function Tests ---

@@ -1,4 +1,4 @@
-module enygma_dvp/src_go
+module github.com/raylsnetwork/enygma_dvp/src
 
 go 1.24.0
 

@@ -42,8 +42,8 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 
-	"enygma_dvp/src_go/core"
-	"enygma_dvp/src_go/web3"
+	"github.com/raylsnetwork/enygma_dvp/src/core"
+	"github.com/raylsnetwork/enygma_dvp/src/web3"
 )
 
 // --- Internal helpers ---

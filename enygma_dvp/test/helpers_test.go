@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"enygma_dvp/src_go/core"
+	"enygma_dvp/github.com/raylsnetwork/enygma_dvp/src"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"

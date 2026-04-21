@@ -5,7 +5,7 @@ import (
 	"math/big"
 	"testing"
 
-	"enygma_dvp/src_go/core"
+	"enygma_dvp/github.com/raylsnetwork/enygma_dvp/src"
 )
 
 func TestNewMerkleTree(t *testing.T) {

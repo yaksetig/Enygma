@@ -3,7 +3,7 @@ module enygma_dvp/test
 go 1.24.0
 
 require (
-	enygma_dvp/src_go v0.0.0
+	github.com/raylsnetwork/enygma_dvp/src v0.0.0 
 	github.com/ethereum/go-ethereum v1.16.8
 )
 
@@ -35,4 +35,4 @@ require (
 	golang.org/x/sys v0.36.0 // indirect
 )
 
-replace enygma_dvp/src_go => ../src
+replace github.com/raylsnetwork/enygma_dvp/src => ../src  

@@ -8,7 +8,7 @@ import (
 	"math/big"
 	"testing"
 
-	"enygma_dvp/src_go/core"
+	"github.com/raylsnetwork/enygma_dvp/src/core"
 )
 
 // TestErc20Swap_E2E exercises the full Alice→Bob swap:

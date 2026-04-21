@@ -64,8 +64,8 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 
-	"enygma_dvp/src_go/core"
-	"enygma_dvp/src_go/core/endpoints"
+	"enygma_dvp/github.com/raylsnetwork/enygma_dvp/src"
+	"enygma_dvp/github.com/raylsnetwork/enygma_dvp/src/endpoints"
 )
 
 const vaultIDErc1155 = 2

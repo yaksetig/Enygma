@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"enygma_dvp/src_go/core"
+	"github.com/raylsnetwork/enygma_dvp/src/core"
 )
 
 // --- Helper: create a mock gnark server ---

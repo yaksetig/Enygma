@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"enygma_dvp/src_go/core"
+	"github.com/raylsnetwork/enygma_dvp/src/core"
 )
 
 // makeViewEncapKey generates a fresh ML-KEM-768 encapsulation key for tests.

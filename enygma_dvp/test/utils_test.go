@@ -7,7 +7,7 @@ import (
 	"os"
 	"testing"
 
-	"enygma_dvp/src_go/core"
+	"enygma_dvp/github.com/raylsnetwork/enygma_dvp/src"
 
 	"github.com/iden3/go-iden3-crypto/babyjub"
 )

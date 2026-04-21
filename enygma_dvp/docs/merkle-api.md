@@ -17,9 +17,9 @@ Returns the Merkle tree status for **all vaults**, plus a cross-check that verif
 }
 ```
 
-| Field | Type | Default | Description |
-|---|---|---|---|
-| `rpcUrl` | string | `http://127.0.0.1:8545` | Ethereum JSON-RPC endpoint |
+| Field          | Type   | Default                  | Description                      |
+| -------------- | ------ | ------------------------ | -------------------------------- |
+| `rpcUrl`       | string | `http://127.0.0.1:8545`  | Ethereum JSON-RPC endpoint       |
 | `receiptsPath` | string | `../build/receipts.json` | Path to deployment receipts file |
 
 ### Response
@@ -58,11 +58,7 @@ Returns the Merkle tree status for **all vaults**, plus a cross-check that verif
           "...",
           ["19309031..."]
         ],
-        "zeros": [
-          "21786163...",
-          "18548196...",
-          "..."
-        ]
+        "zeros": ["21786163...", "18548196...", "..."]
       },
       "error": "string (omitted if no error)"
     }
@@ -74,33 +70,33 @@ Returns the Merkle tree status for **all vaults**, plus a cross-check that verif
 
 #### `enygmaDvpRegistryCheck`
 
-| Field | Type | Description |
-|---|---|---|
-| `enygmaDvpAddress` | string | Address of the EnygmaDvP contract from receipts |
-| `allMatch` | bool | `true` if all vault addresses match between EnygmaDvP and receipts |
-| `entries[].vaultId` | uint64 | Vault index in EnygmaDvP (0–3) |
-| `entries[].name` | string | Vault contract name |
-| `entries[].addressInDvP` | string | Address returned by `vaultById(id)` on EnygmaDvP |
-| `entries[].addressInReceipts` | string | Address from `build/receipts.json` |
-| `entries[].match` | bool | Whether the two addresses agree |
-| `error` | string | Set if the check could not be completed |
+| Field                         | Type   | Description                                                        |
+| ----------------------------- | ------ | ------------------------------------------------------------------ |
+| `enygmaDvpAddress`            | string | Address of the EnygmaDvP contract from receipts                    |
+| `allMatch`                    | bool   | `true` if all vault addresses match between EnygmaDvP and receipts |
+| `entries[].vaultId`           | uint64 | Vault index in EnygmaDvP (0–3)                                     |
+| `entries[].name`              | string | Vault contract name                                                |
+| `entries[].addressInDvP`      | string | Address returned by `vaultById(id)` on EnygmaDvP                   |
+| `entries[].addressInReceipts` | string | Address from `build/receipts.json`                                 |
+| `entries[].match`             | bool   | Whether the two addresses agree                                    |
+| `error`                       | string | Set if the check could not be completed                            |
 
 #### `vaults[]`
 
-| Field | Type | Description |
-|---|---|---|
-| `name` | string | Vault contract name |
-| `address` | string | Vault contract address |
-| `onChainRoot` | string | Current Merkle root from `currentRoot()` on the vault contract |
-| `localRoot` | string | Root computed locally by replaying on-chain `Commitment` events |
-| `match` | bool | `true` if `localRoot == onChainRoot` |
-| `leafCount` | int | Total number of `Commitment` events found on-chain |
-| `treeNumber` | uint64 | Current tree number (increments when the tree fills up at 256 leaves) |
-| `tree.depth` | int | Tree depth (always 8; max 256 leaves per tree) |
-| `tree.root` | string | Same as `localRoot` |
-| `tree.levels` | `[][]string` | All tree levels in decimal. `levels[0]` = leaves, `levels[8]` = `[root]` |
-| `tree.zeros` | `[]string` | Zero values per level. `zeros[i]` is the implicit sibling when a node at level `i` has no pair |
-| `error` | string | Set if this vault could not be checked |
+| Field         | Type         | Description                                                                                    |
+| ------------- | ------------ | ---------------------------------------------------------------------------------------------- |
+| `name`        | string       | Vault contract name                                                                            |
+| `address`     | string       | Vault contract address                                                                         |
+| `onChainRoot` | string       | Current Merkle root from `currentRoot()` on the vault contract                                 |
+| `localRoot`   | string       | Root computed locally by replaying on-chain `Commitment` events                                |
+| `match`       | bool         | `true` if `localRoot == onChainRoot`                                                           |
+| `leafCount`   | int          | Total number of `Commitment` events found on-chain                                             |
+| `treeNumber`  | uint64       | Current tree number (increments when the tree fills up at 256 leaves)                          |
+| `tree.depth`  | int          | Tree depth (always 8; max 256 leaves per tree)                                                 |
+| `tree.root`   | string       | Same as `localRoot`                                                                            |
+| `tree.levels` | `[][]string` | All tree levels in decimal. `levels[0]` = leaves, `levels[8]` = `[root]`                       |
+| `tree.zeros`  | `[]string`   | Zero values per level. `zeros[i]` is the implicit sibling when a node at level `i` has no pair |
+| `error`       | string       | Set if this vault could not be checked                                                         |
 
 ---
 
@@ -121,21 +117,21 @@ Provide either `vault` or `vaultId` — not both required.
 }
 ```
 
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `vault` | string | one of these | Vault name (see table below) |
-| `vaultId` | uint64 | one of these | Vault ID 0–3 (see table below) |
-| `rpcUrl` | string | no | Ethereum JSON-RPC endpoint (default `http://127.0.0.1:8545`) |
-| `receiptsPath` | string | no | Path to deployment receipts file (default `../build/receipts.json`) |
+| Field          | Type   | Required     | Description                                                         |
+| -------------- | ------ | ------------ | ------------------------------------------------------------------- |
+| `vault`        | string | one of these | Vault name (see table below)                                        |
+| `vaultId`      | uint64 | one of these | Vault ID 0–3 (see table below)                                      |
+| `rpcUrl`       | string | no           | Ethereum JSON-RPC endpoint (default `http://127.0.0.1:8545`)        |
+| `receiptsPath` | string | no           | Path to deployment receipts file (default `../build/receipts.json`) |
 
 #### Valid vault identifiers
 
-| `vaultId` | `vault` | Asset type |
-|---|---|---|
-| `0` | `Erc20CoinVault` | ERC-20 |
-| `1` | `Erc721CoinVault` | ERC-721 |
-| `2` | `Erc1155CoinVault` | ERC-1155 |
-| `3` | `EnygmaErc20CoinVault` | Enygma ERC-20 (private mint) |
+| `vaultId` | `vault`                | Asset type                   |
+| --------- | ---------------------- | ---------------------------- |
+| `0`       | `Erc20CoinVault`       | ERC-20                       |
+| `1`       | `Erc721CoinVault`      | ERC-721                      |
+| `2`       | `Erc1155CoinVault`     | ERC-1155                     |
+| `3`       | `EnygmaErc20CoinVault` | Enygma ERC-20 (private mint) |
 
 ### Response
 

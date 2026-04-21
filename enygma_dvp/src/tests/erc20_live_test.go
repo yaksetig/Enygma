@@ -9,7 +9,7 @@ import (
 	"net"
 	"testing"
 
-	"enygma_dvp/src_go/core"
+	"github.com/raylsnetwork/enygma_dvp/src/core"
 )
 
 // serverAvailable checks if something is listening on the given addr.
