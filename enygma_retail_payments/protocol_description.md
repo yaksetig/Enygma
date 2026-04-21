@@ -282,18 +282,12 @@ Upon successful equality, Bob is now able to open the commitment and can spend t
 
 ---
 
-## 8. Notes
-
-- View keys are **ML-KEM keys (not Diffie–Hellman)**
-- Single-input spend (no anonymity set)
-- Recipient detection is implicit via decapsulation + AEAD check
-
-### Zero-Knowledge Proof Remarks
+## Zero-Knowledge Proof Remarks
 The ZK proof submitted by Alice must include the following clauses:
 
 * I am spending a commitment in the tree
 * Here's a (private) Merkle Proof of inclusion to show that this commitment is part of the tree
-* I know the spend key associated with the commitment being spent
+* I know the spend key associated with the commitment being spent (i.e., I know the preimage of the hash-based key)
 * The nullifier $$nf_A$$ is obtained by hashing the spend key and the leafIndex where this commitment is located in the tree
 * The destination amount is the same as the amount that I'm spending (plus the amount in the change commitment)
 * Commitment_A is well formed (i.e., follows the H(x, y, z, w) structure)
@@ -301,3 +295,10 @@ The ZK proof submitted by Alice must include the following clauses:
 * The token_id in both output commitments is the same as the token_id in the commitment I'm spending
 
 TBD: Do we want to enforce that the change commitment has the sender as the owner? (i.e., it uses the spend key of Alice)
+
+
+## Notes
+
+- View keys are **ML-KEM keys (not Diffie–Hellman)**
+- Single-input spend (no anonymity set)
+- Recipient detection is implicit via decapsulation + AEAD check
