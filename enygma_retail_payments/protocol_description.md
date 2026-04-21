@@ -127,15 +127,24 @@ Upon generating the shared secret, Alice must derive two values:
 We assume the existence of global system parameters: $$context_{k}$$ and $$context_{salt}$$. These parameters are simply domain-separation strings to be used as inputs to the Hash-based Key Derivation function to produce independent values to be used for encryption and randomness of the commitments.
  
 #### Deriving a symmetric key
+To derive a symmetric key, Alice simply uses the shared secret and the domain-separation string as input to the HKDF function and obtains a fresh symmetric key that Bob will also be able to derive on his side. This value will always be random due to the use of a new shared secret for every transaction that takes place in the network. We assume $$len_{k} = 256$$ bits as we want the construction to be within the extremely conservative quantum-secure bounds (i.e., AES-GCM-256).
 
 $$
 k = \mathrm{HKDF}(ss, context_{k}, len_{k})
 $$
 
-#### Deriving a salt
+#### Deriving a destination salt
+To derive a destination salt, Alice simply uses the shared secret and the domain-separation string as input to the HKDF function and obtains a fresh salt that Bob will also be able to derive on his side. This value will always be random due to the use of a new shared secret for every transaction that takes place in the network. 
 
 $$
 \mathrm{salt_{B}} = \mathrm{HKDF}(ss, context_{salt}, len_{salt})
+$$
+
+#### Deriving a change salt
+This case is slightly different. Alice needs to generate a salt for the change commitment such that only Alice knows this value. Therefore, Alice simply generates a random value of size $$len_{salt}$$. 
+
+$$
+\mathrm{salt_{A}} \longleftarrow \\{ 0,1\\}^{len_{salt}}
 $$
 
 ---
