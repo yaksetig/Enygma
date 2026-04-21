@@ -254,7 +254,7 @@ We introduce a step to inform Bob if the shared secret is valid for this specifi
 Upon successful decryption, Bob obtains the information needed to open the received commitment (i.e., token id and received amount).
 
 $$
-(token_{id}, v') = \mathrm{AEAD.Dec}(k', \mathrm{enc}, \mathrm{ctxt})
+(token_{id}, v') = \mathrm{AEAD.Dec}(k', \mathrm{[[TX_{DATA}]]_{k}})
 $$
 
 ---
