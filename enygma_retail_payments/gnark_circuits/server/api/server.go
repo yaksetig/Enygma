@@ -1,0 +1,18 @@
+package api
+
+import (
+	"github.com/gin-gonic/gin"
+
+	"gnark_server/server/circuits/payment"
+	"gnark_server/server/circuits/privateMint"
+	"gnark_server/server/config"
+)
+
+func NewServer(cfg *config.Config) *gin.Engine {
+	r := gin.Default()
+
+	r.POST("/proof/payment", payment.NewHandler(cfg.PaymentPk, cfg.PaymentVk))
+	r.POST("/proof/privateMint", privateMint.NewHandler(cfg.PrivateMintPk, cfg.PrivateMintVk))
+
+	return r
+}

@@ -1,0 +1,14 @@
+module github.com/raylsnetwork/enygma_retail_payments/src
+
+go 1.24.0
+
+require github.com/raylsnetwork/enygma_dvp/src v0.0.0
+
+require (
+	github.com/dchest/blake512 v1.0.0 // indirect
+	github.com/iden3/go-iden3-crypto v0.0.16 // indirect
+	golang.org/x/crypto v0.36.0 // indirect
+	golang.org/x/sys v0.36.0 // indirect
+)
+
+replace github.com/raylsnetwork/enygma_dvp/src => ../../enygma_dvp/src
