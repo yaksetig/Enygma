@@ -36,7 +36,7 @@ import (
 	"math/big"
 	"testing"
 
-	"enygma_dvp/github.com/raylsnetwork/enygma_dvp/src"
+	"github.com/raylsnetwork/enygma_dvp/src/core"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"

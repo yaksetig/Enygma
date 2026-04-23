@@ -144,6 +144,11 @@
     },
     "circuits": [
       {
+        "id": 1,
+        "filename": "Payment",
+        "tags": ["erc20", "merkle", "2-input", "2-output", "fungible"]
+      },
+      {
         "id": 2,
         "filename": "OwnershipErc721",
         "tags": [

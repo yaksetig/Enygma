@@ -6,7 +6,7 @@ import (
 	"net"
 	"testing"
 
-	"enygma_dvp/github.com/raylsnetwork/enygma_dvp/src"
+	"github.com/raylsnetwork/enygma_dvp/src/core"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"

@@ -89,15 +89,23 @@ var (
 )
 
 func init() {
-	// Get the project root directory (parent of scripts_go)
-	execPath, err := os.Getwd()
+	cwd, err := os.Getwd()
 	if err != nil {
 		log.Fatal("Failed to get working directory:", err)
 	}
-	initProjectRoot = filepath.Dir(execPath)
-	if filepath.Base(execPath) != "scripts_go" {
-		initProjectRoot = execPath
+	dir := cwd
+	for {
+		if _, err := os.Stat(filepath.Join(dir, "enygmadvp.config.json")); err == nil {
+			initProjectRoot = dir
+			return
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
 	}
+	initProjectRoot = cwd
 }
 
 func main() {
