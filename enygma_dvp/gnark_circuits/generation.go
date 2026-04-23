@@ -1,8 +1,6 @@
 package main
 
 import (
-
-	"github.com/consensys/gnark/frontend"
 	"github.com/consensys/gnark/constraint/solver"
 
 	"gnark_server/templates"
@@ -199,14 +197,6 @@ func GenerationVkPk (){
 	// covered by test/01_v2_erc20_private_mint_test.go (TestV2Erc20OnChain_PrivateMint)
 	private_mint_config := templates.PrivateMintConfig{}
 
-	// covered by test/02_v2_erc20_payment_test.go (TestV2Erc20Payment)
-	payment_config := templates.PaymentCircuitConfig{
-		TmNInputs:         2,
-		TmMOutputs:        2,
-		TmMerkleTreeDepth: 8,
-		TmRange:           frontend.Variable("1000000000000000000000000000000000000"),
-	}
-
 	// covered by test/03_v2_dvp_test.go and test/04_v2_dvp_deadline_test.go
 	dvp_initiator_config := templates.DvPInitiatorCircuitConfig{
 		TmMerkleTreeDepth: 8,
@@ -218,7 +208,6 @@ func GenerationVkPk (){
 	}
 
 	script.SetupPrivateMint(private_mint_config, "PrivateMint")
-	script.SetupPayment(payment_config, "Payment")
 	script.SetupDvPInitiator(dvp_initiator_config, "DvPInitiator")
 	script.SetupDvPDestination(dvp_destination_config, "DvPDestination")
 }

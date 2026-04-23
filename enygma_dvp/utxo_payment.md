@@ -1,26 +1,28 @@
 # Private Payment Protocol
 
 ## System Entites
-We assume a simple setting with three entities:
-* Alice (the sender)
-* Blockchain (the verification layer)
-* Bob (the recipient)
 
-  
+We assume a simple setting with three entities:
+
+- Alice (the sender)
+- Blockchain (the verification layer)
+- Bob (the recipient)
+
 ```mermaid
 flowchart LR
     A(["Alice"]) <-.-> C(["Blockchain"]) <-.-> B(["Bob"])
-    
+
 ```
 
 ### Adversarial Model
+
 The goal of the adversary $$\mathcal{A}$$ is twofold: break the privacy of the system and disrupt the activity of the system. We assume that the adversary ...
 
-
 ---
+
 ## Key Generation
 
-In this step, each user generates two key pairs: a view key pair (i.e., ML-KEM) and a spend key pair (i.e., a hash-based key). 
+In this step, each user generates two key pairs: a view key pair (i.e., ML-KEM) and a spend key pair (i.e., a hash-based key).
 
 First, the user generates an ML-KEM keypair. The purpose of this key is to allow for quantum-secure key agreements in the various transactions that take place.
 
@@ -34,7 +36,7 @@ $$
 (pk^{\text{spend}}, sk^{\text{spend}}) \longleftarrow \mathrm{Hash.KeyGen}()
 $$
 
-We envision a simple key pair where the secret key is a simple preimage and the public key is a hash digest of said preimage. 
+We envision a simple key pair where the secret key is a simple preimage and the public key is a hash digest of said preimage.
 
 $$
 sk_A^{\text{spend}} \longleftarrow \\{ 0,1\\}^\lambda
@@ -44,8 +46,8 @@ $$
 pk_A^{\text{spend}} = \mathrm{H}(sk_A^{\text{spend}})
 $$
 
-
 ---
+
 ## Registration
 
 Upon completion of the key generation stage, each user registers both public keys. Therefore, each user publishes:
@@ -58,60 +60,62 @@ The output of this stage once different users register is a public-key record la
 
 <div align="center">
 
-| User | View Key | Spend Key |
-|:----:|:--------:|:---------:|
-| $A$ | $pk_A^{\text{view}}$ | $pk_A^{\text{spend}}$ |
-| $B$ | $pk_B^{\text{view}}$ | $pk_B^{\text{spend}}$ |
-| $\vdots$ | $\vdots$ | $\vdots$ |
-| $Z$ | $pk_Z^{\text{view}}$ | $pk_Z^{\text{spend}}$ |
+|   User   |       View Key       |       Spend Key       |
+| :------: | :------------------: | :-------------------: |
+|   $A$    | $pk_A^{\text{view}}$ | $pk_A^{\text{spend}}$ |
+|   $B$    | $pk_B^{\text{view}}$ | $pk_B^{\text{spend}}$ |
+| $\vdots$ |       $\vdots$       |       $\vdots$        |
+|   $Z$    | $pk_Z^{\text{view}}$ | $pk_Z^{\text{spend}}$ |
 
 </div>
 
 ---
 
-
-
 ## Transaction Structure
-We go over the case where Alice, who has an initial commitment $$C_{A}$$ sends Bob a payment. 
-The goal of the protocol is for Alice to non-interactively have the ability to send funds to Bob. 
 
-Each commitment is of the following form: 
+We go over the case where Alice, who has an initial commitment $$C_{A}$$ sends Bob a payment.
+The goal of the protocol is for Alice to non-interactively have the ability to send funds to Bob.
 
-$$ 
-Commitment = H(pk^{\text{spend}}, salt, token_{id}, amount) 
+Each commitment is of the following form:
+
+$$
+Commitment = H(pk^{\text{spend}}, salt, token_{id}, amount)
 $$
 
 ### Transaction Payload
-Before proceeding with the description of the payment protocol, we higlight the tx structure of each payment that takes place in the network. 
-We assume that Alice 
+
+Before proceeding with the description of the payment protocol, we higlight the tx structure of each payment that takes place in the network.
+We assume that Alice
 
 <div align="center">
 
 | Ciphertext (ML-KEM) | Destination Commitment | Change Commitment | Ciphertext (AES) | Nullifier | $\pi$ |
-|:-------------------:|:----------------------:|:-----------------:|:----------------:|:---------:|:-----:|
+| :-----------------: | :--------------------: | :---------------: | :--------------: | :-------: | :---: |
 
 </div>
 
 ### Retrieving Destination Keys
-Before initiating a transfer, Alice must know the public keys associated with Bob. Therefore, Alice retrieves the pair $(pk_B^{\text{view}}$, $pk_B^{\text{spend}})$. 
+
+Before initiating a transfer, Alice must know the public keys associated with Bob. Therefore, Alice retrieves the pair $(pk_B^{\text{view}}$, $pk_B^{\text{spend}})$.
 
 ### Transaction Amount(s)
-We assume that the commitment owned by Alice (i.e., $$C_{A}$$) contains a max amount $$v$$ that Alice can spend. 
-In our protocol, the sender (i.e., Alice) always sends the full amount in every transaction. The corresponding amount to the recipient and the remaining to a "change commitment". 
 
+We assume that the commitment owned by Alice (i.e., $$C_{A}$$) contains a max amount $$v$$ that Alice can spend.
+In our protocol, the sender (i.e., Alice) always sends the full amount in every transaction. The corresponding amount to the recipient and the remaining to a "change commitment".
 
 We denote $$v_{1}$$ the amount being sent and $$v_{2}$$ the change amount. The amount $$v = v_{1} + v_{2}$$ is the amount owned by Alice in $$C_{A}$$.
 
 ### Token IDs
-Each transfer is related to a specific token ID. We enforce this by having each commitment linked to a token ID. In fact, the token ID is one of the inputs to the commitment. 
 
+Each transfer is related to a specific token ID. We enforce this by having each commitment linked to a token ID. In fact, the token ID is one of the inputs to the commitment.
 
 ---
+
 ## Transaction Creation
 
 ### Step 1 — ML-KEM Encapsulation
 
-Alice initiates a post-quantum key agreement step and obtains a ciphertext and a shared secret $$ss$$. 
+Alice initiates a post-quantum key agreement step and obtains a ciphertext and a shared secret $$ss$$.
 
 $$
 (\mathrm{ctxt}, ss) \leftarrow \mathrm{ML\text{-}KEM.Encaps}(pk_B^{\text{view}})
@@ -120,10 +124,11 @@ $$
 ---
 
 ### Step 2 — Key Derivation
-Upon generating the shared secret, Alice must derive two values: 
 
-* a salt, which is used to mask/randomize the destination commitment
-* a symmetric key, which is used to encrypt additional data that is appended to the transaction
+Upon generating the shared secret, Alice must derive two values:
+
+- a salt, which is used to mask/randomize the destination commitment
+- a symmetric key, which is used to encrypt additional data that is appended to the transaction
 
 #### Deriving a symmetric key
 
@@ -185,8 +190,8 @@ Alice submits the following payload:
 
 <div align="center">
 
-| ML-KEM.CTXT | $$\mathrm{Commitment_{B}}$$ | $$\mathrm{Commitment_{A}}$$ | AES-GCM-ENC(k, m, _) | $$\mathrm{nf}$$ | $\pi$ |
-|:-----------:|:---------------------------:|:---------------------------:|:--------------------:|:---------------:|:-----:|
+| ML-KEM.CTXT | $$\mathrm{Commitment_{B}}$$ | $$\mathrm{Commitment_{A}}$$ | AES-GCM-ENC(k, m, \_) | $$\mathrm{nf}$$ | $\pi$ |
+| :---------: | :-------------------------: | :-------------------------: | :-------------------: | :-------------: | :---: |
 
 </div>
 
@@ -216,7 +221,7 @@ $$
 
 ### Step 3 — Decrypt
 
-Since this is an authenticated encryption (with associated data) scheme, Bob will know if the used key is correct as the authentication component of the cipher will succeed. 
+Since this is an authenticated encryption (with associated data) scheme, Bob will know if the used key is correct as the authentication component of the cipher will succeed.
 
 $$
 (token_{id}, v_{1}) = \mathrm{AEAD.Dec}(k', \mathrm{enc}, \mathrm{ctxt})
@@ -270,7 +275,7 @@ $$
 nf = \mathrm{HASH}(sk_A^{\text{spend}} \parallel \mathrm{index})
 $$
 
-- prevents double-spend  
+- prevents double-spend
 - unlinkable to $pk_A^{\text{spend}}$
 
 ---
