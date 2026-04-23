@@ -1,6 +1,7 @@
 {
   "id": "EnygmaPayment",
   "desc": "v0.1.0",
+  "_warning": "DEMO ONLY — the private keys below are well-known Hardhat default accounts. They are publicly visible on the internet. Never use them on any real network or with real funds.",
   "network": {
     "host": "127.0.0.1",
     "port": "8545",
@@ -28,7 +29,14 @@
       {
         "id": 1,
         "filename": "Payment",
-        "tags": ["payment", "erc20", "merkle", "2-input", "2-output", "fungible"]
+        "tags": [
+          "payment",
+          "erc20",
+          "merkle",
+          "2-input",
+          "2-output",
+          "fungible"
+        ]
       }
     ]
   }

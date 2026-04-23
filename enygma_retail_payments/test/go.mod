@@ -38,4 +38,7 @@ require (
 
 replace github.com/raylsnetwork/enygma_retail_payments/src => ../src
 
+// Local replace — remove once enygma_dvp is published as a standalone Go module.
+// Both repos must be cloned side-by-side: enygma_dvp/ and enygma_retail_payments/
+// in the same parent directory.
 replace github.com/raylsnetwork/enygma_dvp/src => ../../enygma_dvp/src
