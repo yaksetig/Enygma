@@ -3,6 +3,13 @@
 #  Verification key and proving key from gnark circuit
 /gnark_circuits/scripts/keys
 
+# Compiled gnark binaries
+/gnark_circuits/export_vk
+/gnark_circuits/export_vk_init
+/gnark_circuits/patch_verifier
+/gnark_circuits/regen_erc
+/gnark_circuits/poseidon/test
+
 /legacy/circuits/circomlib
 
 # Verifier.sols

@@ -1,6 +1,7 @@
 {
   "id": "EnygmaDvp",
   "desc": "v0.5.4",
+  "_warning": "The mnemonic and private keys in this file are FOR DEMO AND LOCAL DEVELOPMENT PURPOSES ONLY. They are derived from the well-known Hardhat default mnemonic and must never be used on any public or production network. Do not send real funds to these addresses.",
   "network": {
     "host": "127.0.0.1",
     "port": "8545",

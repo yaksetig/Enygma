@@ -23,6 +23,8 @@ try {
       timeout: 10000000,
       chainId: 1337,
       accounts: {
+        // WARNING: This mnemonic is the well-known Hardhat default and is for demo/local development only.
+        // Never use it on any public or production network. Do not send real funds to these addresses.
         mnemonic:
           "federal unhappy avoid mistake life barrel beauty raccoon recycle unknown review link",
         path: "m/44'/60'/0'/0",
@@ -44,19 +46,6 @@ try {
         passphrase: "",
       },
       url: "http://localhost:8545",
-    },
-    rayls: {
-      timeout: 10000000,
-      chainId: 149401,
-      accounts: {
-        mnemonic:
-          "federal unhappy avoid mistake life barrel beauty raccoon recycle unknown review link",
-        path: "m/44'/60'/0'/0",
-        initialIndex: 0,
-        count: 10,
-        passphrase: "",
-      },
-      url: "http://commitchain-dev.parfin.corp:8545",
     },
   };
   // console.log(networks);
