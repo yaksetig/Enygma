@@ -9,6 +9,15 @@
 /gnark_circuits/patch_verifier
 /gnark_circuits/regen_erc
 /gnark_circuits/poseidon/test
+/gnark_circuits/generation
+/gnark_circuits/main
+
+# Compiled deploy scripts
+/scripts/deploy
+/scripts/init
+
+# macOS artifacts
+.DS_Store
 
 /legacy/circuits/circomlib
 
