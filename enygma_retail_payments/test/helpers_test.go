@@ -22,10 +22,14 @@ import (
 // ── Hardhat constants ──────────────────────────────────────────────────────────
 
 const (
-	hardhatRPC         = "http://localhost:8545"
-	hardhatChainID     = 1337
-	hardhatPrivKeyHex  = "34d091c661db4c814d65c8ae9277b7055c0dde5a752ce5a3fdfd4ea11a8f7154"
-	hardhatRecipientHex = "0xD2C3b34Abae5664986C8cf0F14d1D434Ac894768"
+	hardhatRPC            = "http://localhost:8545"
+	hardhatChainID        = 1337
+	// account[0] — owner / Alice's Ethereum signing key (demo only)
+	hardhatPrivKeyHex     = "34d091c661db4c814d65c8ae9277b7055c0dde5a752ce5a3fdfd4ea11a8f7154"
+	hardhatAliceAddr      = "0x0F1013e0e46B97144b25b3131668EF99858BD8D0"
+	// account[1] — Bob's Ethereum signing key (demo only)
+	hardhatBobPrivKeyHex  = "69b5623bd1cfe22983c8849d155ca641238c18ab1b2e34c5ae943ed2ce4716b7"
+	hardhatBobAddr        = "0xD2C3b34Abae5664986C8cf0F14d1D434Ac894768"
 )
 
 // ── ABI struct types mirroring IEnygmaDvp.sol ──────────────────────────────────
@@ -102,7 +106,17 @@ func loadOnchainABI(t *testing.T, contractName string) abi.ABI {
 
 func hardhatAuth(t *testing.T, client *ethclient.Client) *bind.TransactOpts {
 	t.Helper()
-	privKey, err := crypto.HexToECDSA(hardhatPrivKeyHex)
+	return hardhatAuthFromKey(t, hardhatPrivKeyHex)
+}
+
+func hardhatBobAuth(t *testing.T, client *ethclient.Client) *bind.TransactOpts {
+	t.Helper()
+	return hardhatAuthFromKey(t, hardhatBobPrivKeyHex)
+}
+
+func hardhatAuthFromKey(t *testing.T, privKeyHex string) *bind.TransactOpts {
+	t.Helper()
+	privKey, err := crypto.HexToECDSA(privKeyHex)
 	if err != nil {
 		t.Fatalf("HexToECDSA: %v", err)
 	}
@@ -110,7 +124,7 @@ func hardhatAuth(t *testing.T, client *ethclient.Client) *bind.TransactOpts {
 	if err != nil {
 		t.Fatalf("NewKeyedTransactorWithChainID: %v", err)
 	}
-	auth.GasLimit = 6_000_000
+	auth.GasLimit = 8_000_000
 	return auth
 }
 

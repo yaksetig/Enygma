@@ -197,6 +197,14 @@ func deploy() error {
 	fmt.Printf("Erc20CoinVault → %s\n", erc20CoinVaultAddress.Hex())
 	receipts["Erc20CoinVault"] = receiptToData(receipt, erc20CoinVaultAddress)
 
+	fmt.Println("Deploying UserRegistry...")
+	userRegistryAddress, receipt, err := deployContract(client, owner, "UserRegistry")
+	if err != nil {
+		return fmt.Errorf("failed to deploy UserRegistry: %w", err)
+	}
+	fmt.Printf("UserRegistry → %s\n", userRegistryAddress.Hex())
+	receipts["UserRegistry"] = receiptToData(receipt, userRegistryAddress)
+
 	if err := saveReceipts(receipts); err != nil {
 		return fmt.Errorf("failed to save receipts: %w", err)
 	}

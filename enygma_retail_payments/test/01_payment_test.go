@@ -5,20 +5,21 @@ package tests
 // TestRetailErc20_PrivateMint: exercises the PrivateMint flow.
 //   - Issuer mints a private note directly to Alice's spend key.
 //
-// TestRetailErc20_Payment: full deposit → payment → scan cycle.
+// TestRetailErc20_Payment: full register → deposit → payment → scan cycle.
+//   - Alice and Bob each register their spend key and view key on-chain.
 //   - Alice deposits 40 tokens.
-//   - Alice pays 30 to Bob, keeps 10 as change.
+//   - Alice looks up Bob's keys from the registry and pays him 30, keeps 10 as change.
 //   - Bob and Alice scan their respective notes.
 //
 // Prerequisites:
 //   1. Hardhat node:            npx hardhat node
-//   2. Deploy contracts:        cd scripts && CC=/usr/bin/clang go build -o /tmp/rp_deploy deploy.go && cd .. && /tmp/rp_deploy
-//   3. Export VKs:              cd gnark_circuits && go run generation.go  (generates PaymentPK/VK.key)
-//   4. Init contracts:          cd scripts && CC=/usr/bin/clang go build -o /tmp/rp_init init.go && cd .. && /tmp/rp_init
+//   2. Deploy contracts:        cd scripts && go build -o /tmp/rp_deploy deploy.go && cd .. && /tmp/rp_deploy
+//   3. Export VKs:              cd gnark_circuits && go run generation.go
+//   4. Init contracts:          cd scripts && go build -o /tmp/rp_init init.go && cd .. && /tmp/rp_init
 //   5. Gnark server (port 8082): cd gnark_circuits && go run main.go
 //
 // Run with:
-//   cd test && CC=/usr/bin/clang go test ./... -v -timeout 600s
+//   cd test && go test ./... -v -timeout 600s
 
 import (
 	"context"
@@ -94,10 +95,10 @@ func TestRetailErc20_PrivateMint(t *testing.T) {
 	auth := hardhatAuth(t, client)
 
 	gnarkClient := rpcore.NewPaymentClient("")
-	tokenId             := big.NewInt(0)
-	mintAmount          := big.NewInt(100)
-	vaultId             := big.NewInt(0)
-	contractAddressBig  := new(big.Int).SetBytes(dvpAddr.Bytes())
+	tokenId            := big.NewInt(0)
+	mintAmount         := big.NewInt(100)
+	vaultId            := big.NewInt(0)
+	contractAddressBig := new(big.Int).SetBytes(dvpAddr.Bytes())
 
 	// Step 1 — Alice generates her spend key pair.
 	aliceSpend, err := rpcore.NewSpendKeyPair()
@@ -123,7 +124,6 @@ func TestRetailErc20_PrivateMint(t *testing.T) {
 		t.Fatalf("Erc20PrivateMintProof: %v", err)
 	}
 	t.Logf("Step 2 — commitment: %s", mintResult.Commitment)
-	t.Logf("Step 2 — cipherText: %s", mintResult.CipherText)
 
 	proof := proofStringsToPrivateMint(t,
 		mintResult.ProofResponse.Proof,
@@ -143,12 +143,11 @@ func TestRetailErc20_PrivateMint(t *testing.T) {
 		mintReceipt.BlockNumber, mintReceipt.GasUsed)
 
 	privateMintSig := crypto.Keccak256Hash([]byte("PrivateMint(uint256,uint256,uint256)"))
-	var eventCommitment, eventCipherText *big.Int
+	var eventCommitment *big.Int
 	for _, log := range mintReceipt.Logs {
 		if log.Topics[0] == privateMintSig {
 			eventCommitment = log.Topics[2].Big()
-			eventCipherText = log.Topics[3].Big()
-			t.Logf("  PrivateMint event: commitment=%s cipherText=%s", eventCommitment, eventCipherText)
+			t.Logf("  PrivateMint event: commitment=%s", eventCommitment)
 		}
 	}
 	if eventCommitment == nil {
@@ -192,9 +191,10 @@ func TestRetailErc20_Payment(t *testing.T) {
 	defer client.Close()
 
 	receipts := loadOnchainReceipts(t)
-	vaultAddr := common.HexToAddress(receipts["Erc20CoinVault"].ContractAddress)
-	erc20Addr := common.HexToAddress(receipts["ERC20"].ContractAddress)
-	dvpAddr   := common.HexToAddress(receipts["EnygmaDvp"].ContractAddress)
+	vaultAddr    := common.HexToAddress(receipts["Erc20CoinVault"].ContractAddress)
+	erc20Addr    := common.HexToAddress(receipts["ERC20"].ContractAddress)
+	dvpAddr      := common.HexToAddress(receipts["EnygmaDvp"].ContractAddress)
+	registryAddr := common.HexToAddress(receipts["UserRegistry"].ContractAddress)
 
 	vaultABI := loadOnchainABI(t, "Erc20CoinVault")
 	erc20ABI := loadOnchainABI(t, "RaylsERC20")
@@ -203,8 +203,8 @@ func TestRetailErc20_Payment(t *testing.T) {
 	vault := bind.NewBoundContract(vaultAddr, vaultABI, client, client, client)
 	erc20 := bind.NewBoundContract(erc20Addr, erc20ABI, client, client, client)
 
-	auth := hardhatAuth(t, client)
-	alice := auth.From
+	aliceAuth := hardhatAuth(t, client)
+	bobAuth   := hardhatBobAuth(t, client)
 
 	gnarkClient := rpcore.NewPaymentClient("")
 	merkleDepth := 8
@@ -213,26 +213,8 @@ func TestRetailErc20_Payment(t *testing.T) {
 	paymentAmt  := big.NewInt(30)
 	changeAmt   := big.NewInt(10)
 
-	// ── Mint & approve ERC20 ──────────────────────────────────────────────────
-	mintTx, err := erc20.Transact(auth, "mint", alice, new(big.Int).Mul(depositAmt, big.NewInt(10)))
-	if err != nil {
-		t.Fatalf("ERC20.mint: %v", err)
-	}
-	if _, err := bind.WaitMined(ctx, client, mintTx); err != nil {
-		t.Fatalf("wait mint: %v", err)
-	}
-	t.Logf("Minted tokens to Alice (%s)", alice.Hex())
-
-	approveTx, err := erc20.Transact(auth, "approve", vaultAddr, depositAmt)
-	if err != nil {
-		t.Fatalf("ERC20.approve: %v", err)
-	}
-	if _, err := bind.WaitMined(ctx, client, approveTx); err != nil {
-		t.Fatalf("wait approve: %v", err)
-	}
-
 	// ─────────────────────────────────────────────────────────────────────────
-	// Step 1: depositV2 — Alice deposits 40 tokens into the private vault.
+	// Step 1: Key generation — Alice and Bob each generate their ZK key pairs.
 	// ─────────────────────────────────────────────────────────────────────────
 	aliceSpend, err := rpcore.NewSpendKeyPair()
 	if err != nil {
@@ -241,6 +223,58 @@ func TestRetailErc20_Payment(t *testing.T) {
 	aliceView, err := rpcore.NewViewKeyPair()
 	if err != nil {
 		t.Fatalf("Alice NewViewKeyPair: %v", err)
+	}
+
+	bobSpend, err := rpcore.NewSpendKeyPair()
+	if err != nil {
+		t.Fatalf("Bob NewSpendKeyPair: %v", err)
+	}
+	bobView, err := rpcore.NewViewKeyPair()
+	if err != nil {
+		t.Fatalf("Bob NewViewKeyPair: %v", err)
+	}
+
+	t.Logf("Step 1 — Alice pk_spend: %s", aliceSpend.PublicKey)
+	t.Logf("Step 1 — Bob   pk_spend: %s", bobSpend.PublicKey)
+
+	// ─────────────────────────────────────────────────────────────────────────
+	// Step 2: Registration — Alice and Bob publish their keys on-chain.
+	//   - pkSpend stored in contract state (uint256).
+	//   - pkView  stored in contract state (bytes, 1184 bytes ML-KEM-768 key).
+	// ─────────────────────────────────────────────────────────────────────────
+	t.Log("Step 2 — Alice registers her keys on-chain...")
+	if err := rpcore.Register(client, aliceAuth, registryAddr,
+		aliceSpend.PublicKey, aliceView.EncapsKey); err != nil {
+		t.Fatalf("Alice Register: %v", err)
+	}
+	t.Logf("Step 2 — Alice registered (Ethereum addr: %s)", aliceAuth.From.Hex())
+
+	t.Log("Step 2 — Bob registers his keys on-chain...")
+	if err := rpcore.Register(client, bobAuth, registryAddr,
+		bobSpend.PublicKey, bobView.EncapsKey); err != nil {
+		t.Fatalf("Bob Register: %v", err)
+	}
+	t.Logf("Step 2 — Bob registered (Ethereum addr: %s)", bobAuth.From.Hex())
+
+	// ─────────────────────────────────────────────────────────────────────────
+	// Step 3: Deposit — Alice deposits 40 tokens into the private vault.
+	// ─────────────────────────────────────────────────────────────────────────
+	mintTx, err := erc20.Transact(aliceAuth, "mint", aliceAuth.From,
+		new(big.Int).Mul(depositAmt, big.NewInt(10)))
+	if err != nil {
+		t.Fatalf("ERC20.mint: %v", err)
+	}
+	if _, err := bind.WaitMined(ctx, client, mintTx); err != nil {
+		t.Fatalf("wait mint: %v", err)
+	}
+	t.Logf("Step 3 — minted tokens to Alice (%s)", aliceAuth.From.Hex())
+
+	approveTx, err := erc20.Transact(aliceAuth, "approve", vaultAddr, depositAmt)
+	if err != nil {
+		t.Fatalf("ERC20.approve: %v", err)
+	}
+	if _, err := bind.WaitMined(ctx, client, approveTx); err != nil {
+		t.Fatalf("wait approve: %v", err)
 	}
 
 	ss, capsule, err := rpcore.Encapsulate(aliceView.EncapsKey)
@@ -257,9 +291,10 @@ func TestRetailErc20_Payment(t *testing.T) {
 	}
 	aliceSaltBField := rpcore.SaltBToField(aliceSaltB)
 
-	aliceCommitment, err := rpcore.Erc20CommitmentV2(aliceSpend.PublicKey, aliceSaltBField, depositAmt, tokenId)
+	aliceCommitment, err := rpcore.Erc20CommitmentV2(
+		aliceSpend.PublicKey, aliceSaltBField, depositAmt, tokenId)
 	if err != nil {
-		t.Fatalf("Erc20CommitmentV2: %v", err)
+		t.Fatalf("Erc20CommitmentV2 (deposit): %v", err)
 	}
 
 	aliceDepositCtxtII, err := rpcore.EncryptPayload(aliceEncKey, tokenId, depositAmt)
@@ -267,8 +302,8 @@ func TestRetailErc20_Payment(t *testing.T) {
 		t.Fatalf("EncryptPayload (deposit): %v", err)
 	}
 
-	depositParams := []*big.Int{depositAmt, aliceCommitment}
-	depositTx, err := vault.Transact(auth, "depositV2", depositParams, capsule, aliceDepositCtxtII)
+	depositTx, err := vault.Transact(aliceAuth, "depositV2",
+		[]*big.Int{depositAmt, aliceCommitment}, capsule, aliceDepositCtxtII)
 	if err != nil {
 		t.Fatalf("vault.depositV2: %v", err)
 	}
@@ -276,7 +311,7 @@ func TestRetailErc20_Payment(t *testing.T) {
 	if err != nil {
 		t.Fatalf("wait depositV2: %v", err)
 	}
-	t.Logf("Step 1 — depositV2 mined (block %d, gas %d, commitment %s)",
+	t.Logf("Step 3 — depositV2 mined (block %d, gas %d, commitment %s)",
 		depositReceipt.BlockNumber, depositReceipt.GasUsed, aliceCommitment)
 
 	mt := loadVaultMerkleTree(t, client, vaultAddr, merkleDepth)
@@ -284,22 +319,34 @@ func TestRetailErc20_Payment(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GenerateProof for Alice: %v", err)
 	}
-	t.Logf("Step 1 — Merkle root: %s", aliceProof.Root)
+	t.Logf("Step 3 — Merkle root: %s", aliceProof.Root)
 
 	// ─────────────────────────────────────────────────────────────────────────
-	// Step 2: payment — Alice pays 30 to Bob, keeps 10 as change.
-	//
-	// Inputs:  [Alice's 40 token note, dummy (0)]
-	// Outputs: [30 to Bob, 10 change to Alice]
+	// Step 4: Key lookup — Alice retrieves Bob's keys from the registry.
+	//   No manual key passing: both pkSpend and pkView are read from chain.
 	// ─────────────────────────────────────────────────────────────────────────
-	bobSpend, err := rpcore.NewSpendKeyPair()
+	bobEthAddr := common.HexToAddress(hardhatBobAddr)
+	bobKeys, err := rpcore.LookupKeys(client, registryAddr, bobEthAddr)
 	if err != nil {
-		t.Fatalf("Bob NewSpendKeyPair: %v", err)
+		t.Fatalf("LookupKeys (Bob): %v", err)
 	}
-	bobView, err := rpcore.NewViewKeyPair()
+	t.Logf("Step 4 — Alice looked up Bob's keys from registry")
+	t.Logf("  Bob pk_spend: %s", bobKeys.SpendKey)
+	t.Logf("  Bob pk_view:  %d bytes", len(bobKeys.ViewKey))
+
+	// Alice also looks up her own keys for the change output.
+	aliceEthAddr := common.HexToAddress(hardhatAliceAddr)
+	aliceKeys, err := rpcore.LookupKeys(client, registryAddr, aliceEthAddr)
 	if err != nil {
-		t.Fatalf("Bob NewViewKeyPair: %v", err)
+		t.Fatalf("LookupKeys (Alice): %v", err)
 	}
+
+	// ─────────────────────────────────────────────────────────────────────────
+	// Step 5: Payment — Alice pays 30 to Bob, keeps 10 as change.
+	//   Inputs:  [Alice's 40-token note, dummy (0)]
+	//   Outputs: [30 to Bob, 10 change to Alice]
+	//   Keys sourced from registry (Step 4) — not passed manually.
+	// ─────────────────────────────────────────────────────────────────────────
 	dummySpend, err := rpcore.NewSpendKeyPair()
 	if err != nil {
 		t.Fatalf("dummy NewSpendKeyPair: %v", err)
@@ -314,8 +361,8 @@ func TestRetailErc20_Payment(t *testing.T) {
 		},
 		[]*big.Int{aliceSaltBField, big.NewInt(0)},
 		[]*big.Int{paymentAmt, changeAmt},
-		[]*big.Int{bobSpend.PublicKey, aliceSpend.PublicKey},
-		[][]byte{bobView.EncapsKey, aliceView.EncapsKey},
+		[]*big.Int{bobKeys.SpendKey, aliceKeys.SpendKey},   // from registry
+		[][]byte{bobKeys.ViewKey, aliceKeys.ViewKey},        // from registry
 		merkleDepth,
 		[]*rpcore.MerkleProof{aliceProof, makeDummyProof(merkleDepth)},
 		[]*big.Int{big.NewInt(0), big.NewInt(0)},
@@ -324,7 +371,7 @@ func TestRetailErc20_Payment(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PaymentProof: %v", err)
 	}
-	t.Logf("Step 2 — gnark Payment proof generated")
+	t.Logf("Step 5 — gnark Payment proof generated")
 	t.Logf("  Bob's commitment   (output 0): %s", paymentResult.Statement[7])
 	t.Logf("  Alice's change cmt (output 1): %s", paymentResult.Statement[8])
 
@@ -340,12 +387,9 @@ func TestRetailErc20_Payment(t *testing.T) {
 		NumberOfOutputs: big.NewInt(int64(paymentResult.NumberOfOutputs)),
 	}
 
-	t.Logf("Step 2 — contract statement (%d elements): %v",
-		len(onchainReceipt.Statement), onchainReceipt.Statement)
-
 	vaultId := big.NewInt(0)
 	onchainTx, err := endpoints.SubmitPayment(
-		client, auth, dvpABI, dvpAddr,
+		client, aliceAuth, dvpABI, dvpAddr,
 		onchainReceipt,
 		vaultId,
 		paymentResult.CipherText,
@@ -354,7 +398,7 @@ func TestRetailErc20_Payment(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SubmitPayment: %v", err)
 	}
-	t.Logf("Step 2 — payment() mined (block %d, gas %d)",
+	t.Logf("Step 5 — payment() mined (block %d, gas %d)",
 		onchainTx.BlockNumber, onchainTx.GasUsed)
 
 	paymentSig := crypto.Keccak256Hash([]byte("Payment(uint256,uint256,bytes,bytes)"))
@@ -382,7 +426,7 @@ func TestRetailErc20_Payment(t *testing.T) {
 	}
 
 	// ─────────────────────────────────────────────────────────────────────────
-	// Step 3: Bob scans the Payment event for his 30 token note.
+	// Step 6: Scanning — Bob and Alice scan Payment events for their notes.
 	// ─────────────────────────────────────────────────────────────────────────
 	bobEvents := []dvpcore.OnChainErc20Event{{
 		Commitment: paymentResult.Statement[7],
@@ -399,18 +443,16 @@ func TestRetailErc20_Payment(t *testing.T) {
 	if bobNotes[0].Amount.Cmp(paymentAmt) != 0 {
 		t.Errorf("Bob's note amount: got %s, want %s", bobNotes[0].Amount, paymentAmt)
 	}
-	t.Logf("Step 3 — Bob scanned his note: amount=%s tokenId=%s saltBField=%s",
-		bobNotes[0].Amount, bobNotes[0].TokenId, bobNotes[0].SaltBField)
+	t.Logf("Step 6 — Bob scanned his note: amount=%s tokenId=%s",
+		bobNotes[0].Amount, bobNotes[0].TokenId)
 
-	// ─────────────────────────────────────────────────────────────────────────
-	// Step 4: Alice scans the Payment event for her 10 token change note.
-	// ─────────────────────────────────────────────────────────────────────────
 	aliceChangeEvents := []dvpcore.OnChainErc20Event{{
 		Commitment: paymentResult.Statement[8],
 		CipherText: paymentResult.CipherText[1],
 		EncTxData:  paymentResult.EncTxData[1],
 	}}
-	aliceChangeNotes, err := dvpcore.ScanForErc20Notes(aliceView.DecapsKey, aliceSpend.PublicKey, aliceChangeEvents)
+	aliceChangeNotes, err := dvpcore.ScanForErc20Notes(
+		aliceView.DecapsKey, aliceSpend.PublicKey, aliceChangeEvents)
 	if err != nil {
 		t.Fatalf("ScanForErc20Notes (Alice change): %v", err)
 	}
@@ -420,9 +462,9 @@ func TestRetailErc20_Payment(t *testing.T) {
 	if aliceChangeNotes[0].Amount.Cmp(changeAmt) != 0 {
 		t.Errorf("Alice's change amount: got %s, want %s", aliceChangeNotes[0].Amount, changeAmt)
 	}
-	t.Logf("Step 4 — Alice scanned her change note: amount=%s tokenId=%s saltBField=%s",
-		aliceChangeNotes[0].Amount, aliceChangeNotes[0].TokenId, aliceChangeNotes[0].SaltBField)
+	t.Logf("Step 6 — Alice scanned her change note: amount=%s tokenId=%s",
+		aliceChangeNotes[0].Amount, aliceChangeNotes[0].TokenId)
 
-	t.Logf("=== PAYMENT COMPLETE: Alice paid %s tokens to Bob, kept %s tokens change ===",
+	t.Logf("=== PAYMENT COMPLETE: Alice paid %s tokens to Bob, kept %s tokens as change ===",
 		paymentAmt, changeAmt)
 }
