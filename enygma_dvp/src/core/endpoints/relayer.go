@@ -215,8 +215,8 @@ func Swap(
 }
 
 // SubmitPayment submits a Payment circuit proof to the EnygmaDvp.payment() function.
-// ctxts[j] and encTxDatas[j] are the per-output ML-KEM capsule and AES-GCM ciphertext
-// that enable each recipient to scan and discover their note without prior interaction.
+// ctxt and encTxData are Bob's ML-KEM capsule and AES-GCM ciphertext (output 0 only);
+// Alice's change ciphertext is not published — she holds saltA locally.
 func SubmitPayment(
 	client *ethclient.Client,
 	auth *bind.TransactOpts,
@@ -224,11 +224,11 @@ func SubmitPayment(
 	contractAddr common.Address,
 	receipt ProofReceipt,
 	vaultId *big.Int,
-	ctxts [][]byte,
-	encTxDatas [][]byte,
+	ctxt []byte,
+	encTxData []byte,
 ) (*types.Receipt, error) {
 	return relayTransact(client, auth, contractABI, contractAddr,
-		"payment", receipt, vaultId, ctxts, encTxDatas)
+		"payment", receipt, vaultId, ctxt, encTxData)
 }
 
 // Exchange executes a payment-vs-payment exchange on the EnygmaDvp contract.

@@ -1,3 +1,6 @@
+// Server entry point. Run with: go run main.go
+// Note: generation.go also declares func main (key generation). Both files share
+// package main intentionally — run them individually, never with go build ./...
 package main
 
 import (

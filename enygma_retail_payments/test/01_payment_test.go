@@ -12,11 +12,9 @@ package tests
 //   - Bob and Alice scan their respective notes.
 //
 // Prerequisites:
-//   1. Hardhat node:            npx hardhat node
-//   2. Deploy contracts:        cd scripts && go build -o /tmp/rp_deploy deploy.go && cd .. && /tmp/rp_deploy
-//   3. Export VKs:              cd gnark_circuits && go run generation.go
-//   4. Init contracts:          cd scripts && go build -o /tmp/rp_init init.go && cd .. && /tmp/rp_init
-//   5. Gnark server (port 8082): cd gnark_circuits && go run main.go
+//   1. Hardhat node (keep running):     cd ../enygma_dvp && npx hardhat node
+//   2. Deploy + init contracts:         bash setup.sh   (from enygma_retail_payments/ root)
+//   3. Gnark server (port 8082, keep running): cd gnark_circuits && go run main.go
 //
 // Run with:
 //   cd test && go test ./... -v -timeout 600s
@@ -343,37 +341,31 @@ func TestRetailErc20_Payment(t *testing.T) {
 
 	// ─────────────────────────────────────────────────────────────────────────
 	// Step 5: Payment — Alice pays 30 to Bob, keeps 10 as change.
-	//   Inputs:  [Alice's 40-token note, dummy (0)]
+	//   Inputs:  [Alice's 40-token note]
 	//   Outputs: [30 to Bob, 10 change to Alice]
 	//   Keys sourced from registry (Step 4) — not passed manually.
 	// ─────────────────────────────────────────────────────────────────────────
-	dummySpend, err := rpcore.NewSpendKeyPair()
-	if err != nil {
-		t.Fatalf("dummy NewSpendKeyPair: %v", err)
-	}
-
 	paymentResult, err := gnarkClient.PaymentProof(
 		big.NewInt(0),
-		[]*big.Int{depositAmt, big.NewInt(0)},
+		[]*big.Int{depositAmt},
 		[]rpcore.KeyPair{
 			{PrivateKey: aliceSpend.PrivateKey, PublicKey: aliceSpend.PublicKey},
-			{PrivateKey: dummySpend.PrivateKey, PublicKey: dummySpend.PublicKey},
 		},
-		[]*big.Int{aliceSaltBField, big.NewInt(0)},
+		[]*big.Int{aliceSaltBField},
 		[]*big.Int{paymentAmt, changeAmt},
 		[]*big.Int{bobKeys.SpendKey, aliceKeys.SpendKey},   // from registry
 		[][]byte{bobKeys.ViewKey, aliceKeys.ViewKey},        // from registry
 		merkleDepth,
-		[]*rpcore.MerkleProof{aliceProof, makeDummyProof(merkleDepth)},
-		[]*big.Int{big.NewInt(0), big.NewInt(0)},
+		[]*rpcore.MerkleProof{aliceProof},
+		[]*big.Int{big.NewInt(0)},
 		tokenId,
 	)
 	if err != nil {
 		t.Fatalf("PaymentProof: %v", err)
 	}
 	t.Logf("Step 5 — gnark Payment proof generated")
-	t.Logf("  Bob's commitment   (output 0): %s", paymentResult.Statement[7])
-	t.Logf("  Alice's change cmt (output 1): %s", paymentResult.Statement[8])
+	t.Logf("  Bob's commitment   (output 0): %s", paymentResult.Statement[4])
+	t.Logf("  Alice's change cmt (output 1): %s", paymentResult.Statement[5])
 
 	snarkProof := proofStringsToOnchain(t, paymentResult.Proof)
 	onchainReceipt := endpoints.ProofReceipt{
@@ -392,8 +384,8 @@ func TestRetailErc20_Payment(t *testing.T) {
 		client, aliceAuth, dvpABI, dvpAddr,
 		onchainReceipt,
 		vaultId,
-		paymentResult.CipherText,
-		paymentResult.EncTxData,
+		paymentResult.CipherText,  // Bob's ML-KEM capsule only
+		paymentResult.EncTxData,   // Bob's AES-GCM ciphertext only
 	)
 	if err != nil {
 		t.Fatalf("SubmitPayment: %v", err)
@@ -409,8 +401,10 @@ func TestRetailErc20_Payment(t *testing.T) {
 			t.Logf("  Payment event: commitment=%s", log.Topics[2].Big())
 		}
 	}
-	if paymentEvents != paymentResult.NumberOfOutputs {
-		t.Errorf("expected %d Payment events, got %d", paymentResult.NumberOfOutputs, paymentEvents)
+	// Only Bob's destination commitment (output 0) emits a Payment event.
+	// Alice's change commitment is inserted into the tree but has no on-chain ciphertext.
+	if paymentEvents != 1 {
+		t.Errorf("expected 1 Payment event (Bob's destination), got %d", paymentEvents)
 	}
 
 	nullifierSig := crypto.Keccak256Hash([]byte("Nullifier(uint256,uint256,uint256)"))
@@ -429,9 +423,9 @@ func TestRetailErc20_Payment(t *testing.T) {
 	// Step 6: Scanning — Bob and Alice scan Payment events for their notes.
 	// ─────────────────────────────────────────────────────────────────────────
 	bobEvents := []dvpcore.OnChainErc20Event{{
-		Commitment: paymentResult.Statement[7],
-		CipherText: paymentResult.CipherText[0],
-		EncTxData:  paymentResult.EncTxData[0],
+		Commitment: paymentResult.Statement[4],
+		CipherText: paymentResult.CipherText,
+		EncTxData:  paymentResult.EncTxData,
 	}}
 	bobNotes, err := dvpcore.ScanForErc20Notes(bobView.DecapsKey, bobSpend.PublicKey, bobEvents)
 	if err != nil {
@@ -446,24 +440,19 @@ func TestRetailErc20_Payment(t *testing.T) {
 	t.Logf("Step 6 — Bob scanned his note: amount=%s tokenId=%s",
 		bobNotes[0].Amount, bobNotes[0].TokenId)
 
-	aliceChangeEvents := []dvpcore.OnChainErc20Event{{
-		Commitment: paymentResult.Statement[8],
-		CipherText: paymentResult.CipherText[1],
-		EncTxData:  paymentResult.EncTxData[1],
-	}}
-	aliceChangeNotes, err := dvpcore.ScanForErc20Notes(
-		aliceView.DecapsKey, aliceSpend.PublicKey, aliceChangeEvents)
+	// Alice's change salt is random (protocol §"Deriving a change salt") and returned
+	// directly in paymentResult.SaltA — she doesn't need to scan the chain.
+	aliceChangeCmt, err := rpcore.Erc20CommitmentV2(
+		aliceSpend.PublicKey, paymentResult.SaltA, changeAmt, tokenId)
 	if err != nil {
-		t.Fatalf("ScanForErc20Notes (Alice change): %v", err)
+		t.Fatalf("Erc20CommitmentV2 (Alice change verify): %v", err)
 	}
-	if len(aliceChangeNotes) != 1 {
-		t.Fatalf("Alice expected 1 change note, got %d", len(aliceChangeNotes))
+	if aliceChangeCmt.Cmp(paymentResult.Statement[5]) != 0 {
+		t.Errorf("Alice's change commitment mismatch: got %s, want %s",
+			aliceChangeCmt, paymentResult.Statement[5])
 	}
-	if aliceChangeNotes[0].Amount.Cmp(changeAmt) != 0 {
-		t.Errorf("Alice's change amount: got %s, want %s", aliceChangeNotes[0].Amount, changeAmt)
-	}
-	t.Logf("Step 6 — Alice scanned her change note: amount=%s tokenId=%s",
-		aliceChangeNotes[0].Amount, aliceChangeNotes[0].TokenId)
+	t.Logf("Step 6 — Alice verified her change note: amount=%s tokenId=%s saltA=%s",
+		changeAmt, tokenId, paymentResult.SaltA)
 
 	t.Logf("=== PAYMENT COMPLETE: Alice paid %s tokens to Bob, kept %s tokens as change ===",
 		paymentAmt, changeAmt)

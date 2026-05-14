@@ -108,60 +108,70 @@ enygma_retail_payments/
 
 ## How to Run
 
-### 1. Start the Hardhat node (from `enygma_dvp/`)
+### 1. Start the Hardhat node (from `enygma_dvp/`, keep running)
 
 ```bash
 cd ../enygma_dvp
 npx hardhat node
 ```
 
-### 2. Start the gnark ZK server (port 8082)
+### 2. Deploy, export VK, and initialize contracts
+
+Run `setup.sh` from the `enygma_retail_payments/` root. It compiles contracts,
+regenerates Poseidon artifacts, copies the updated ABI, exports the Payment VK,
+deploys all contracts, and initializes them on-chain.
+
+```bash
+bash setup.sh
+```
+
+<details>
+<summary>Manual steps (equivalent to setup.sh)</summary>
+
+```bash
+# Compile Solidity contracts and regenerate Poseidon artifacts
+cd ../enygma_dvp
+npx hardhat compile
+node regen_poseidon.mjs
+
+# Copy updated ABI to retail payments
+cp artifacts/contracts/core/contracts/vaults/Erc20CoinVault.sol/Erc20CoinVault.json \
+   ../enygma_retail_payments/contracts/abis/Erc20CoinVault.json
+
+# Export Payment VK to build/Payment.json
+cd ../enygma_retail_payments/gnark_circuits
+go run ./cmd/export_vk/ ../build
+
+# Deploy contracts (writes build/receipts.json)
+cd ../enygma_retail_payments
+go build -C scripts -o /tmp/rp_deploy deploy.go && /tmp/rp_deploy
+
+# Initialize contracts on-chain (registers VK and vault)
+go build -C scripts -o /tmp/rp_init init.go && /tmp/rp_init
+```
+
+</details>
+
+### 3. Start the gnark ZK server (port 8082, keep running)
 
 ```bash
 cd gnark_circuits
 go run main.go
 ```
 
-The server loads proving/verifying keys from `./scripts/keys/` on startup. Pre-generated
-keys are committed to the repo, so no key generation step is needed for a standard run.
+The server loads proving/verifying keys from `./scripts/keys/` at startup. Pre-generated
+keys are committed to the repo, so no key-generation step is needed for a standard run.
 See [Regenerating Keys](#regenerating-provingverifying-keys) only if you change circuit parameters.
 
-### 3. Deploy contracts
-
-```bash
-cd scripts
-go run deploy.go
-```
-
-Reads `enygmapayment.config.json` for RPC endpoint and accounts. Writes
-deployment addresses to `build/receipts.json`.
-
-### 4. Export the Payment VK
-
-```bash
-cd gnark_circuits
-go run ./cmd/export_vk/ ../build
-```
-
-Writes `build/Payment.json` in circom format, consumed by the init script.
-
-### 5. Initialize contracts on-chain
-
-```bash
-cd scripts
-go run init.go
-```
-
-Registers the Payment verification key and Erc20CoinVault with the `EnygmaDvp` contract.
-
-### 6. Run integration tests
+### 4. Run integration tests
 
 ```bash
 cd test
 go test ./... -v -timeout 600s
 ```
 
-Requires the gnark server (step 2) and a freshly deployed chain (steps 1–5).
+Requires the Hardhat node (step 1), deployed+initialized contracts (step 2), and the
+gnark server (step 3).
 
 ## Regenerating Proving/Verifying Keys
 
@@ -173,7 +183,8 @@ cd gnark_circuits
 go run generation.go
 ```
 
-After regenerating, re-run steps 4–5 to export the new VK and re-initialize the contracts.
+After regenerating, re-run `setup.sh` (or the manual steps 2c–2e above) to export the
+new VK and re-initialize the contracts.
 
 ## Implementation Details
 

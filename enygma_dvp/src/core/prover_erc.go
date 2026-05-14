@@ -1526,9 +1526,11 @@ type PaymentResult struct {
 	Statement       []*big.Int  // interleaved: [msg, tree0, root0, null0, ..., cmt0, cmt1]
 	NumberOfInputs  int
 	NumberOfOutputs int
-	// Per-output encrypted note data (index 0 = payment, 1 = change, ...)
-	CipherText  [][]byte // ML-KEM capsule per output (1088 bytes)
-	EncTxData [][]byte // AES-256-GCM ciphertext of (tokenId || amount) per output
+	// Bob's note discovery data (output 0 only — published on-chain).
+	CipherText []byte // ML-KEM capsule for Bob (1088 bytes)
+	EncTxData  []byte // AES-256-GCM ciphertext of (tokenId || amount) for Bob
+	// Alice's change note data (private — not published on-chain).
+	SaltA *big.Int // random change salt; Alice must store this locally to open Commitment_A
 }
 
 // ContractStatement de-interleaves the statement for on-chain submission.
@@ -1552,24 +1554,27 @@ func (r *PaymentResult) ContractStatement() []*big.Int {
 // PaymentProof generates a Payment circuit proof for Alice paying some amount to Bob
 // with optional change back to herself (or any other recipients).
 //
-// Circuit config: 2 inputs / 2 outputs / Merkle depth 8.
-//   - Input 0: Alice's real note; Input 1: dummy (value=0, Merkle check skipped).
+// Circuit config: 1 input / 2 outputs / Merkle depth 8.
+//   - Input 0: Alice's real note.
 //   - Output 0: payment to Bob; Output 1: change back to Alice.
 //
-// For each output the function runs ML-KEM.Encapsulate + HKDF to derive salt_j and
-// encKey_j, computes the V2 commitment, and encrypts (tokenId || amount_j) with AES-GCM.
+// Salt derivation follows the protocol:
+//   - Output 0 (destination): salt derived via HKDF from the ML-KEM shared secret
+//     so Bob can recover it by decapsulating the ML-KEM ciphertext.
+//   - Output 1+ (change): salt is random (protocol §"Deriving a change salt");
+//     the caller must store PaymentResult.SaltA locally to later open the commitment.
 // The caller submits the resulting ctxts/encTxDatas alongside the proof on-chain.
 func (c *GnarkClient) PaymentProof(
 	stMessage *big.Int,
-	wtValuesIn []*big.Int,           // [aliceAmount, 0]
-	keysIn []KeyPair,                // [aliceKey, dummyKey]
-	wtSaltsIn []*big.Int,            // [aliceSaltBField, 0]
+	wtValuesIn []*big.Int,           // [aliceAmount]
+	keysIn []KeyPair,                // [aliceKey]
+	wtSaltsIn []*big.Int,            // [aliceSaltBField]
 	wtValuesOut []*big.Int,          // [paymentAmount, changeAmount]
 	recipientSpendPks []*big.Int,    // [bobPk, alicePk]
 	recipientViewEncapKeys [][]byte, // [bobViewEncapKey, aliceViewEncapKey]
 	merkleDepth int,
-	merkleProofs []*MerkleProof,     // [aliceProof, dummyProof]
-	stTreeNumbers []*big.Int,        // [0, 0]
+	merkleProofs []*MerkleProof,     // [aliceProof]
+	stTreeNumbers []*big.Int,        // [0]
 	wtTokenId *big.Int,
 ) (*PaymentResult, error) {
 	nIn := len(wtValuesIn)
@@ -1600,38 +1605,56 @@ func (c *GnarkClient) PaymentProof(
 	}
 
 	// --- outputs: KEM + HKDF + AES-GCM + V2 commitments ---
+	//
+	// Output 0 (Bob): KEM-derived salt + on-chain ciphertext so Bob can scan.
+	// Output 1+ (change): random salt + no on-chain ciphertext; Alice stores saltA locally.
 	wtSaltsOut := make([]*big.Int, nOut)
 	stCommitmentsOut := make([]*big.Int, nOut)
-	cipherText := make([][]byte, nOut)
-	encTxData := make([][]byte, nOut)
+	var cipherText []byte
+	var encTxData []byte
+	var saltA *big.Int
 
-	for i := 0; i < nOut; i++ {
-		ss, ctI, err := Encapsulate(recipientViewEncapKeys[i])
-		if err != nil {
-			return nil, fmt.Errorf("Encapsulate output %d: %w", i, err)
-		}
-		cipherText[i] = ctI
+	// Output 0 (Bob): KEM encapsulation → HKDF salt + HKDF key + AES-GCM ciphertext.
+	ss0, ctxt0, err := Encapsulate(recipientViewEncapKeys[0])
+	if err != nil {
+		return nil, fmt.Errorf("Encapsulate Bob output: %w", err)
+	}
+	saltB0, err := DerivePaymentSalt(ss0)
+	if err != nil {
+		return nil, fmt.Errorf("DerivePaymentSalt Bob output: %w", err)
+	}
+	encKey0, err := DerivePaymentKey(ss0)
+	if err != nil {
+		return nil, fmt.Errorf("DerivePaymentKey Bob output: %w", err)
+	}
+	ctxtII0, err := EncryptPayload(encKey0, wtTokenId, wtValuesOut[0])
+	if err != nil {
+		return nil, fmt.Errorf("EncryptPayload Bob output: %w", err)
+	}
+	cipherText = ctxt0
+	encTxData = ctxtII0
+	wtSaltsOut[0] = SaltBToField(saltB0)
 
-		saltB, err := DerivePaymentSalt(ss)
-		if err != nil {
-			return nil, fmt.Errorf("DerivePaymentSalt output %d: %w", i, err)
-		}
-		encKey, err := DerivePaymentKey(ss)
-		if err != nil {
-			return nil, fmt.Errorf("DerivePaymentKey output %d: %w", i, err)
-		}
-		saltBField := SaltBToField(saltB)
-		wtSaltsOut[i] = saltBField
+	cmt0, err := Erc20CommitmentV2(recipientSpendPks[0], wtSaltsOut[0], wtValuesOut[0], wtTokenId)
+	if err != nil {
+		return nil, fmt.Errorf("Erc20CommitmentV2 Bob output: %w", err)
+	}
+	stCommitmentsOut[0] = cmt0
 
-		ctII, err := EncryptPayload(encKey, wtTokenId, wtValuesOut[i])
+	// Output 1+ (change): random salt, no KEM, no on-chain ciphertext.
+	for i := 1; i < nOut; i++ {
+		randSalt, err := RandomInField()
 		if err != nil {
-			return nil, fmt.Errorf("EncryptPayload output %d: %w", i, err)
+			return nil, fmt.Errorf("RandomInField change output %d: %w", i, err)
 		}
-		encTxData[i] = ctII
+		if i == 1 {
+			saltA = randSalt
+		}
+		wtSaltsOut[i] = randSalt
 
-		cmt, err := Erc20CommitmentV2(recipientSpendPks[i], saltBField, wtValuesOut[i], wtTokenId)
+		cmt, err := Erc20CommitmentV2(recipientSpendPks[i], randSalt, wtValuesOut[i], wtTokenId)
 		if err != nil {
-			return nil, fmt.Errorf("Erc20CommitmentV2 output %d: %w", i, err)
+			return nil, fmt.Errorf("Erc20CommitmentV2 change output %d: %w", i, err)
 		}
 		stCommitmentsOut[i] = cmt
 	}
@@ -1696,8 +1719,9 @@ func (c *GnarkClient) PaymentProof(
 		Statement:       statement,
 		NumberOfInputs:  nIn,
 		NumberOfOutputs: nOut,
-		CipherText:     cipherText,
-		EncTxData:    encTxData,
+		CipherText:      cipherText,
+		EncTxData:       encTxData,
+		SaltA:           saltA,
 	}, nil
 }
 

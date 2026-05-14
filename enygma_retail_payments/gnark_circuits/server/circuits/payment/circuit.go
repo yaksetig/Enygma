@@ -4,23 +4,22 @@ import "math/big"
 
 // PaymentRequest is the JSON body accepted by the /proof/payment endpoint.
 //
-// Config is fixed at 2 inputs / 2 outputs / depth 8:
+// Config is fixed at 1 input / 2 outputs / depth 8:
 //   - Input 0  : Alice's real note (value > 0).
-//   - Input 1  : Dummy note (value = 0; Merkle check is skipped by the circuit).
 //   - Output 0 : Payment to Bob.
 //   - Output 1 : Change back to Alice.
 type PaymentRequest struct {
 	StMessage        string       `json:"stMessage"        binding:"required"`
-	StTreeNumbers    [2]string    `json:"stTreeNumbers"    binding:"required"`
-	StMerkleRoots    [2]string    `json:"stMerkleRoots"    binding:"required"`
-	StNullifiers     [2]string    `json:"stNullifiers"     binding:"required"`
+	StTreeNumbers    [1]string    `json:"stTreeNumbers"    binding:"required"`
+	StMerkleRoots    [1]string    `json:"stMerkleRoots"    binding:"required"`
+	StNullifiers     [1]string    `json:"stNullifiers"     binding:"required"`
 	StCommitmentsOut [2]string    `json:"stCommitmentsOut" binding:"required"`
 
-	WtPrivateKeysIn      [2]string    `json:"wtPrivateKeysIn"      binding:"required"`
-	WtValuesIn           [2]string    `json:"wtValuesIn"           binding:"required"`
-	WtSaltsIn            [2]string    `json:"wtSaltsIn"            binding:"required"`
-	WtPathElements       [2][8]string `json:"wtPathElements"       binding:"required"`
-	WtPathIndices        [2]string    `json:"wtPathIndices"        binding:"required"`
+	WtPrivateKeysIn      [1]string    `json:"wtPrivateKeysIn"      binding:"required"`
+	WtValuesIn           [1]string    `json:"wtValuesIn"           binding:"required"`
+	WtSaltsIn            [1]string    `json:"wtSaltsIn"            binding:"required"`
+	WtPathElements       [1][8]string `json:"wtPathElements"       binding:"required"`
+	WtPathIndices        [1]string    `json:"wtPathIndices"        binding:"required"`
 	WtTokenId            string       `json:"wtTokenId"            binding:"required"`
 	WtSpendPublicKeysOut [2]string    `json:"wtSpendPublicKeysOut" binding:"required"`
 	WtValuesOut          [2]string    `json:"wtValuesOut"          binding:"required"`

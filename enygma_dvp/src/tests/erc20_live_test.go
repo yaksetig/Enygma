@@ -159,20 +159,17 @@ func TestErc20JoinSplitProofLive(t *testing.T) {
 
 	t.Logf("Proof generated successfully!")
 	t.Logf("Statement: %v", result.Statement)
-	t.Logf("CipherText[0] len: %d bytes", len(result.CipherText[0]))
-	t.Logf("EncTxData[0] len: %d bytes", len(result.EncTxData[0]))
+	t.Logf("CipherText len: %d bytes", len(result.CipherText))
+	t.Logf("EncTxData len: %d bytes", len(result.EncTxData))
 
-	// V2: both ciphertexts must be populated for both outputs
-	if len(result.CipherText) != 2 {
-		t.Errorf("expected 2 CipherText entries, got %d", len(result.CipherText))
+	// Only Bob's ciphertext is published; Alice's change uses a random salt stored locally.
+	if len(result.CipherText) == 0 {
+		t.Error("expected non-empty CipherText (Bob's ML-KEM capsule)")
 	}
-	if len(result.CipherText[0]) == 0 {
-		t.Error("expected non-empty CipherText[0]")
+	if len(result.EncTxData) == 0 {
+		t.Error("expected non-empty EncTxData (Bob's AES-GCM ciphertext)")
 	}
-	if len(result.EncTxData) != 2 {
-		t.Errorf("expected 2 EncTxData entries, got %d", len(result.EncTxData))
-	}
-	if len(result.EncTxData[0]) == 0 {
-		t.Error("expected non-empty EncTxData[0]")
+	if result.SaltA == nil {
+		t.Error("expected non-nil SaltA (Alice's random change salt)")
 	}
 }

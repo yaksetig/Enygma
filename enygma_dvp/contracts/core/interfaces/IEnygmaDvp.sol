@@ -455,8 +455,8 @@ interface IEnygmaDvp {
     function payment(
         ProofReceipt memory receipt,
         uint256 vaultId,
-        bytes[] calldata ctxts,
-        bytes[] calldata encTxDatas
+        bytes calldata ctxt,
+        bytes calldata encTxData
     ) external returns (bool);
 
     // lockReceiptNullifiers / unlockReceiptNullifiers are used by SwapRelayer

@@ -40,7 +40,7 @@ type PaymentCircuit struct {
 	// --- private witnesses: outputs ---
 	WtSpendPublicKeysOut []frontend.Variable // TmMOutputs — pk_spend of each recipient
 	WtValuesOut          []frontend.Variable // TmMOutputs — amount per output
-	WtSaltsOut           []frontend.Variable // TmMOutputs — HKDF(ss_j, "Bob salt") per output
+	WtSaltsOut           []frontend.Variable // TmMOutputs — salt per output (HKDF-derived for output 0; random for change outputs)
 }
 
 func (circuit *PaymentCircuit) Define(api frontend.API) error {
@@ -70,7 +70,7 @@ func (circuit *PaymentCircuit) Define(api frontend.API) error {
 			circuit.WtTokenId,
 		)
 
-		// Merkle proof: skip for dummy (zero-value) inputs
+		// Merkle proof: enforce root match only when value > 0 (zero-value inputs are ignored).
 		pathElements := make([]frontend.Variable, circuit.Config.TmMerkleTreeDepth)
 		for j := 0; j < circuit.Config.TmMerkleTreeDepth; j++ {
 			pathElements[j] = circuit.WtPathElements[i][j]

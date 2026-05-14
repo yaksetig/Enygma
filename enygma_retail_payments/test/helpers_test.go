@@ -180,16 +180,3 @@ func loadVaultMerkleTree(t *testing.T, client *ethclient.Client, vaultAddr commo
 	t.Logf("loadVaultMerkleTree: loaded %d commitment leaves from vault %s", len(logs), vaultAddr.Hex())
 	return mt
 }
-
-func makeDummyProof(depth int) *rpcore.MerkleProof {
-	p := &rpcore.MerkleProof{
-		Element:  big.NewInt(0),
-		Elements: make([]*big.Int, depth),
-		Indices:  big.NewInt(0),
-		Root:     big.NewInt(0),
-	}
-	for i := range p.Elements {
-		p.Elements[i] = big.NewInt(0)
-	}
-	return p
-}

@@ -1,3 +1,6 @@
+// Key generation entry point. Run with: go run generation.go
+// Note: main.go also declares func main (the gnark server). Both files share
+// package main intentionally — run them individually, never with go build ./...
 package main
 
 import (
@@ -15,7 +18,7 @@ func GenerationVkPk() {
 	solver.RegisterHint(primitives.PoseidonPrivateKeyNative)
 
 	payment_config := templates.PaymentCircuitConfig{
-		TmNInputs:         2,
+		TmNInputs:         1,
 		TmMOutputs:        2,
 		TmMerkleTreeDepth: 8,
 		TmRange:           frontend.Variable("1000000000000000000000000000000000000"),

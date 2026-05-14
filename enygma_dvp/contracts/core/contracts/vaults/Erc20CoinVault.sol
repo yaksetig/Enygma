@@ -313,7 +313,14 @@ contract Erc20CoinVault is AbstractCoinVault {
         if (receipt.numberOfInputs != 1 && receipt.numberOfInputs != 2 && receipt.numberOfInputs != 10) {
             revert InvalidNumberOfInputs();
         }
-        if (receipt.numberOfInputs == 1) {
+        if (receipt.numberOfInputs == 1 && receipt.numberOfOutputs == 2) {
+            // Retail Payment circuit: 1-input/2-output, VK registered at slot 0.
+            IVerifier(_verifierContractAddress).verifyProof(
+                VK_ID_ERC20_JOINSPLIT,
+                receipt.proof,
+                receipt.statement
+            );
+        } else if (receipt.numberOfInputs == 1) {
             // DvP Initiator: 1-input/3-output circuit with 7-element statement.
             // numberOfOutputs is reported as 1 on-chain so only statement[4]=commitB
             // is inserted into the vault; the full 7-element statement is used for VK verification.

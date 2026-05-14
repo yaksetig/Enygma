@@ -22,6 +22,8 @@ type (
 )
 
 // Function re-exports — key generation, Merkle tree, and cryptographic helpers.
+// PaymentProof itself lives in enygma_dvp/src/core/prover_erc.go and is accessed
+// via GnarkClient.PaymentProof (see NewPaymentClient above).
 var (
 	NewSpendKeyPair   = dvpcore.NewSpendKeyPair
 	NewViewKeyPair    = dvpcore.NewViewKeyPair

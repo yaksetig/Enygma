@@ -1023,25 +1023,25 @@ contract EnygmaDvp is IEnygmaDvp, AccessControl {
 
     // payment nullifies Alice's input notes and inserts all output commitments.
     //
-    // Off-chain flow (matches the mermaid payment diagram, N-in / M-out):
-    //   For each output j:
-    //     ss_j, ctxts[j]  = ML-KEM.Encapsulate(view_pk_j)
-    //     salt_j          = HKDF(ss_j, "Bob salt")
-    //     encKey_j        = HKDF(ss_j, "encryption key")
-    //     COMMIT_j        = Poseidon(spend_pk_j, SaltBToField(salt_j), amount_j, tokenId)
-    //     encTxDatas[j]   = AES-GCM-ENC(encKey_j, tokenId || amount_j)
+    // Off-chain flow:
+    //   ss, ctxt         = ML-KEM.Encapsulate(bob_view_pk)
+    //   saltB            = HKDF(ss, "Bob salt")
+    //   encKey           = HKDF(ss, "encryption key")
+    //   Commitment_B     = Poseidon(bob_spend_pk, SaltBToField(saltB), amount_B, tokenId)
+    //   saltA           <- random (only Alice knows this; stored locally)
+    //   Commitment_A     = Poseidon(alice_spend_pk, saltA, amount_A, tokenId)
+    //   encTxData        = AES-GCM-ENC(encKey, tokenId || amount_B)
     //
-    // A Payment event is emitted per output so every recipient can scan independently.
-    // len(ctxts) == len(encTxDatas) == receipt.numberOfOutputs.
+    // Both commitments are inserted atomically into the Merkle tree.
+    // Only Bob's ciphertext is published on-chain; Alice recovers her change via saltA.
+    // A single Payment event is emitted for Bob's commitment (output 0).
     function payment(
         ProofReceipt memory receipt,
         uint256 vaultId,
-        bytes[] calldata ctxts,
-        bytes[] calldata encTxDatas
+        bytes calldata ctxt,
+        bytes calldata encTxData
     ) public returns (bool) {
         if (receipt.numberOfOutputs == 0) revert InvalidNumberOfOutputs();
-        if (ctxts.length != receipt.numberOfOutputs) revert InvalidNumberOfOutputs();
-        if (encTxDatas.length != receipt.numberOfOutputs) revert InvalidNumberOfOutputs();
         if (_coinVaults[vaultId] == address(0)) revert InvalidVaultId();
 
         IAbstractCoinVault vault = IAbstractCoinVault(_coinVaults[vaultId]);
@@ -1049,7 +1049,7 @@ contract EnygmaDvp is IEnygmaDvp, AccessControl {
         // Verify ZK proof and check nullifier/root validity.
         vault.checkReceiptConditions(receipt);
 
-        // Insert all output commitments into the Merkle tree.
+        // Insert all output commitments into the Merkle tree (atomically).
         vault.insertCommitmentsFromReceipt(receipt);
 
         // Mark all input nullifiers as spent.
@@ -1059,11 +1059,9 @@ contract EnygmaDvp is IEnygmaDvp, AccessControl {
         //   [msg, treeNums[nIn], roots[nIn], nullifiers[nIn], cmts[nOut]]
         uint256 commitmentsIndex = 1 + 3 * receipt.numberOfInputs;
 
-        // Emit one Payment event per output for non-interactive note discovery.
-        for (uint256 j = 0; j < receipt.numberOfOutputs; j++) {
-            uint256 commitmentOut = receipt.statement[commitmentsIndex + j];
-            emit Payment(vaultId, commitmentOut, ctxts[j], encTxDatas[j]);
-        }
+        // Emit a Payment event for Bob's output (index 0) so he can scan and claim his note.
+        uint256 commitmentOut = receipt.statement[commitmentsIndex];
+        emit Payment(vaultId, commitmentOut, ctxt, encTxData);
 
         return true;
     }
