@@ -1,24 +1,39 @@
 package utils
 
 import (
-	"os"
-	"fmt"
 	"bytes"
-	"strings"
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
 	"math/big"
 	"net/http"
-	"io/ioutil"
-	"encoding/json"
+	"net/url"
+	"os"
+	"strings"
+	"time"
 
 	enygma "enygma/contracts"
-	
+
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/iden3/go-iden3-crypto/babyjub"
 	"github.com/iden3/go-iden3-crypto/poseidon"
-	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/ethereum/go-ethereum/accounts/abi/bind"
-	
 )
+
+const httpAllowlistEnv = "ENYGMA_HTTP_ALLOWLIST"
+
+var defaultAllowedHTTPOrigins = []string{
+	"http://127.0.0.1:3000",
+	"http://localhost:3000",
+	"http://[::1]:3000",
+	"http://127.0.0.1:3001",
+	"http://localhost:3001",
+	"http://[::1]:3001",
+	"http://127.0.0.1:8080",
+	"http://localhost:8080",
+	"http://[::1]:8080",
+}
 
 // Configuration and Constants
 var (
@@ -28,15 +43,12 @@ var (
 	ZkdvpGetMerkleTree = "http://127.0.0.1:3001/getMerkleTree"
 	ZkdvpGetProof      = "http://127.0.0.1:3001/generateJoinEnygmaProof"
 	WithdrawProofURL   = "http://127.0.0.1:8080/proof/withdraw"
-	DepositProofURL   = "http://127.0.0.1:8080/proof/deposit"
+	DepositProofURL    = "http://127.0.0.1:8080/proof/deposit"
 	Address            = readJSONFile()
 	P, _               = new(big.Int).SetString("2736030358979909402780800718157159386076813972158567259200215660948447373041", 10)
 	G                  = initPoint("16540640123574156134436876038791482806971768689494387082833631921987005038935", "20819045374670962167435360035096875258406992893633759881276124905556507972311")
 	H                  = initPoint("10100005861917718053548237064487763771145251762383025193119768015180892676690", "7512830269827713629724023825249861327768672768516116945507944076335453576011")
 )
-
-
-
 
 // Utility Functions
 func initPoint(xStr, yStr string) *babyjub.Point {
@@ -79,6 +91,10 @@ func ConvertBigIntsToStrings(bigInts []*big.Int) []string {
 }
 
 func PostJSON(url string, payload interface{}) ([]byte, error) {
+	if err := validateOutboundURL(url); err != nil {
+		return nil, err
+	}
+
 	jsonData, _ := json.Marshal(payload)
 	request, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
 	if err != nil {
@@ -86,7 +102,7 @@ func PostJSON(url string, payload interface{}) ([]byte, error) {
 	}
 	request.Header.Set("Content-Type", "application/json; charset=UTF-8")
 
-	client := &http.Client{}
+	client := &http.Client{Timeout: 30 * time.Second}
 	response, err := client.Do(request)
 	if err != nil {
 		if strings.Contains(err.Error(), "connection refused") {
@@ -97,20 +113,24 @@ func PostJSON(url string, payload interface{}) ([]byte, error) {
 	defer response.Body.Close()
 	body, err := ioutil.ReadAll(response.Body)
 	if err != nil {
-		return  nil,fmt.Errorf("failed to read response body: %v", err)
+		return nil, fmt.Errorf("failed to read response body: %v", err)
 	}
 
-	return body,nil
+	return body, nil
 }
 
 func GetJSON(url string) ([]byte, error) {
+	if err := validateOutboundURL(url); err != nil {
+		return nil, err
+	}
+
 	request, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("error creating GET request: %v", err)
 	}
 	request.Header.Set("Content-Type", "application/json; charset=UTF-8")
 
-	client := &http.Client{}
+	client := &http.Client{Timeout: 30 * time.Second}
 	response, err := client.Do(request)
 	if err != nil {
 		if strings.Contains(err.Error(), "connection refused") {
@@ -126,6 +146,68 @@ func GetJSON(url string) ([]byte, error) {
 	}
 
 	return body, nil
+}
+
+func validateOutboundURL(rawURL string) error {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("invalid outbound URL %q: %w", rawURL, err)
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return fmt.Errorf("outbound URL %q uses unsupported scheme %q", rawURL, parsed.Scheme)
+	}
+	if parsed.Host == "" || parsed.Hostname() == "" {
+		return fmt.Errorf("outbound URL %q must include a host", rawURL)
+	}
+	if parsed.User != nil {
+		return fmt.Errorf("outbound URL %q must not include credentials", rawURL)
+	}
+
+	origin := canonicalOrigin(parsed)
+	for _, allowed := range allowedHTTPOrigins() {
+		if origin == allowed {
+			return nil
+		}
+	}
+	return fmt.Errorf("outbound URL origin %q is not allowed; add it to %s to permit it", origin, httpAllowlistEnv)
+}
+
+func allowedHTTPOrigins() []string {
+	origins := make([]string, 0, len(defaultAllowedHTTPOrigins)+8)
+	origins = append(origins, defaultAllowedHTTPOrigins...)
+	for _, raw := range []string{
+		CommitChainURL,
+		HttpPostURL,
+		ZkdvpAddLeaveURL,
+		ZkdvpGetMerkleTree,
+		ZkdvpGetProof,
+		WithdrawProofURL,
+		DepositProofURL,
+		os.Getenv(httpAllowlistEnv),
+	} {
+		for _, part := range strings.Split(raw, ",") {
+			part = strings.TrimSpace(part)
+			if part == "" {
+				continue
+			}
+			if parsed, err := url.Parse(part); err == nil && parsed.Scheme != "" && parsed.Host != "" {
+				origins = append(origins, canonicalOrigin(parsed))
+			}
+		}
+	}
+	return origins
+}
+
+func canonicalOrigin(parsed *url.URL) string {
+	scheme := strings.ToLower(parsed.Scheme)
+	host := strings.ToLower(parsed.Hostname())
+	if strings.Contains(host, ":") {
+		host = "[" + host + "]"
+	}
+	if port := parsed.Port(); port != "" {
+		host += ":" + port
+	}
+	return scheme + "://" + host
 }
 
 func GenerateWithdrawCommitments(v *big.Int, senderId int, blockNumber *big.Int, kIndex []int, secrets []*big.Int) ([]enygma.IEnygmaPoint, []*big.Int) {
@@ -155,7 +237,6 @@ func GenerateWithdrawCommitments(v *big.Int, senderId int, blockNumber *big.Int,
 
 	return commitmentsEnygma, txRandom
 }
-
 
 func GenerateDepositCommitments(v *big.Int, senderId int, blockNumber *big.Int, kIndex []int, secrets []*big.Int) ([]enygma.IEnygmaPoint, []*big.Int) {
 	txRandom := getTxRandomAndRValues(secrets, blockNumber, senderId, kIndex)
@@ -258,7 +339,7 @@ func InsertLeaves(commitment string) error {
 	return nil
 }
 
-func GetPkZkDvP(secret *big.Int) *big.Int{
+func GetPkZkDvP(secret *big.Int) *big.Int {
 	inputs := []*big.Int{secret}
 	PoseidonHash, _ := poseidon.Hash(inputs)
 
@@ -266,12 +347,11 @@ func GetPkZkDvP(secret *big.Int) *big.Int{
 
 }
 
-
 func ConvertStringToBigInt(arrayString []string) []*big.Int {
-	var bigIntArray []*big.Int 
-	
-	for i := 0; i < len(arrayString); i++{
-		bigInt0,_ :=new(big.Int).SetString(arrayString[i], 10)
+	var bigIntArray []*big.Int
+
+	for i := 0; i < len(arrayString); i++ {
+		bigInt0, _ := new(big.Int).SetString(arrayString[i], 10)
 		bigIntArray = append(bigIntArray, bigInt0)
 	}
 

@@ -225,7 +225,10 @@ func loadConfig() (*Config, error) {
 
 // loadArtifact reads from contracts/abis/<name>.json (flat layout).
 func loadArtifact(contractName string) (*ContractArtifact, error) {
-	artifactPath := filepath.Join(projectRoot, "contracts", "abis", contractName+".json")
+	artifactPath, err := safeABIFile(projectRoot, contractName)
+	if err != nil {
+		return nil, err
+	}
 	data, err := os.ReadFile(artifactPath)
 	if err != nil {
 		return nil, err

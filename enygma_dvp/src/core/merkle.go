@@ -7,6 +7,8 @@ import (
 	"math/big"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strings"
 
 	"github.com/iden3/go-iden3-crypto/poseidon"
 	"golang.org/x/crypto/sha3"
@@ -14,6 +16,7 @@ import (
 
 // SNARK_SCALAR_FIELD is the field modulus for the BN254 curve
 var SNARK_SCALAR_FIELD, _ = new(big.Int).SetString("21888242871839275222246405745257275088548364400416034343698204186575808495617", 10)
+var merkleStatePrefixPattern = regexp.MustCompile(`^[A-Za-z0-9_-]*$`)
 
 // MerkleProof represents a proof of inclusion in the Merkle tree
 type MerkleProof struct {
@@ -66,12 +69,11 @@ func NewMerkleTreeWithPath(depth int, prefix string, clientPath string) (*Merkle
 		prevTrees:  make([][][]*big.Int, 0),
 	}
 
-	// Determine save path
-	if clientPath != "" {
-		mt.savePath = filepath.Join(clientPath, prefix+"MerkleTreeState.json")
-	} else {
-		mt.savePath = filepath.Join("./src/appdata/", prefix+"MerkleTreeState.json")
+	savePath, err := safeMerkleStatePath(prefix, clientPath)
+	if err != nil {
+		return nil, err
 	}
+	mt.savePath = savePath
 
 	// Try to load from file
 	if _, err := os.Stat(mt.savePath); err == nil {
@@ -90,6 +92,61 @@ func NewMerkleTreeWithPath(depth int, prefix string, clientPath string) (*Merkle
 	}
 
 	return mt, nil
+}
+
+func safeMerkleStatePath(prefix string, clientPath string) (string, error) {
+	if !merkleStatePrefixPattern.MatchString(prefix) {
+		return "", fmt.Errorf("Merkle tree prefix %q must contain only letters, numbers, underscore, or hyphen", prefix)
+	}
+
+	basePath := clientPath
+	if basePath == "" {
+		basePath = filepath.Join(".", "src", "appdata")
+	}
+	absBase, err := filepath.Abs(basePath)
+	if err != nil {
+		return "", err
+	}
+	absBase = filepath.Clean(absBase)
+	if !isPathInsideAllowedRoots(absBase) {
+		return "", fmt.Errorf("Merkle tree path %q is outside the allowed project roots", basePath)
+	}
+
+	candidate := filepath.Join(absBase, prefix+"MerkleTreeState.json")
+	rel, err := filepath.Rel(absBase, candidate)
+	if err != nil {
+		return "", err
+	}
+	if strings.HasPrefix(rel, "..") || filepath.IsAbs(rel) {
+		return "", fmt.Errorf("Merkle tree path %q is outside %q", candidate, absBase)
+	}
+	return candidate, nil
+}
+
+func isPathInsideAllowedRoots(candidate string) bool {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return false
+	}
+	roots := []string{cwd}
+	for _, root := range strings.Split(os.Getenv("ENYGMA_ALLOWED_FILE_ROOTS"), ",") {
+		root = strings.TrimSpace(root)
+		if root != "" {
+			roots = append(roots, root)
+		}
+	}
+
+	for _, root := range roots {
+		absRoot, err := filepath.Abs(root)
+		if err != nil {
+			continue
+		}
+		rel, err := filepath.Rel(filepath.Clean(absRoot), candidate)
+		if err == nil && (rel == "." || (!strings.HasPrefix(rel, "..") && !filepath.IsAbs(rel))) {
+			return true
+		}
+	}
+	return false
 }
 
 // loadFromFile loads the Merkle tree state from a JSON file

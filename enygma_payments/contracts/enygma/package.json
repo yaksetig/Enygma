@@ -3,5 +3,11 @@
   "dependencies": {
     "hardhat": "^2.22.14",
     "solc-js": "^1.0.1"
+  },
+  "overrides": {
+    "@fastify/busboy": "3.2.0",
+    "adm-zip": "0.5.2",
+    "cookie": "0.7.0",
+    "tmp": "0.2.4"
   }
 }

@@ -356,7 +356,11 @@ func loadInitConfig() (*InitConfig, error) {
 }
 
 func loadReceipts() (InitReceipts, error) {
-	receiptsPath := filepath.Join(initProjectRoot, "build", "receipts.json")
+	buildRoot := filepath.Join(initProjectRoot, "build")
+	receiptsPath, err := safePathWithin(buildRoot, filepath.Join(buildRoot, "receipts.json"))
+	if err != nil {
+		return nil, err
+	}
 	data, err := os.ReadFile(receiptsPath)
 	if err != nil {
 		return nil, err
@@ -371,7 +375,10 @@ func loadReceipts() (InitReceipts, error) {
 }
 
 func loadContractABI(contractPath string) (abi.ABI, error) {
-	artifactPath := filepath.Join(initProjectRoot, "artifacts", "contracts", contractPath+".json")
+	artifactPath, err := safeArtifactFile(initProjectRoot, contractPath)
+	if err != nil {
+		return abi.ABI{}, err
+	}
 	data, err := os.ReadFile(artifactPath)
 	if err != nil {
 		return abi.ABI{}, err
@@ -415,7 +422,10 @@ func getVerificationKeys(circuits []struct {
 	var verificationKeys []VerifyingKey
 
 	for _, circuit := range circuits {
-		filePath := filepath.Join(initProjectRoot, "build", circuit.Filename+".json")
+		filePath, err := safeCircuitBuildJSON(initProjectRoot, circuit.Filename)
+		if err != nil {
+			return nil, err
+		}
 		fmt.Println(filePath)
 
 		data, err := os.ReadFile(filePath)

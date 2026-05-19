@@ -7,13 +7,28 @@ import (
 	"fmt"
 	"math/big"
 	"net/http"
+	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	poseidonLib "github.com/iden3/go-iden3-crypto/poseidon"
 	"golang.org/x/crypto/sha3"
 )
+
+const (
+	defaultMerkleRPCURL = "http://127.0.0.1:8545"
+	rpcAllowlistEnv     = "ENYGMA_RPC_ALLOWLIST"
+	fileRootsEnv        = "ENYGMA_ALLOWED_FILE_ROOTS"
+)
+
+var defaultAllowedRPCOrigins = []string{
+	"http://127.0.0.1:8545",
+	"http://localhost:8545",
+	"http://[::1]:8545",
+}
 
 // ─── Local Merkle Tree ────────────────────────────────────────────────────────
 // Mirrors src/core/merkle.go so we can reconstruct the tree from on-chain events.
@@ -165,8 +180,17 @@ type jsonRPCError struct {
 }
 
 func doRPC(rpcURL string, req jsonRPCRequest) (jsonRPCResponse, error) {
+	if err := validateRPCURL(rpcURL); err != nil {
+		return jsonRPCResponse{}, err
+	}
 	body, _ := json.Marshal(req)
-	resp, err := http.Post(rpcURL, "application/json", bytes.NewReader(body)) //nolint:gosec
+	request, err := http.NewRequest("POST", rpcURL, bytes.NewReader(body))
+	if err != nil {
+		return jsonRPCResponse{}, err
+	}
+	request.Header.Set("Content-Type", "application/json")
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(request)
 	if err != nil {
 		return jsonRPCResponse{}, err
 	}
@@ -281,7 +305,11 @@ type contractReceipt struct {
 var vaultNames = []string{"Erc20CoinVault", "Erc721CoinVault", "Erc1155CoinVault", "EnygmaErc20CoinVault"}
 
 func loadVaultAddresses(receiptsPath string) (map[string]string, error) {
-	data, err := os.ReadFile(receiptsPath)
+	safePath, err := safeReceiptsPath(receiptsPath)
+	if err != nil {
+		return nil, err
+	}
+	data, err := os.ReadFile(safePath)
 	if err != nil {
 		return nil, err
 	}
@@ -296,6 +324,114 @@ func loadVaultAddresses(receiptsPath string) (map[string]string, error) {
 		}
 	}
 	return out, nil
+}
+
+func validateRPCURL(rawURL string) error {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("invalid rpcUrl %q: %w", rawURL, err)
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return fmt.Errorf("rpcUrl %q uses unsupported scheme %q", rawURL, parsed.Scheme)
+	}
+	if parsed.Host == "" || parsed.Hostname() == "" {
+		return fmt.Errorf("rpcUrl %q must include a host", rawURL)
+	}
+	if parsed.User != nil {
+		return fmt.Errorf("rpcUrl %q must not include credentials", rawURL)
+	}
+
+	origin := canonicalRPCOrigin(parsed)
+	for _, allowed := range allowedRPCOrigins() {
+		if origin == allowed {
+			return nil
+		}
+	}
+	return fmt.Errorf("rpcUrl origin %q is not allowed; add it to %s to permit it", origin, rpcAllowlistEnv)
+}
+
+func allowedRPCOrigins() []string {
+	origins := make([]string, 0, len(defaultAllowedRPCOrigins)+4)
+	origins = append(origins, defaultAllowedRPCOrigins...)
+	for _, raw := range strings.Split(os.Getenv(rpcAllowlistEnv), ",") {
+		raw = strings.TrimSpace(raw)
+		if raw == "" {
+			continue
+		}
+		if parsed, err := url.Parse(raw); err == nil && parsed.Scheme != "" && parsed.Host != "" {
+			origins = append(origins, canonicalRPCOrigin(parsed))
+		}
+	}
+	return origins
+}
+
+func canonicalRPCOrigin(parsed *url.URL) string {
+	scheme := strings.ToLower(parsed.Scheme)
+	host := strings.ToLower(parsed.Hostname())
+	if strings.Contains(host, ":") {
+		host = "[" + host + "]"
+	}
+	if port := parsed.Port(); port != "" {
+		host += ":" + port
+	}
+	return scheme + "://" + host
+}
+
+func safeReceiptsPath(candidate string) (string, error) {
+	if strings.TrimSpace(candidate) == "" {
+		return "", fmt.Errorf("receiptsPath must not be empty")
+	}
+	if strings.Contains(candidate, "\x00") {
+		return "", fmt.Errorf("receiptsPath contains an invalid character")
+	}
+	if filepath.Base(candidate) != "receipts.json" {
+		return "", fmt.Errorf("receiptsPath must point to receipts.json")
+	}
+
+	absCandidate, err := filepath.Abs(candidate)
+	if err != nil {
+		return "", err
+	}
+	absCandidate = filepath.Clean(absCandidate)
+	for _, root := range allowedReceiptsRoots() {
+		if isPathWithin(absCandidate, root) {
+			return absCandidate, nil
+		}
+	}
+	return "", fmt.Errorf("receiptsPath %q is outside the allowed build roots", candidate)
+}
+
+func allowedReceiptsRoots() []string {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return nil
+	}
+	roots := []string{
+		filepath.Join(cwd, "build"),
+		filepath.Join(cwd, "..", "build"),
+	}
+	for _, root := range strings.Split(os.Getenv(fileRootsEnv), ",") {
+		root = strings.TrimSpace(root)
+		if root != "" {
+			roots = append(roots, root)
+		}
+	}
+
+	out := make([]string, 0, len(roots))
+	for _, root := range roots {
+		if absRoot, err := filepath.Abs(root); err == nil {
+			out = append(out, filepath.Clean(absRoot))
+		}
+	}
+	return out
+}
+
+func isPathWithin(candidate, root string) bool {
+	rel, err := filepath.Rel(root, candidate)
+	if err != nil {
+		return false
+	}
+	return rel == "." || (!strings.HasPrefix(rel, "..") && !filepath.IsAbs(rel))
 }
 
 // ─── Handler ──────────────────────────────────────────────────────────────────
@@ -319,11 +455,11 @@ type VaultMerkleStatus struct {
 
 // VaultRegistryEntry is one row of the EnygmaDvP registry cross-check.
 type VaultRegistryEntry struct {
-	VaultID         uint64 `json:"vaultId"`
-	Name            string `json:"name"`
-	AddressInDvP    string `json:"addressInDvP"`    // from vaultById(id) on EnygmaDvP
+	VaultID           uint64 `json:"vaultId"`
+	Name              string `json:"name"`
+	AddressInDvP      string `json:"addressInDvP"`      // from vaultById(id) on EnygmaDvP
 	AddressInReceipts string `json:"addressInReceipts"` // from receipts.json
-	Match           bool   `json:"match"`
+	Match             bool   `json:"match"`
 }
 
 // EnygmaDvPCheck holds the result of comparing receipts.json vault addresses
@@ -352,18 +488,28 @@ func MerkleStatusHandler() gin.HandlerFunc {
 
 	commitmentTopic := keccak32Hex("Commitment(uint256,uint256)")
 	currentRootSel := keccak4("currentRoot()")
-	treeNumberSel  := keccak4("treeNumber()")
-	vaultByIDSel   := keccak4("vaultById(uint256)")
+	treeNumberSel := keccak4("treeNumber()")
+	vaultByIDSel := keccak4("vaultById(uint256)")
 
 	return func(c *gin.Context) {
 		var req MerkleStatusRequest
 		_ = c.ShouldBindJSON(&req) // all fields optional
 		if req.RpcUrl == "" {
-			req.RpcUrl = "http://127.0.0.1:8545"
+			req.RpcUrl = defaultMerkleRPCURL
 		}
 		if req.ReceiptsPath == "" {
 			req.ReceiptsPath = "../build/receipts.json"
 		}
+		if err := validateRPCURL(req.RpcUrl); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		receiptsPath, err := safeReceiptsPath(req.ReceiptsPath)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		req.ReceiptsPath = receiptsPath
 
 		vaultAddrs, err := loadVaultAddresses(req.ReceiptsPath)
 		if err != nil {
@@ -397,15 +543,19 @@ func MerkleStatusHandler() gin.HandlerFunc {
 // vaultIDByName maps each vault contract name to its on-chain vaultId (position
 // in EnygmaDvP._coinVaults[], assigned in registration order by deploy/init).
 var vaultIDByName = map[string]uint64{
-	"Erc20CoinVault":        0,
-	"Erc721CoinVault":       1,
-	"Erc1155CoinVault":      2,
-	"EnygmaErc20CoinVault":  3,
+	"Erc20CoinVault":       0,
+	"Erc721CoinVault":      1,
+	"Erc1155CoinVault":     2,
+	"EnygmaErc20CoinVault": 3,
 }
 
 func checkEnygmaDvPRegistry(rpcURL, receiptsPath string, receiptsAddrs map[string]string, vaultByIDSel string) EnygmaDvPCheck {
 	// Load EnygmaDvP address from receipts.
-	data, err := os.ReadFile(receiptsPath)
+	safePath, err := safeReceiptsPath(receiptsPath)
+	if err != nil {
+		return EnygmaDvPCheck{Error: fmt.Sprintf("validate receipts path: %v", err)}
+	}
+	data, err := os.ReadFile(safePath)
 	if err != nil {
 		return EnygmaDvPCheck{Error: fmt.Sprintf("read receipts: %v", err)}
 	}
@@ -427,11 +577,11 @@ func checkEnygmaDvPRegistry(rpcURL, receiptsPath string, receiptsAddrs map[strin
 		onChainAddr, err := ethCallAddress(rpcURL, dvpAddr, vaultByIDSel, id)
 		if err != nil {
 			entries = append(entries, VaultRegistryEntry{
-				VaultID: id,
-				Name:    name,
+				VaultID:           id,
+				Name:              name,
 				AddressInDvP:      fmt.Sprintf("error: %v", err),
 				AddressInReceipts: strings.ToLower(receiptsAddrs[name]),
-				Match: false,
+				Match:             false,
 			})
 			allMatch = false
 			continue
@@ -523,8 +673,8 @@ var vaultNameByID = func() map[uint64]string {
 
 type MerkleVaultRequest struct {
 	// Identify the vault by name OR by id — one is required.
-	Vault        string `json:"vault"`        // e.g. "Erc20CoinVault"
-	VaultID      *uint64 `json:"vaultId"`     // e.g. 0  (pointer so 0 is distinguishable from absent)
+	Vault        string  `json:"vault"`   // e.g. "Erc20CoinVault"
+	VaultID      *uint64 `json:"vaultId"` // e.g. 0  (pointer so 0 is distinguishable from absent)
 	RpcUrl       string  `json:"rpcUrl"`
 	ReceiptsPath string  `json:"receiptsPath"`
 }
@@ -542,7 +692,7 @@ func MerkleVaultHandler() gin.HandlerFunc {
 
 	commitmentTopic := keccak32Hex("Commitment(uint256,uint256)")
 	currentRootSel := keccak4("currentRoot()")
-	treeNumberSel  := keccak4("treeNumber()")
+	treeNumberSel := keccak4("treeNumber()")
 
 	return func(c *gin.Context) {
 		var req MerkleVaultRequest
@@ -551,11 +701,21 @@ func MerkleVaultHandler() gin.HandlerFunc {
 			return
 		}
 		if req.RpcUrl == "" {
-			req.RpcUrl = "http://127.0.0.1:8545"
+			req.RpcUrl = defaultMerkleRPCURL
 		}
 		if req.ReceiptsPath == "" {
 			req.ReceiptsPath = "../build/receipts.json"
 		}
+		if err := validateRPCURL(req.RpcUrl); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		receiptsPath, err := safeReceiptsPath(req.ReceiptsPath)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		req.ReceiptsPath = receiptsPath
 
 		// Resolve vault name from either field.
 		vaultName := req.Vault

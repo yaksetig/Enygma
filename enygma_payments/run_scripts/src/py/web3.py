@@ -3,7 +3,7 @@ import json
 from pprint import pprint
 from web3 import Web3
 from src.py.logger import info, error, debug
-from src.py.helpers.path_helpers import TokenJsonPath
+from src.py.helpers.path_helpers import SafePath, TokenJsonPath
 from IPython.utils.capture import capture_output
 from web3.middleware import geth_poa_middleware
 import time
@@ -75,6 +75,7 @@ class W3b3:
         return self.W3.toWei(value, unit)
     #*******************************************************************************
     def get_contract(self, deploy_address, compiled_path):
+        compiled_path = SafePath(compiled_path, allowed_extensions={".json"}, must_exist=True)
         with open(compiled_path, "r") as file:
             compiled_sol = json.load(file)
         compiled_abi = compiled_sol["abi"]
@@ -105,7 +106,8 @@ class W3b3:
         data ={ "address" : f"{token_address}"}
         path = self.root_path.replace("run_scripts", "go_client/config")
        
-        with open(f"{path}/address.json", 'w') as file:
+        address_path = SafePath(f"{path}/address.json", allowed_extensions={".json"})
+        with open(address_path, 'w') as file:
             json.dump(data, file, indent=4)
             
         
@@ -135,6 +137,7 @@ class W3b3:
             # deploying chess lobby
             debug(f"Deploying {contract_path} ...")
 
+            contract_path = SafePath(contract_path, allowed_extensions={".json"}, must_exist=True)
             with open(contract_path, "r") as file:
                 compiled_contract = json.load(file)
 
@@ -159,4 +162,3 @@ class W3b3:
             error(ex)
             return None
     #*******************************************************************************
-

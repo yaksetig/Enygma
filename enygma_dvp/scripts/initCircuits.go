@@ -128,7 +128,10 @@ func generateSnarkKeys(circuits []CircuitEntry) error {
 // Corresponds to: dvpSnarks.generateSnarkKeyForCircuit(filename)
 func generateSnarkKeyForCircuit(filename string) error {
 	buildDir := filepath.Join(circuitsProjectRoot, "build")
-	filePath := filepath.Join(buildDir, filename)
+	filePath, err := safeCircuitBuildStem(circuitsProjectRoot, filename)
+	if err != nil {
+		return err
+	}
 	ptau := filepath.Join(buildDir, "powersOfTau28_hez_final_20.ptau")
 
 	fmt.Printf("\nFilename: %s\n", filename)
@@ -168,10 +171,13 @@ func contributeToCeremonies(circuits []CircuitEntry) error {
 // exports the verification key to JSON, and removes the .tmp zkey file.
 // Corresponds to: dvpSnarks.contributeToCeremony(circuitName)
 func contributeToCeremony(circuitName string) error {
-	buildDir := filepath.Join(circuitsProjectRoot, "build")
-	jsPK := filepath.Join(buildDir, circuitName+".zkey")
-	jsVK := filepath.Join(buildDir, circuitName+".json")
-	jsTmp := filepath.Join(buildDir, circuitName+".tmp")
+	filePath, err := safeCircuitBuildStem(circuitsProjectRoot, circuitName)
+	if err != nil {
+		return err
+	}
+	jsPK := filePath + ".zkey"
+	jsVK := filePath + ".json"
+	jsTmp := filePath + ".tmp"
 
 	// Generate 32 bytes of random entropy (same as JS crypto.randomBytes(32).toString("hex"))
 	randomBytes := make([]byte, 32)

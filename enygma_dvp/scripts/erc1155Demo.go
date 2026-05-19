@@ -148,7 +148,10 @@ func loadErc1155Receipts() (erc1155Receipts, error) {
 }
 
 func loadErc1155ContractABI(contractPath string) (abi.ABI, error) {
-	artifactPath := filepath.Join(erc1155ProjectRoot, "artifacts", "contracts", contractPath+".json")
+	artifactPath, err := safeArtifactFile(erc1155ProjectRoot, contractPath)
+	if err != nil {
+		return abi.ABI{}, err
+	}
 	data, err := os.ReadFile(artifactPath)
 	if err != nil {
 		return abi.ABI{}, err
@@ -315,17 +318,17 @@ func runErc1155Demo(tokenIds []*big.Int, depositAmounts []*big.Int, paymentAmoun
 	fmt.Println("Registering Fungible ERC-1155 tokenId to RaylsERC1155")
 	if err := transactAndWait(client, ownerAuth, erc1155ABI, erc1155Addr,
 		"registerNewToken",
-		big.NewInt(0),             // type
-		big.NewInt(0),             // fungibility (0 = fungible)
-		"Test Fungible",           // name
-		"TFT",                     // symbol
-		fungId,                    // offchainId
+		big.NewInt(0),                // type
+		big.NewInt(0),                // fungibility (0 = fungible)
+		"Test Fungible",              // name
+		"TFT",                        // symbol
+		fungId,                       // offchainId
 		big.NewInt(1000000000000000), // maxSupply
-		big.NewInt(18),            // decimals
-		[]*big.Int{},              // subTokenIds
-		[]*big.Int{},              // subTokenValues
-		big.NewInt(0),             // data
-		[]*big.Int{},              // additionalAttrs
+		big.NewInt(18),               // decimals
+		[]*big.Int{},                 // subTokenIds
+		[]*big.Int{},                 // subTokenValues
+		big.NewInt(0),                // data
+		[]*big.Int{},                 // additionalAttrs
 	); err != nil {
 		return fmt.Errorf("registerNewToken (fungible): %w", err)
 	}
@@ -354,17 +357,17 @@ func runErc1155Demo(tokenIds []*big.Int, depositAmounts []*big.Int, paymentAmoun
 	fmt.Println("Registering non-Fungible ERC-1155 tokenId to RaylsERC1155")
 	if err := transactAndWait(client, ownerAuth, erc1155ABI, erc1155Addr,
 		"registerNewToken",
-		big.NewInt(0),  // type
-		big.NewInt(1),  // fungibility (1 = non-fungible)
+		big.NewInt(0),       // type
+		big.NewInt(1),       // fungibility (1 = non-fungible)
 		"Test Non-fungible", // name
-		"TNFT",         // symbol
-		nonFungId,      // offchainId
-		big.NewInt(0),  // maxSupply
-		big.NewInt(0),  // decimals
-		[]*big.Int{},   // subTokenIds
-		[]*big.Int{},   // subTokenValues
-		big.NewInt(0),  // data
-		[]*big.Int{},   // additionalAttrs
+		"TNFT",              // symbol
+		nonFungId,           // offchainId
+		big.NewInt(0),       // maxSupply
+		big.NewInt(0),       // decimals
+		[]*big.Int{},        // subTokenIds
+		[]*big.Int{},        // subTokenValues
+		big.NewInt(0),       // data
+		[]*big.Int{},        // additionalAttrs
 	); err != nil {
 		return fmt.Errorf("registerNewToken (non-fungible): %w", err)
 	}
@@ -374,7 +377,7 @@ func runErc1155Demo(tokenIds []*big.Int, depositAmounts []*big.Int, paymentAmoun
 		"addTokenToGroup",
 		big.NewInt(vaultIDErc1155),
 		[]*big.Int{big.NewInt(0), nonFungId}, // uniqueIdParams: [0, nonFungId]
-		big.NewInt(1),                         // groupId (non-fungible group = 1)
+		big.NewInt(1),                        // groupId (non-fungible group = 1)
 	); err != nil {
 		return fmt.Errorf("addTokenToGroup (non-fungible): %w", err)
 	}
@@ -547,18 +550,18 @@ func runErc1155Demo(tokenIds []*big.Int, depositAmounts []*big.Int, paymentAmoun
 	fmt.Println("Alice generates a tx to send her NFT to Bob")
 	params1, err := endpoints.GenerateSingleErc1155Proof(
 		gnarkClient,
-		paymentCommitment,   // stMessage
-		nonFungAmount,       // amountOrOne
-		nftKeyDeposit,       // keyIn
-		bobNFTKey,           // keyOut
+		paymentCommitment, // stMessage
+		nonFungAmount,     // amountOrOne
+		nftKeyDeposit,     // keyIn
+		bobNFTKey,         // keyOut
 		treeDepth,
 		aliceNFTCoinProof,   // coin tree proof
 		aliceNFTCoinTreeNum, // coin tree number
 		erc1155Addr,
 		nonFungId,
-		aliceNFTGroupTreeNum,  // non-fungible group tree number
-		aliceNFTGroupProof,    // non-fungible group proof
-		false,                 // isFungible
+		aliceNFTGroupTreeNum, // non-fungible group tree number
+		aliceNFTGroupProof,   // non-fungible group proof
+		false,                // isFungible
 	)
 	if err != nil {
 		return fmt.Errorf("GenerateSingleErc1155Proof: %w", err)
@@ -568,14 +571,14 @@ func runErc1155Demo(tokenIds []*big.Int, depositAmounts []*big.Int, paymentAmoun
 	fmt.Println("Bob generates a tx to send payment to Alice")
 	params2, err := endpoints.GenerateErc1155JoinSplitProof(
 		gnarkClient,
-		nftCommitment,                          // stMessage
-		[]*big.Int{fungAmount, fungAmount},      // wtValuesIn
-		[]core.KeyPair{fundKey0, fundKey1},      // keysIn
-		[]*big.Int{paymentAmount, changeAmount}, // wtValuesOut
+		nftCommitment,                                 // stMessage
+		[]*big.Int{fungAmount, fungAmount},            // wtValuesIn
+		[]core.KeyPair{fundKey0, fundKey1},            // keysIn
+		[]*big.Int{paymentAmount, changeAmount},       // wtValuesOut
 		[]core.KeyPair{alicePaymentKey, bobChangeKey}, // keysOut
 		treeDepth,
 		[]*core.MerkleProof{bobCoin1Proof, bobCoin2Proof}, // coin tree proofs
-		[]*big.Int{bobCoin1TreeNum, bobCoin2TreeNum},       // coin tree numbers
+		[]*big.Int{bobCoin1TreeNum, bobCoin2TreeNum},      // coin tree numbers
 		erc1155Addr,
 		fungId,
 		bobFungGroupTreeNum, // fungible group tree number (same for both inputs)
@@ -594,10 +597,10 @@ func runErc1155Demo(tokenIds []*big.Int, depositAmounts []*big.Int, paymentAmoun
 
 	swapCommitments, err := endpoints.Swap(
 		client, ownerAuth, dvpABI, dvpAddr,
-		p2Receipt,                      // paymentReceipt
-		p1Receipt,                      // deliveryReceipt
-		big.NewInt(vaultIDErc1155),     // paymentVaultId
-		big.NewInt(vaultIDErc1155),     // deliveryVaultId
+		p2Receipt,                  // paymentReceipt
+		p1Receipt,                  // deliveryReceipt
+		big.NewInt(vaultIDErc1155), // paymentVaultId
+		big.NewInt(vaultIDErc1155), // deliveryVaultId
 	)
 	if err != nil {
 		return fmt.Errorf("Swap: %w", err)

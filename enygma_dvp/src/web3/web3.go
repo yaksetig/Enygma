@@ -176,7 +176,10 @@ func GetTransactOpts(privateKeyHex string, chainID *big.Int) (*bind.TransactOpts
 
 // LoadArtifact loads a Hardhat contract artifact from the project artifacts directory
 func LoadArtifact(projectRoot, contractPath string) (*ContractArtifact, error) {
-	artifactPath := filepath.Join(projectRoot, "artifacts", "contracts", contractPath+".json")
+	artifactPath, err := safeArtifactFile(projectRoot, contractPath)
+	if err != nil {
+		return nil, err
+	}
 	data, err := os.ReadFile(artifactPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read artifact %s: %w", artifactPath, err)
@@ -188,6 +191,41 @@ func LoadArtifact(projectRoot, contractPath string) (*ContractArtifact, error) {
 	}
 
 	return &artifact, nil
+}
+
+func safeArtifactFile(projectRoot, contractPath string) (string, error) {
+	if strings.TrimSpace(contractPath) == "" {
+		return "", fmt.Errorf("contract path must not be empty")
+	}
+	if strings.Contains(contractPath, "\x00") || filepath.IsAbs(contractPath) {
+		return "", fmt.Errorf("contract path %q is invalid", contractPath)
+	}
+
+	artifactRoot := filepath.Join(projectRoot, "artifacts", "contracts")
+	candidate := filepath.Join(artifactRoot, contractPath+".json")
+	return safePathWithin(artifactRoot, candidate)
+}
+
+func safePathWithin(root, candidate string) (string, error) {
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		return "", err
+	}
+	absCandidate, err := filepath.Abs(candidate)
+	if err != nil {
+		return "", err
+	}
+	absRoot = filepath.Clean(absRoot)
+	absCandidate = filepath.Clean(absCandidate)
+
+	rel, err := filepath.Rel(absRoot, absCandidate)
+	if err != nil {
+		return "", err
+	}
+	if rel == "." || (!strings.HasPrefix(rel, "..") && !filepath.IsAbs(rel)) {
+		return absCandidate, nil
+	}
+	return "", fmt.Errorf("path %q is outside %q", candidate, root)
 }
 
 // LoadContractABI loads and parses only the ABI from a contract artifact

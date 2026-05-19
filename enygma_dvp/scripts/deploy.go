@@ -331,7 +331,10 @@ func loadConfig() (*Config, error) {
 }
 
 func loadArtifact(contractPath string) (*ContractArtifact, error) {
-	artifactPath := filepath.Join(projectRoot, "artifacts", "contracts", contractPath+".json")
+	artifactPath, err := safeArtifactFile(projectRoot, contractPath)
+	if err != nil {
+		return nil, err
+	}
 	data, err := os.ReadFile(artifactPath)
 	if err != nil {
 		return nil, err
@@ -417,15 +420,18 @@ func deployContractWithArgs(client *ethclient.Client, auth *bind.TransactOpts, c
 // The artifact's linkReferences are used to find the exact placeholder per library.
 func deployContractWithLibraries(client *ethclient.Client, auth *bind.TransactOpts, contractPath string, libMap map[string]common.Address) (common.Address, *types.Receipt, error) {
 	// Load raw artifact JSON to access linkReferences
-	artifactPath := filepath.Join(projectRoot, "artifacts/contracts", contractPath+".json")
+	artifactPath, err := safeArtifactFile(projectRoot, contractPath)
+	if err != nil {
+		return common.Address{}, nil, err
+	}
 	rawData, err := os.ReadFile(artifactPath)
 	if err != nil {
 		return common.Address{}, nil, fmt.Errorf("failed to read artifact %s: %w", contractPath, err)
 	}
 
 	var fullArtifact struct {
-		ABI            json.RawMessage                       `json:"abi"`
-		Bytecode       string                                `json:"bytecode"`
+		ABI            json.RawMessage `json:"abi"`
+		Bytecode       string          `json:"bytecode"`
 		LinkReferences map[string]map[string][]struct {
 			Start  int `json:"start"`
 			Length int `json:"length"`

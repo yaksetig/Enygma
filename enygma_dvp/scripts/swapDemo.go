@@ -88,9 +88,9 @@ func main() {
 
 type swapConfig struct {
 	Network struct {
-		Host    string `json:"host"`
-		Port    string `json:"port"`
-		ChainID string `json:"chain-id"`
+		Host     string `json:"host"`
+		Port     string `json:"port"`
+		ChainID  string `json:"chain-id"`
 		Accounts []struct {
 			Address string `json:"address"`
 			Private string `json:"private"`
@@ -139,7 +139,10 @@ func loadSwapReceipts() (swapReceipts, error) {
 
 // loadSwapContractABI reads a Hardhat artifact from artifacts/contracts/<path>.json.
 func loadSwapContractABI(contractPath string) (abi.ABI, error) {
-	artifactPath := filepath.Join(swapProjectRoot, "artifacts", "contracts", contractPath+".json")
+	artifactPath, err := safeArtifactFile(swapProjectRoot, contractPath)
+	if err != nil {
+		return abi.ABI{}, err
+	}
 	data, err := os.ReadFile(artifactPath)
 	if err != nil {
 		return abi.ABI{}, err
@@ -501,10 +504,10 @@ func runSwapDemo() error {
 
 	swapCommitments, err := endpoints.Swap(
 		client, ownerAuth, dvpABI, dvpAddr,
-		jsReceipt,        // paymentReceipt (Bob's ERC-20 JoinSplit)
-		ownReceipt,       // deliveryReceipt (Alice's NFT Ownership)
-		big.NewInt(0),    // paymentVaultId  (Erc20CoinVault = vault 0)
-		big.NewInt(1),    // deliveryVaultId (Erc721CoinVault = vault 1)
+		jsReceipt,     // paymentReceipt (Bob's ERC-20 JoinSplit)
+		ownReceipt,    // deliveryReceipt (Alice's NFT Ownership)
+		big.NewInt(0), // paymentVaultId  (Erc20CoinVault = vault 0)
+		big.NewInt(1), // deliveryVaultId (Erc721CoinVault = vault 1)
 	)
 	if err != nil {
 		return fmt.Errorf("Swap: %w", err)

@@ -16,7 +16,7 @@ node scripts/regen_poseidon.js
 
 echo "==> [2/3] Building deploy binary..."
 cd scripts
-CC=/usr/bin/clang go build -o /tmp/deploy_contracts deploy.go enygma.go
+CC=/usr/bin/clang go build -o /tmp/deploy_contracts deploy.go enygma.go safe_paths.go
 cd "$PROJECT_ROOT"
 
 echo "==> [3/3] Deploying contracts..."

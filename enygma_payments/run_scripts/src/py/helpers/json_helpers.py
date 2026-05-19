@@ -1,12 +1,16 @@
 import io
 import json
 from pprint import pprint
+from src.py.helpers.path_helpers import SafePath
+
 def read_json_file(file_path):
+	file_path = SafePath(file_path, allowed_extensions={".json"}, must_exist=True)
 	with open(file_path, 'r') as stream:
 		data_loaded = json.load(stream)
 	return data_loaded
 
 def save_json_file(file_path, json_dict):
+	file_path = SafePath(file_path, allowed_extensions={".json"})
 	json_object = json.dumps(json_dict, indent=4)
 	 
 	# Writing to sample.json
@@ -31,11 +35,13 @@ def extract_abi_from_json(src_path, dest_path):
 	save_json_file(dest_path, src_json)	
 
 def save_receipts_to_json(receipts_path, receipts):
+	receipts_path = SafePath(receipts_path, allowed_extensions={".json"})
 	receipts_file = open(receipts_path, "w")
 	json.dump(receipts, receipts_file,  default=lambda o: o.__dict__, indent=4)
 	receipts_file.close()
 
 def save_demo_data_to_json(demo_data_path, demo_dict):
+	demo_data_path = SafePath(demo_data_path, allowed_extensions={".json"})
 	demo_file = open(demo_data_path, "w")
 	json.dump(demo_dict, demo_file,  default=lambda o: o.__dict__, indent=4)
-	demo_file.close()	
+	demo_file.close()
