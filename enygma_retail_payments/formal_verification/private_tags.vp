@@ -1,11 +1,5 @@
 attacker[active]
 
-principal Blockchain[
-]
-
-principal PKI[
-]
-
 // Alice generates key pair
 principal Alice[
 	generates skA
@@ -17,59 +11,52 @@ principal Bob[
 	pkB = G^skB
 ]
 
-principal Charlie[
-	generates skC
-	pkC = G^skC
-]
 
-// Users register their public keys
-Alice 	-> PKI: [pkA]
-Bob   	-> PKI: [pkB]
-Charlie -> PKI: [pkC]
-
-// Users receive registered public keys
-
-PKI -> Alice  : [pkB], [pkC]
-PKI -> Bob	  : [pkA], [pkC]
-PKI -> Charlie: [pkA], [pkB]
+Alice -> Bob  : [pkA]
+Bob   -> Alice: [pkB]
 
 principal Alice[
+	
+	// context to be used in HKDF
 	knows public info
-	generates ss_ab
-	generates ss_ac
-
+	
+	// generates the shared secret (to be established with Bob)
+	generates ss
+	
+	// "Ok" message for Bob to know the message is for him
 	knows public ok_msg
-
-  	c1_b = PKE_ENC(pkB, ss_ab) 
-  	c1_c = PKE_ENC(pkC, ss_ac)
-
-	salt_ab = HASH(ss_ab, info)
-	salt_ac = HASH(ss_ac, info)
-
-	k_ab = HKDF(salt_ab, ss_ab, info)
-	k_ac = HKDF(salt_ac, ss_ac, info)
-
-	c2_b = AEAD_ENC(k_ab, ok_msg, c1_b)
-	c2_c = AEAD_ENC(k_ac, ok_msg, c1_c)
+	
+	// simulate the ML-KEM encapsulate step
+  	c1 = PKE_ENC(pkB, ss) 
+	
+	// generate the salt for the HKDF
+	salt = HASH(ss, info)
+	
+	// derive the symmetric (encryption) key using the HKDF
+	k = HKDF(salt, ss, info)
+	
+	// symmetric encryption of the "ok" message
+	c2 = AEAD_ENC(k, ok_msg, c1)
 ]
 
-Alice -> Bob: [c1_b], [c2_b]
-Alice -> Bob: [c1_c], [c2_c]
+// Send both ciphertexts to Bob
+Alice -> Bob: [c1], [c2]
 
 principal Bob[
+	
 	knows public info
 
 	// decrypt payload
-	ss_ab_ 	 = PKE_DEC(skB, c1_b)
+	ss_ = PKE_DEC(skB, c1)
 	
 	// obtain salt
-	salt_ab_ = HASH(ss_ab_, info)
+	salt_ = HASH(ss_, info)
 
-	// derive symmetric key
-	k_ab_ 	 = HKDF(salt_ab_, ss_ab_, info)
+	// derive symmetric (decryption) key
+	k_ = HKDF(salt_, ss_, info)
 	
 	// decrypt ciphertext
-	ok_m = AEAD_DEC(k_ab_, c2_b, c1_b)
+	ok_m = AEAD_DEC(k_, c2, c1)
 	
 	// check if ciphertext correctly decrypted
 	_ = ASSERT(ok_m, ok_msg)?
@@ -80,27 +67,34 @@ principal Alice[
 	generates r
 
 	// private messaging tag
-	tag = HASH(ss_ab, block_number)
+	tag = HASH(ss, block_number)
 	
-	// random tag just 
+	// random tag
 	random_tag = HASH(r)
 
 ]
 
-
 queries[
-	confidentiality? ss_ab
-	confidentiality? ss_ac
+	confidentiality? ss
+	confidentiality? k
 	
+	authentication? Alice -> Bob: c1
+	authentication? Alice -> Bob: c2
+
+	// 
+	equivalence? ss, ss_
+
+	// can an adversary distinguish between real tag and random tag? 
 	unlinkability? tag, random_tag
-	equivalence? ss_ab, ss_ab_
 
 ]
 
 
 
-
-
+// unlinkability is defined as:
+// "for two observed values, 
+// the adversary cannot distinguish between an execution in which they belong to same user 
+// and a protocol execution in which they belong to two different users."
 
 
 
