@@ -1,0 +1,12 @@
+# macOS
+.DS_Store
+
+# Git bundles — transport artifacts, never repo content
+*.bundle
+
+# Hardhat build output
+enygma_payments/contracts/enygma/artifacts/
+enygma_payments/contracts/enygma/cache/
+
+# Node
+node_modules/
