@@ -1,0 +1,803 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Enygma · Shield → Lock → Swap → Audit</title>
+<style>
+:root{
+  --bg:#F4F5F9; --surface:#FFFFFF; --surface-2:#F0F1F7; --border:#E3E5EF;
+  --text:#171922; --text-muted:#606579; --text-faint:#9095A8;
+  --accent:#5B4BE0; --accent-ink:#4436C4; --accent-soft:#EEEBFE; --accent-soft-border:#D3CCFA;
+  --teal:#0E9C7C; --teal-soft:#DCF4EC;
+  --amber:#B87708; --amber-soft:#FBEDD3;
+  --rose:#D93A5C; --rose-soft:#FBE1E7;
+  --alice:#5B4BE0; --bob:#0E9C7C;
+  --shadow: 0 1px 2px rgba(23,25,34,.04), 0 8px 24px -12px rgba(23,25,34,.13);
+  --r:13px; --r-sm:8px;
+  --sans:-apple-system, BlinkMacSystemFont, "Segoe UI", ui-sans-serif, Arial, sans-serif;
+  --mono: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", Menlo, Consolas, monospace;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+body{background:var(--bg); color:var(--text); font-family:var(--sans); font-size:13px; line-height:1.5;
+     -webkit-font-smoothing:antialiased;}
+h1,h2,h3,h4{margin:0; font-weight:650; letter-spacing:-.01em;}
+
+/* ── step bar ─────────────────────────────────────────────── */
+.bar{position:sticky; top:0; z-index:30; background:rgba(255,255,255,.9);
+     backdrop-filter:saturate(1.4) blur(10px); -webkit-backdrop-filter:saturate(1.4) blur(10px);
+     border-bottom:1px solid var(--border);}
+.bar-in{max-width:1320px; margin:0 auto; padding:9px 20px; display:flex; align-items:center; gap:14px; flex-wrap:wrap;}
+.mark{width:27px;height:27px;border-radius:8px;background:linear-gradient(140deg,var(--accent),#7E6BF5);
+      display:grid;place-items:center;flex:none;}
+.mark svg{width:15px;height:15px;}
+.title b{display:block;font-size:12.5px;line-height:1.2;}
+.title span{display:block;font-size:10.5px;color:var(--text-muted);}
+.sp{flex:1 1 auto;}
+.steps{display:flex; gap:6px; flex-wrap:wrap;}
+.sbtn{font:inherit;font-size:12px;font-weight:600;border:1px solid var(--border);background:var(--surface);
+      color:var(--text-muted);border-radius:8px;padding:6px 11px;cursor:pointer;display:flex;align-items:center;gap:6px;
+      transition:border-color .12s,color .12s,background .12s;}
+.sbtn .n{font-family:var(--mono);font-size:10px;width:15px;height:15px;border-radius:50%;
+         background:var(--surface-2);color:var(--text-faint);display:grid;place-items:center;font-weight:700;}
+.sbtn:hover:not(:disabled){color:var(--text);}
+.sbtn:disabled{opacity:.42;cursor:default;}
+.sbtn.next{border-color:var(--accent);color:var(--accent-ink);background:var(--accent-soft);}
+.sbtn.next .n{background:var(--accent);color:#fff;}
+.sbtn.done{color:var(--teal);border-color:color-mix(in srgb,var(--teal) 30%,transparent);}
+.sbtn.done .n{background:var(--teal-soft);color:var(--teal);}
+.sbtn:focus-visible{outline:2px solid var(--accent);outline-offset:1px;}
+.blk{font-family:var(--mono);font-size:11px;color:var(--text-muted);background:var(--surface-2);
+     border:1px solid var(--border);border-radius:7px;padding:4px 9px;white-space:nowrap;}
+.blk b{color:var(--text);}
+.tbtn{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.28);color:#E6E2FF;
+      font-size:11px;padding:4px 10px;}
+.tbtn:hover:not(:disabled){background:rgba(255,255,255,.22);}
+.tbtn[data-on="false"]{color:#C7C0F5;opacity:.72;}
+
+/* ── layout ───────────────────────────────────────────────── */
+.wrap{max-width:1320px;margin:0 auto;padding:16px 20px 60px;display:flex;flex-direction:column;gap:14px;}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow);overflow:hidden;}
+.chd{display:flex;align-items:center;gap:9px;padding:10px 14px;border-bottom:1px solid var(--border);
+     background:var(--surface-2);flex-wrap:wrap;}
+.chd h3{font-size:12.5px;}
+.chd .tag{font-family:var(--mono);font-size:10px;color:var(--text-faint);}
+.cb{padding:13px 14px;}
+.cb.tight{padding:0;}
+
+/* ── wallets ──────────────────────────────────────────────── */
+.who{display:flex;align-items:center;gap:8px;}
+.av{width:23px;height:23px;border-radius:7px;display:grid;place-items:center;color:#fff;font-size:11px;font-weight:700;flex:none;}
+.pk{font-family:var(--mono);font-size:10px;color:var(--text-faint);}
+.hold{display:flex;flex-direction:column;gap:8px;}
+.hgrp .hl{font-family:var(--mono);font-size:9.5px;letter-spacing:.05em;text-transform:uppercase;
+          color:var(--text-faint);font-weight:700;margin-bottom:5px;}
+.bal{display:flex;gap:7px;flex-wrap:wrap;}
+.chip{font-family:var(--mono);font-size:11.5px;border-radius:7px;padding:5px 9px;border:1px solid var(--border);
+      background:var(--surface-2);color:var(--text);font-variant-numeric:tabular-nums;}
+.chip.zero{color:var(--text-faint);}
+.chip.acme{background:#FBEDD3;border-color:#EBD5A8;color:#7A4E05;}
+.chip.usdc{background:#DCF4EC;border-color:#A9DFCE;color:#08624F;}
+.chip.acme.zero,.chip.usdc.zero{background:var(--surface-2);border-color:var(--border);color:var(--text-faint);}
+.empty{font-size:11.5px;color:var(--text-faint);font-style:italic;}
+.mynote{display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:center;font-family:var(--mono);
+        font-size:11px;padding:6px 9px;border:1px solid var(--border);border-radius:7px;background:var(--surface-2);}
+.mynote .li{color:var(--text-faint);font-size:10px;}
+.mynote .amt{color:var(--text);font-variant-numeric:tabular-nums;}
+.mynote .st{font-size:9.5px;font-weight:700;letter-spacing:.04em;}
+.mynote.spent{opacity:.5;}
+.mynote.spent .amt{text-decoration:line-through;}
+
+/* ── the chain ────────────────────────────────────────────── */
+.chain{border:1px solid var(--accent-soft-border);border-radius:var(--r);overflow:hidden;
+       box-shadow:0 1px 2px rgba(23,25,34,.04), 0 14px 34px -18px rgba(67,54,196,.34);}
+.chain-head{display:flex;align-items:center;gap:10px;padding:10px 14px;flex-wrap:wrap;
+            background:linear-gradient(120deg,#2A2350,#3B3273);color:#fff;}
+.chain-head h2{font-size:12.5px;letter-spacing:.02em;}
+.chain-head .tag{font-family:var(--mono);font-size:10.5px;color:#C7C0F5;}
+.chain-head .tag b{color:#fff;}
+.chain-body{background:var(--surface);display:grid;grid-template-columns:minmax(280px,1fr) minmax(340px,1.35fr);}
+.pane{padding:13px 14px;border-right:1px solid var(--border);border-bottom:1px solid var(--border);min-width:0;}
+.pane:nth-child(2n){border-right:0;}
+.pane-h{display:flex;align-items:center;gap:8px;margin-bottom:9px;flex-wrap:wrap;}
+.pane-h h4{font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--text-faint);font-weight:700;}
+.pane-h .sub{font-family:var(--mono);font-size:10px;color:var(--text-faint);}
+
+table{width:100%;border-collapse:collapse;font-size:12px;}
+th{text-align:left;font-family:var(--mono);font-size:9px;letter-spacing:.05em;text-transform:uppercase;
+   color:var(--text-faint);font-weight:700;padding:0 8px 6px 0;}
+td{padding:5px 8px 5px 0;border-top:1px solid var(--border);font-variant-numeric:tabular-nums;}
+td.n{text-align:right;font-family:var(--mono);}
+td.who-c{white-space:nowrap;}
+.vaultrow td{background:var(--accent-soft);}
+.flash{animation:fl .9s ease-out;}
+@keyframes fl{0%{background:#FFF3B0;}100%{background:transparent;}}
+
+/* leaves — uniform by default, because that is what the chain actually sees */
+.leaves{display:flex;flex-wrap:wrap;gap:6px;}
+.leaf{border:1px solid var(--border);border-radius:7px;padding:6px 8px;background:var(--surface-2);
+      font-family:var(--mono);font-size:10px;min-width:104px;transition:background .2s,border-color .2s;}
+.leaf .li{color:var(--text-faint);font-size:9px;display:flex;justify-content:space-between;gap:6px;}
+.leaf .h{color:var(--text);margin-top:2px;overflow-wrap:anywhere;}
+.leaf .rv{margin-top:3px;font-size:9.5px;font-weight:700;}
+.leaf.in-set{border-color:var(--accent-soft-border);background:var(--accent-soft);}
+.leaf.rv-alice{border-color:var(--alice);background:#EEEBFE;}
+.leaf.rv-bob{border-color:var(--bob);background:#DCF4EC;}
+.leaf.rv-spent{opacity:.5;}
+.leaf.rv-spent .h{text-decoration:line-through;}
+.rvtoggle{display:flex;align-items:center;gap:6px;font-size:10.5px;color:var(--text-muted);cursor:pointer;
+          user-select:none;margin-left:auto;}
+.rvtoggle input{accent-color:var(--accent);cursor:pointer;margin:0;}
+.anon{font-family:var(--mono);font-size:10.5px;color:var(--accent-ink);background:var(--accent-soft);
+      border:1px solid var(--accent-soft-border);border-radius:6px;padding:5px 9px;margin-bottom:8px;}
+.anon b{color:var(--accent-ink);}
+.rvwarn{font-family:var(--mono);font-size:10px;color:var(--amber);background:var(--amber-soft);
+        border:1px solid color-mix(in srgb,var(--amber) 26%,transparent);border-radius:6px;
+        padding:5px 9px;margin-bottom:8px;}
+
+/* the zk statement pane */
+.pane.full{grid-column:1 / -1;border-right:0;border-bottom:0;}
+.zk{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.zkcol{border:1px solid var(--border);border-radius:8px;overflow:hidden;}
+.zkcol .zh{font-family:var(--mono);font-size:9.5px;letter-spacing:.05em;text-transform:uppercase;
+           font-weight:700;padding:6px 10px;border-bottom:1px solid var(--border);}
+.zkcol.pub .zh{background:var(--surface-2);color:var(--text-muted);}
+.zkcol.prv .zh{background:var(--rose-soft);color:var(--rose);}
+.zkrow{display:grid;grid-template-columns:104px 1fr;gap:8px;padding:5px 10px;font-family:var(--mono);
+       font-size:10.5px;align-items:baseline;}
+.zkrow .k{color:var(--text-faint);}
+.zkrow .v{overflow-wrap:anywhere;}
+.zkcol.prv .zkrow .v{color:var(--text-faint);}
+.zknote{margin-top:10px;font-size:11.5px;line-height:1.6;color:var(--text-muted);
+        background:var(--accent-soft);border:1px solid var(--accent-soft-border);
+        border-radius:7px;padding:9px 11px;}
+.zknote b{color:var(--accent-ink);}
+@media (max-width:720px){ .zk{grid-template-columns:1fr;} }
+.nf{font-family:var(--mono);font-size:10.5px;color:var(--rose);background:var(--rose-soft);
+    border:1px solid color-mix(in srgb,var(--rose) 22%,transparent);border-radius:6px;padding:4px 8px;
+    overflow-wrap:anywhere;margin-bottom:5px;}
+.dvpstate{display:flex;flex-direction:column;gap:7px;}
+.kvp{display:grid;grid-template-columns:96px 1fr;gap:8px;font-family:var(--mono);font-size:10.5px;align-items:baseline;}
+.kvp .k{color:var(--text-faint);}
+.kvp .v{overflow-wrap:anywhere;}
+.pill{display:inline-block;font-family:var(--mono);font-size:9.5px;font-weight:700;border-radius:999px;padding:2px 8px;letter-spacing:.04em;}
+.pill.idle{background:var(--surface-2);color:var(--text-faint);}
+.pill.pend{background:var(--amber-soft);color:var(--amber);}
+.pill.ok{background:var(--teal-soft);color:var(--teal);}
+
+/* ── auditor ──────────────────────────────────────────────── */
+.aud-grid{display:grid;grid-template-columns:1fr;gap:8px;}
+.arow{display:grid;grid-template-columns:74px 1fr 1fr;gap:10px;align-items:center;padding:7px 9px;
+      border:1px solid var(--border);border-radius:7px;background:var(--surface-2);font-family:var(--mono);font-size:11px;}
+.arow .src{color:var(--text-faint);font-size:10px;}
+.arow .ct{color:var(--text-muted);overflow-wrap:anywhere;font-size:10px;}
+.arow .res{overflow-wrap:anywhere;}
+.arow .res.locked{color:var(--rose);}
+.arow .res.open{color:var(--teal);}
+.arow.hd{background:none;border:0;padding:0 9px;}
+.arow.hd span{font-size:9px;letter-spacing:.05em;text-transform:uppercase;color:var(--text-faint);font-weight:700;}
+
+/* ── log ──────────────────────────────────────────────────── */
+.log{font-family:var(--mono);font-size:11px;max-height:250px;overflow-y:auto;}
+.tx{display:grid;grid-template-columns:52px 1fr;gap:10px;padding:7px 14px;border-bottom:1px solid var(--border);}
+.tx:last-child{border-bottom:0;}
+.tx .b{color:var(--text-faint);}
+.tx .m{color:var(--accent-ink);}
+.tx .d{color:var(--text-muted);font-size:10.5px;margin-top:2px;overflow-wrap:anywhere;}
+.tx .d em{font-style:normal;color:var(--text);}
+
+.hint{font-size:11.5px;color:var(--text-muted);margin:0;}
+.hint code{font-family:var(--mono);font-size:11px;color:var(--accent-ink);}
+.btn{font:inherit;font-size:12px;font-weight:600;border:1px solid var(--border);background:var(--surface);
+     color:var(--text);border-radius:8px;padding:5px 11px;cursor:pointer;}
+.btn:hover:not(:disabled){background:var(--surface-2);}
+.btn:disabled{opacity:.45;cursor:default;}
+.btn-p{background:var(--accent);border-color:var(--accent);color:#fff;}
+.btn-p:hover:not(:disabled){background:var(--accent-ink);}
+
+@media (max-width:1000px){
+  .chain-body{grid-template-columns:1fr;}
+  .pane{border-right:0;}
+}
+@media (max-width:720px){
+  .row2{grid-template-columns:1fr;}
+  .arow{grid-template-columns:64px 1fr;}
+  .arow .ct{display:none;}
+  .arow.hd{display:none;}
+}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;transition-duration:.001ms!important;}}
+</style>
+</head>
+<body>
+
+<header class="bar">
+  <div class="bar-in">
+    <div class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h13M17 8l-3-3M17 8l-3 3"/><path d="M20 16H7M7 16l3-3M7 16l3 3"/></svg></div>
+    <div class="title"><b>Enygma DvP</b><span>shield · lock · swap · audit</span></div>
+    <div class="sp"></div>
+    <div class="steps" id="steps">
+      <button class="sbtn" data-step="1" type="button"><span class="n">1</span>Shield</button>
+      <button class="sbtn" data-step="2" type="button"><span class="n">2</span>Lock</button>
+      <button class="sbtn" data-step="3" type="button"><span class="n">3</span>Swap</button>
+      <button class="sbtn" data-step="4" type="button"><span class="n">4</span>Audit</button>
+      <button class="sbtn" data-step="5" type="button"><span class="n">5</span>Unshield</button>
+    </div>
+    <span class="blk">block <b id="blkNum">0</b></span>
+    <button class="btn" id="btnReset" type="button">Reset</button>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <div class="row2" id="wallets"></div>
+
+  <section class="chain">
+    <div class="chain-head">
+      <h2>THE BLOCKCHAIN</h2>
+      <span class="tag">everything below is public · block <b id="blkNum2">0</b></span>
+      <div class="sp"></div>
+      <button class="btn tbtn" id="btnTraffic" data-on="true" type="button">network traffic: on</button>
+      <span class="tag">merkleRoot <b id="rootOut">—</b></span>
+    </div>
+    <div class="chain-body">
+
+      <div class="pane">
+        <div class="pane-h"><h4>ERC-20 balances</h4><span class="sub">ACME · USDC</span></div>
+        <table id="balTable"></table>
+      </div>
+
+      <div class="pane">
+        <div class="pane-h">
+          <h4>ShieldedVault · commitment tree</h4><span class="sub" id="leafCount">0 leaves</span>
+          <label class="rvtoggle" title="Show the openings. None of this is on chain.">
+            <input type="checkbox" id="reveal"> reveal openings
+          </label>
+        </div>
+        <div id="anonBox"></div>
+        <div class="leaves" id="leaves"><span class="empty">tree is empty</span></div>
+      </div>
+
+      <div class="pane">
+        <div class="pane-h"><h4>Nullifier set</h4><span class="sub" id="nfCount">0 spent</span></div>
+        <div id="nfs"><span class="empty">nothing spent</span></div>
+      </div>
+
+      <div class="pane">
+        <div class="pane-h"><h4>EnygmaDvp</h4><span class="sub">pending swap</span></div>
+        <div class="dvpstate" id="dvp"></div>
+      </div>
+
+      <div class="pane full">
+        <div class="pane-h"><h4>Groth16 statement — what a spend proof publishes</h4>
+          <span class="sub" id="zkTag">no spend proven yet</span></div>
+        <div id="zk"></div>
+      </div>
+
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="chd">
+      <h3>Auditor</h3>
+      <span class="tag" id="audTag">no view key held</span>
+      <div class="sp"></div>
+      <button class="btn" id="btnShareA" type="button" disabled>Alice shares her view key</button>
+      <button class="btn" id="btnShareB" type="button" disabled>Bob shares his</button>
+    </div>
+    <div class="cb">
+      <p class="hint" style="margin-bottom:10px;">
+        Every shielded note emits an <code>EncryptedNote</code> — an ML-KEM capsule and a ciphertext of
+        <code>tokenId ‖ amount</code>. The auditor reads the same chain as everyone else and tries to open each one.
+        Decryption below is real: a key it does not hold produces an AEAD failure, not a blank.
+      </p>
+      <div class="aud-grid" id="audRows"></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="chd"><h3>Transactions</h3><span class="tag" id="txCount">0</span></div>
+    <div class="cb tight"><div class="log" id="log"></div></div>
+  </section>
+
+</main>
+
+<script>
+(function(){
+"use strict";
+
+/* ── primitives (real WebCrypto; SHA-256 stands in for Poseidon) ───────────── */
+const $ = (s)=>document.querySelector(s);
+const enc = new TextEncoder();
+const hexOf = (b)=>Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,"0")).join("");
+const bytes = (h)=>new Uint8Array(h.match(/.{1,2}/g).map(x=>parseInt(x,16)));
+const rand  = (n)=>{const a=new Uint8Array(n);crypto.getRandomValues(a);return hexOf(a);};
+const cut   = (h,a,b)=>!h?"":(h.length<=(a||8)+(b||6)+1?h:h.slice(0,a||8)+"…"+h.slice(-(b||6)));
+const sleep = (ms)=>new Promise(r=>setTimeout(r,ms));
+const reduced = matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+const wait = (ms)=>sleep(reduced?0:ms);
+
+async function sha(s){ return hexOf(await crypto.subtle.digest("SHA-256", enc.encode(s))); }
+async function hkdf(ikm, info, len){
+  const k = await crypto.subtle.importKey("raw", bytes(ikm), "HKDF", false, ["deriveBits"]);
+  return hexOf(await crypto.subtle.deriveBits(
+    {name:"HKDF",hash:"SHA-256",salt:new Uint8Array(0),info:enc.encode(info)}, k, len*8));
+}
+async function seal(keyHex, txt){
+  const k = await crypto.subtle.importKey("raw", bytes(keyHex), "AES-GCM", false, ["encrypt"]);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt({name:"AES-GCM",iv}, k, enc.encode(txt));
+  const out = new Uint8Array(12+ct.byteLength); out.set(iv,0); out.set(new Uint8Array(ct),12);
+  return hexOf(out);
+}
+async function open_(keyHex, blobHex){          // throws on the wrong key — a real AEAD failure
+  const b = bytes(blobHex);
+  const k = await crypto.subtle.importKey("raw", bytes(keyHex), "AES-GCM", false, ["decrypt"]);
+  return new TextDecoder().decode(await crypto.subtle.decrypt({name:"AES-GCM",iv:b.slice(0,12)}, k, b.slice(12)));
+}
+/* Erc20CoinVault.deposit: commitment = Poseidon4(pkSpend, salt, amount, tokenId) */
+const commit = (pk,salt,amt,tok)=>sha("poseidon4|"+pk+"|"+salt+"|"+amt+"|"+tok);
+const nullif = (sk,leaf)=>sha("nf|"+sk+"|"+leaf);
+const parent = (a,b)=>sha("node|"+a+"|"+b);
+async function root(ls){
+  if(!ls.length) return null;
+  let lv = ls.slice();
+  while(lv.length>1){ const nx=[]; for(let i=0;i<lv.length;i+=2) nx.push(await parent(lv[i], lv[i+1]||"0".repeat(64))); lv=nx; }
+  return lv[0];
+}
+
+/* ── the world ────────────────────────────────────────────────────────────── */
+const TOK = { ACME:{sym:"ACME", id:77, cls:"acme"}, USDC:{sym:"USDC", id:10, cls:"usdc"} };
+const VAULT = "0x" + "5ha1e1d" .padEnd(40,"0");
+const DVP   = "0x" + "d012a11" .padEnd(40,"0");
+
+let S = null;   // whole world state
+
+async function mkParty(name, color){
+  const skSpend = rand(32), skView = rand(32);
+  return { name, color,
+           addr: "0x" + (await sha("addr|"+name+"|"+skSpend)).slice(0,40),
+           skSpend, pkSpend: await sha("pk|"+skSpend),
+           skView,  pkView:  await sha("ek|"+skView),
+           sharedView: false };
+}
+
+/* Other accounts shielding into the same vaults. They are the anonymity set: without them a
+   nullifier has nothing to hide among, and "which leaf was spent" becomes answerable by
+   elimination however sound the circuit is. The vault does not start empty and does not stand
+   still — SEEDED leaves already exist when the page loads, and TRAFFIC_MS keeps adding more. */
+const POOL_SIZE  = 60;
+const SEEDED     = 8;      // deposits already in the tree before this session begins
+const TRAFFIC_MS = 4000;   // one unrelated deposit every four seconds, ongoing
+const AMOUNTS = { ACME:[15,40,60,125,250,300,640,900], USDC:[275,640,820,1200,1850,2400,3100,4500] };
+const pick = (a) => a[Math.floor(Math.random()*a.length)];
+
+async function boot(){
+  if(S && S.timer) clearInterval(S.timer);
+  const alice = await mkParty("Alice", "var(--alice)");
+  const bob   = await mkParty("Bob",   "var(--bob)");
+  const others = [];
+  for(let i = 0; i < POOL_SIZE; i++) others.push(await mkParty("acct" + (i + 1), "var(--text-faint)"));
+  S = {
+    block: 0, step: 1, busy: false, reveal: false,
+    traffic: true, timer: null, crowdIdx: 0,
+    alice, bob, others, parties: [alice, bob, ...others],
+    bal: { ACME:{Alice:100, Bob:0, Others:60000, Vault:0},
+           USDC:{Alice:0, Bob:5000, Others:600000, Vault:0} },
+    leaves: [],        // {i, C, owner, tok, amt, salt, state:'unspent'|'locked'|'spent', note:{capsule,ct,secret}}
+    nfs: [],           // {nf, by}
+    dvp: { status:"idle", legs:[], swapId:null, deadline:null },
+    txs: [], root: null,
+    flash: new Set(),
+  };
+  // the vault already has a history when you arrive
+  for(let i = 0; i < SEEDED; i++) await crowdInsert(true);
+  render();
+  startTraffic();
+}
+
+const partyOf = (name) => S.parties.find(p => p.name === name);
+const holderOf = (name) => (name === "Alice" || name === "Bob") ? name : "Others";
+
+/* One unrelated deposit from the pool. `quiet` is used for the pre-existing leaves so the boot
+   sequence does not animate; the ambient ticker uses the loud path so you watch the tree grow. */
+async function crowdInsert(quiet){
+  const who = "acct" + ((S.crowdIdx++ % POOL_SIZE) + 1);
+  const tok = Math.random() < 0.5 ? "ACME" : "USDC";
+  const amt = pick(AMOUNTS[tok]);
+  await shieldOne(who, tok, amt, false, quiet);
+}
+
+function startTraffic(){
+  if(S.timer) return;
+  S.timer = setInterval(async () => {
+    if(!S.traffic || S.busy || document.hidden) return;   // never interleave with a step animation
+    S.busy = true;
+    await crowdInsert();
+    S.busy = false;
+    renderSteps();
+  }, TRAFFIC_MS);
+}
+function setTraffic(on){
+  S.traffic = on;
+  const b = $("#btnTraffic");
+  if(b){ b.textContent = on ? "network traffic: on" : "network traffic: paused"; b.dataset.on = String(on); }
+}
+
+/* ── chain helpers ────────────────────────────────────────────────────────── */
+function tx(method, from, to, detail){
+  S.block++;
+  S.txs.unshift({ block:S.block, method, from, to, detail });
+}
+function flashBal(who, tok){ S.flash.add(who+"|"+tok); setTimeout(()=>{ S.flash.delete(who+"|"+tok); }, 950); }
+
+async function addLeaf(owner, tokKey, amt){
+  const p = partyOf(owner);
+  const salt = rand(32);
+  const C = await commit(p.pkSpend, salt, amt, TOK[tokKey].id);
+  // EncryptedNote: capsule + ChaCha/AES ciphertext of tokenId‖amount, openable by the view key
+  const secret = await hkdf(p.skView, "enygma/note/"+salt, 32);
+  const leaf = { i:S.leaves.length, C, owner, tok:tokKey, amt, salt, state:"unspent",
+                 note:{ capsule:rand(44), ct: await seal(secret, TOK[tokKey].id+"|"+amt) } };
+  S.leaves.push(leaf);
+  S.root = await root(S.leaves.map(l=>l.C));
+  return leaf;
+}
+async function spendLeaf(leaf){
+  const p = partyOf(leaf.owner);
+  leaf.state = "spent";
+  S.nfs.push({ nf: await nullif(p.skSpend, leaf.i), by: leaf.owner });
+}
+
+/* ── STEP 1 — shield ──────────────────────────────────────────────────────── */
+async function shieldOne(who, tokKey, amt, loud, quiet){
+  const p = partyOf(who), h = holderOf(who);
+  S.bal[tokKey][h] -= amt;  S.bal[tokKey].Vault += amt;
+  flashBal(h, tokKey); flashBal("Vault", tokKey);
+  const leaf = await addLeaf(who, tokKey, amt);
+  tx("Erc20CoinVault.depositV2", p.addr, VAULT,
+     loud ? `transferFrom(${who}, vault, <em>${fmt(amt)} ${tokKey}</em>) · insertLeaf(C=${cut(leaf.C,10,6)}) · emit Commitment, EncryptedNote`
+          : `insertLeaf(C=${cut(leaf.C,10,6)}) · emit Commitment, EncryptedNote`);
+  if(quiet) return;
+  render(); await wait(loud ? 620 : 0);
+}
+
+/* Alice shields into a tree that already has a history, unrelated deposits land while she waits,
+   and only then does Bob shield. Nobody chooses their neighbours in the tree, and the gap between
+   the two legs is filled by traffic neither of them controls — which is what the anonymity set
+   actually is. */
+async function stepShield(){
+  await shieldOne("Alice", "ACME", 100, true);
+  await wait(500);
+  for(let i = 0; i < 3; i++){ await crowdInsert(); await wait(850); }
+  await shieldOne("Bob", "USDC", 5000, true);
+  S.step = 2; render();
+}
+
+/* ── STEP 2 — lock ────────────────────────────────────────────────────────── */
+async function stepLock(){
+  const la = S.leaves.find(l=>l.owner==="Alice" && l.state==="unspent");
+  const lb = S.leaves.find(l=>l.owner==="Bob"   && l.state==="unspent");
+
+  // Alice's leg: she commits to the outputs before anything moves
+  const ss = rand(32);
+  S.dvp.ss = ss;
+  S.dvp.saltOutB = await hkdf(ss, "Bob salt", 32);
+  S.dvp.saltOutA = await hkdf(ss, "Alice salt", 32);
+  S.dvp.outB = await commit(S.bob.pkSpend,   S.dvp.saltOutB, la.amt, TOK[la.tok].id);  // Bob gets Alice's ACME
+  S.dvp.outA = await commit(S.alice.pkSpend, S.dvp.saltOutA, lb.amt, TOK[lb.tok].id);  // Alice gets Bob's USDC
+  S.dvp.nfA  = await nullif(S.alice.skSpend, la.i);
+  S.dvp.deadline = S.block + 20;
+  S.dvp.swapId = (await sha("swap|"+S.dvp.outA+"|"+S.dvp.outB+"|"+S.dvp.nfA)).slice(0,32);
+  la.state = "locked";
+  S.dvp.status = "pending"; S.dvp.legs = ["Alice"];
+  tx("EnygmaDvp.submitPartialSettlement", S.alice.addr, DVP,
+     `lockCoin(nf_A) · swapId=<em>${cut(S.dvp.swapId,10,6)}</em> · deadline=block ${S.dvp.deadline}`);
+  render(); await wait(700);
+
+  lb.state = "locked";
+  S.dvp.legs = ["Alice","Bob"]; S.dvp.status = "matched";
+  tx("EnygmaDvp.submitPartialSettlement", S.bob.addr, DVP,
+     `lockCoin(nf_B) · matches swapId <em>${cut(S.dvp.swapId,10,6)}</em> · both legs present`);
+  S.step = 3; render();
+}
+
+/* ── STEP 3 — swap ────────────────────────────────────────────────────────── */
+async function stepSwap(){
+  const la = S.leaves.find(l=>l.owner==="Alice" && l.state==="locked");
+  const lb = S.leaves.find(l=>l.owner==="Bob"   && l.state==="locked");
+
+  await spendLeaf(la); await spendLeaf(lb);
+  render(); await wait(560);
+
+  // outputs: ownership swapped, amounts unchanged, salts from the shared secret
+  const outB = { owner:"Bob",   tok:la.tok, amt:la.amt, salt:S.dvp.saltOutB, C:S.dvp.outB };
+  const outA = { owner:"Alice", tok:lb.tok, amt:lb.amt, salt:S.dvp.saltOutA, C:S.dvp.outA };
+  for(const o of [outB, outA]){
+    const p = partyOf(o.owner);
+    const secret = await hkdf(p.skView, "enygma/note/"+o.salt, 32);
+    S.leaves.push({ i:S.leaves.length, C:o.C, owner:o.owner, tok:o.tok, amt:o.amt, salt:o.salt, state:"unspent",
+                    note:{ capsule:rand(44), ct: await seal(secret, TOK[o.tok].id+"|"+o.amt) } });
+  }
+  S.root = await root(S.leaves.map(l=>l.C));
+  S.dvp.status = "settled";
+  tx("EnygmaDvp.exchangeOnGroupPair", DVP, VAULT,
+     `nullifyFromReceipt(nf_A, nf_B) · insertCommitmentsFromReceipt(C_A', C_B') · <em>one transaction</em>`);
+  S.step = 4; render();
+}
+
+/* ── STEP 4 — audit ───────────────────────────────────────────────────────── */
+async function stepAudit(){
+  S.auditorRegistered = true;
+  tx("EnygmaDvp.registerAuditor", "owner", DVP, `auditorPublicKey registered · group 0`);
+  S.step = 4.5; render();
+  $("#btnShareA").disabled = false; $("#btnShareB").disabled = false;
+}
+async function share(who){
+  S[who].sharedView = true;
+  tx("offchain", S[who].name, "auditor", `discloses sk_view — <em>view key only</em>, no spend authority`);
+  if(S.alice.sharedView) S.step = 5;
+  await renderAudit(); render();
+}
+
+/* ── STEP 5 — unshield ────────────────────────────────────────────────────── */
+async function stepUnshield(){
+  for(const who of ["Alice","Bob"]){
+    const leaf = S.leaves.find(l=>l.owner===who && l.state==="unspent");
+    if(!leaf) continue;
+    const p = partyOf(who);
+    await spendLeaf(leaf);
+    S.bal[leaf.tok].Vault -= leaf.amt;  S.bal[leaf.tok][who] += leaf.amt;
+    flashBal(who, leaf.tok); flashBal("Vault", leaf.tok);
+    S.root = await root(S.leaves.map(l=>l.C));
+    tx("Erc20CoinVault.withdraw", p.addr, VAULT,
+       `nullifyCoin(nf) · transfer(vault → ${who}, <em>${fmt(leaf.amt)} ${leaf.tok}</em>)`);
+    render(); await wait(620);
+  }
+  S.step = 6; render();
+}
+
+/* ── rendering ────────────────────────────────────────────────────────────── */
+const fmt = (n)=>n.toLocaleString("en-US");
+
+function render(){
+  $("#blkNum").textContent = $("#blkNum2").textContent = S.block;
+  $("#rootOut").textContent = S.root ? cut(S.root,10,6) : "—";
+  renderSteps(); renderWallets(); renderBalances(); renderLeaves(); renderNfs(); renderDvp(); renderZk(); renderLog();
+  renderAudit();
+}
+
+function renderSteps(){
+  document.querySelectorAll(".sbtn").forEach(b=>{
+    const n = +b.dataset.step;
+    b.classList.toggle("done", n < Math.floor(S.step));
+    b.classList.toggle("next", n === Math.floor(S.step));
+    // step 4 stays "current" while the view keys are being shared, but must not re-register
+    b.disabled = S.busy || n !== Math.floor(S.step) || (n === 4 && S.auditorRegistered);
+  });
+}
+
+function renderWallets(){
+  $("#wallets").innerHTML = ["alice","bob"].map(k=>{
+    const p = S[k];
+    const mine = S.leaves.filter(l=>l.owner===p.name);
+    return `<div class="card">
+      <div class="chd">
+        <div class="who"><div class="av" style="background:${p.color}">${p.name[0]}</div>
+          <div><div style="font-size:12.5px;font-weight:650;">${p.name}</div>
+               <div class="pk">${cut(p.addr,12,6)}</div></div></div>
+        <div class="sp"></div>
+        <span class="tag">pk_spend ${cut(p.pkSpend,8,5)}</span>
+      </div>
+      <div class="cb">
+        <div class="hold">
+          <div class="hgrp"><div class="hl">Public — ERC-20</div><div class="bal">
+            ${["ACME","USDC"].map(t=>{
+              const v = S.bal[t][p.name];
+              return `<span class="chip ${TOK[t].cls}${v?"":" zero"}">${fmt(v)} ${t}</span>`;
+            }).join("")}
+          </div></div>
+          <div class="hgrp"><div class="hl">Shielded — notes only ${p.name} can open</div>
+            ${mine.length ? mine.map(l=>`
+              <div class="mynote ${l.state==="spent"?"spent":""}" style="margin-bottom:5px;">
+                <span class="li">leaf ${l.i}</span>
+                <span class="amt">${fmt(l.amt)} ${l.tok}</span>
+                <span class="st" style="color:${l.state==="unspent"?"var(--teal)":l.state==="locked"?"var(--amber)":"var(--text-faint)"}">${l.state.toUpperCase()}</span>
+              </div>`).join("")
+            : '<div class="empty">no notes</div>'}
+          </div>
+        </div>
+      </div></div>`;
+  }).join("");
+}
+
+function renderBalances(){
+  const rows = ["Alice","Bob","Others","Vault"];
+  $("#balTable").innerHTML =
+    `<thead><tr><th>Holder</th><th style="text-align:right">ACME</th><th style="text-align:right">USDC</th></tr></thead><tbody>` +
+    rows.map((who)=>{
+      const isV = who==="Vault";
+      const label = isV ? `ShieldedVault<div class="pk">${cut(VAULT,10,4)}</div>`
+                  : who==="Others" ? `other accounts<div class="pk">the anonymity set · ${S.others.filter(o=>S.leaves.some(l=>l.owner===o.name)).length} active</div>` : who;
+      return `<tr class="${isV?"vaultrow":""}"><td class="who-c">${label}</td>` +
+        ["ACME","USDC"].map(t=>{
+          const f = S.flash.has(who+"|"+t) ? " flash" : "";
+          const v = S.bal[t][who];
+          return `<td class="n${f}" style="${v?"":"color:var(--text-faint)"}">${fmt(v)}</td>`;
+        }).join("") + `</tr>`;
+    }).join("") + `</tbody>`;
+}
+
+/* The chain stores a leaf's hash and nothing else. It has no per-leaf spend flag: a nullifier
+   cannot be mapped back to the leaf it retired, so "which of these is spent" is a question the
+   ledger genuinely cannot answer. Rendering a spent marker here would invent a leak the protocol
+   does not have — so the tiles stay uniform, and the reveal toggle is explicitly off-chain. */
+function renderLeaves(){
+  const n = S.leaves.length;
+  $("#leafCount").textContent = n + (n === 1 ? " leaf" : " leaves");
+  if(!n){ $("#leaves").innerHTML = '<span class="empty">tree is empty</span>'; $("#anonBox").innerHTML = ""; return; }
+
+  $("#anonBox").innerHTML =
+    (S.reveal
+      ? '<div class="rvwarn">REVEAL IS ON — owners and amounts below are NOT on chain. No observer can compute this column.</div>'
+      : "") +
+    `<div class="anon">anonymity set: <b>${n}</b> leaves under this root` +
+    (S.nfs.length
+      ? ` · <b>${S.nfs.length}</b> retired, <b>which ${S.nfs.length === 1 ? "one" : S.nfs.length} is unknown</b>`
+      : "") + `</div>`;
+
+  $("#leaves").innerHTML = S.leaves.map(l=>{
+    if(!S.reveal){
+      const inSet = S.nfs.length > 0;   // every leaf is equally a candidate once anything is spent
+      return `<div class="leaf ${inSet ? "in-set" : ""}">
+        <div class="li"><span>leaf ${l.i}</span><span></span></div>
+        <div class="h">${cut(l.C,12,6)}</div></div>`;
+    }
+    const mine = l.owner === "Alice" ? "rv-alice" : l.owner === "Bob" ? "rv-bob" : "";
+    const col  = l.owner === "Alice" ? "var(--alice)" : l.owner === "Bob" ? "var(--bob)" : "var(--text-faint)";
+    return `<div class="leaf ${mine} ${l.state==="spent"?"rv-spent":""}">
+      <div class="li"><span>leaf ${l.i}</span><span>${l.state==="spent"?"spent":l.state==="locked"?"locked":""}</span></div>
+      <div class="h">${cut(l.C,12,6)}</div>
+      <div class="rv" style="color:${col}">${l.owner} · ${fmt(l.amt)} ${l.tok}</div></div>`;
+  }).join("");
+}
+
+/* What a spend proof actually publishes, next to what it keeps. */
+function renderZk(){
+  const d = S.dvp;
+  if(!d.nfA){
+    $("#zkTag").textContent = "no spend proven yet";
+    $("#zk").innerHTML = '<p class="hint">Lock a leg to see the statement a DvPInitiator proof puts on chain.</p>';
+    return;
+  }
+  $("#zkTag").textContent = "DvPInitiator · 8,704 constraints";
+  $("#zk").innerHTML = `
+    <div class="zk">
+      <div class="zkcol pub"><div class="zh">Public inputs — on chain, anyone can read</div>
+        ${zkRow("merkleRoot", cut(S.root,14,8))}
+        ${zkRow("nullifier", cut(d.nfA,14,8))}
+        ${zkRow("C_out", cut(d.outB,12,6))}
+        ${zkRow("C_out", cut(d.outA,12,6))}
+        ${zkRow("deadline", "block " + d.deadline)}
+      </div>
+      <div class="zkcol prv"><div class="zh">Private witness — never leaves the prover</div>
+        ${zkRow("leafIndex", "▓▓▓▓")}
+        ${zkRow("salt", "▓▓▓▓▓▓▓▓▓▓▓▓")}
+        ${zkRow("amount", "▓▓▓▓")}
+        ${zkRow("tokenId", "▓▓")}
+        ${zkRow("sk_spend", "▓▓▓▓▓▓▓▓▓▓▓▓")}
+        ${zkRow("merklePath", "▓▓▓▓▓▓▓▓▓▓▓▓")}
+      </div>
+    </div>
+    <div class="zknote">
+      <b>The proof says: “I know an opening of <em>some</em> leaf under this <code>merkleRoot</code>,
+      and this nullifier follows from it.”</b> It never says which leaf. <code>leafIndex</code> and the
+      Merkle path are private witness — the circuit verifies membership inside the proof, so the
+      verifier learns only that a valid path exists. The nullifier is
+      <code>H(sk_spend, leafIndex)</code>, and without <code>sk_spend</code> it cannot be run backwards
+      or matched against any leaf. So the spend is hidden among all
+      <b>${S.leaves.length}</b> leaves in the tree — and that number is the privacy, which is why the
+      shielding step fills the tree with other people's deposits rather than just two.
+    </div>`;
+}
+const zkRow = (k, v) => `<div class="zkrow"><span class="k">${k}</span><span class="v">${v}</span></div>`;
+
+function renderNfs(){
+  $("#nfCount").textContent = S.nfs.length + " spent";
+  $("#nfs").innerHTML = S.nfs.length
+    ? S.nfs.map(n=>`<div class="nf">${cut(n.nf,20,10)}</div>`).join("") +
+      '<p class="hint" style="margin-top:6px;">A nullifier names no leaf. Only its holder can recompute one.</p>'
+    : '<span class="empty">nothing spent</span>';
+}
+
+function renderDvp(){
+  const d = S.dvp;
+  const pill = d.status==="idle" ? '<span class="pill idle">IDLE</span>'
+             : d.status==="pending" ? '<span class="pill pend">PENDING · 1 OF 2 LEGS</span>'
+             : d.status==="matched" ? '<span class="pill pend">BOTH LEGS LOCKED</span>'
+             : '<span class="pill ok">SETTLED</span>';
+  $("#dvp").innerHTML = pill + (d.swapId ? `
+    <div class="kvp"><span class="k">swapId</span><span class="v">${cut(d.swapId,14,8)}</span></div>
+    <div class="kvp"><span class="k">C_out (×2)</span><span class="v">${cut(d.outB,10,5)}<br>${cut(d.outA,10,5)}</span></div>
+    <div class="kvp"><span class="k">deadline</span><span class="v">block ${d.deadline}</span></div>
+    <div class="kvp"><span class="k">legs</span><span class="v">${d.legs.join(" + ")||"—"}</span></div>`
+    : '<p class="hint">No swap open.</p>');
+}
+
+function renderLog(){
+  $("#txCount").textContent = S.txs.length + (S.txs.length===1?" tx":" txs");
+  $("#log").innerHTML = S.txs.length ? S.txs.map(t=>`
+    <div class="tx"><span class="b">#${t.block}</span>
+      <div><span class="m">${t.method}</span><div class="d">${t.detail}</div></div></div>`).join("")
+    : '<div style="padding:14px;" class="empty">no transactions yet</div>';
+}
+
+/* The auditor genuinely attempts every EncryptedNote with whatever keys it has. */
+async function renderAudit(){
+  const held = [S.alice.sharedView && "Alice", S.bob.sharedView && "Bob"].filter(Boolean);
+  $("#audTag").textContent = !S.auditorRegistered ? "not registered"
+    : held.length ? "view keys held: " + held.join(", ") : "registered · no view key held";
+
+  if(!S.leaves.length){ $("#audRows").innerHTML = '<div class="empty">nothing on chain to audit</div>'; return; }
+
+  const head = `<div class="arow hd"><span>source</span><span>EncryptedNote (on chain)</span><span>auditor's result</span></div>`;
+  const rows = [];
+  for(const l of S.leaves){
+    let res = '<span class="res locked">AEAD auth failure — no key</span>';
+    if(S.auditorRegistered){
+      const p = partyOf(l.owner);
+      if(p.sharedView){
+        try{
+          const secret = await hkdf(p.skView, "enygma/note/"+l.salt, 32);
+          const pt = await open_(secret, l.note.ct);
+          const [tok, amt] = pt.split("|");
+          const sym = Object.values(TOK).find(t=>String(t.id)===tok).sym;
+          res = `<span class="res open">${p.name} · ${fmt(+amt)} ${sym}</span>`;
+        }catch(e){ res = '<span class="res locked">AEAD auth failure</span>'; }
+      }
+    } else {
+      res = '<span class="res locked">auditor not registered</span>';
+    }
+    rows.push(`<div class="arow"><span class="src">leaf ${l.i}</span>
+      <span class="ct">${cut(l.note.ct,26,10)}</span>${res}</div>`);
+  }
+  $("#audRows").innerHTML = head + rows.join("");
+}
+
+/* ── wiring ───────────────────────────────────────────────────────────────── */
+const RUN = { 1:stepShield, 2:stepLock, 3:stepSwap, 4:stepAudit, 5:stepUnshield };
+
+$("#steps").addEventListener("click", async (e)=>{
+  const b = e.target.closest(".sbtn"); if(!b || S.busy) return;
+  const n = +b.dataset.step; if(n !== Math.floor(S.step)) return;
+  S.busy = true; renderSteps();
+  await RUN[n]();
+  S.busy = false; renderSteps();
+});
+$("#btnTraffic").addEventListener("click", ()=>setTraffic(!S.traffic));
+$("#reveal").addEventListener("change", (e)=>{ S.reveal = e.target.checked; renderLeaves(); });
+$("#btnShareA").addEventListener("click", ()=>{ $("#btnShareA").disabled = true; share("alice"); });
+$("#btnShareB").addEventListener("click", ()=>{ $("#btnShareB").disabled = true; share("bob"); });
+$("#btnReset").addEventListener("click", async ()=>{
+  $("#btnShareA").disabled = true; $("#btnShareB").disabled = true;
+  $("#reveal").checked = false;
+  await boot();
+  setTraffic(true);
+});
+
+/* test surface */
+window.__ENYGMA_DVP = {
+  state: ()=>S, run: (n)=>RUN[n](), share, partyOf,
+  setTraffic, crowdInsert, SEEDED, TRAFFIC_MS,
+  setReveal: (v)=>{ S.reveal=v; document.getElementById('reveal').checked=v; renderLeaves(); },
+  commit, nullif, root, hkdf, seal, open_, TOK, VAULT, DVP,
+  ready: false,
+};
+
+boot().then(()=>{ window.__ENYGMA_DVP.ready = true; });
+
+})();
+</script>
+</body>
+</html>

@@ -108,9 +108,57 @@ the DvP numbers come from [`enygma_dvp/README.md`](../enygma_dvp/README.md).
 No claim the page makes about conservation, discovery or attribution depends on a substituted
 part. The test suites re-derive each of them independently from the exposed state.
 
+## A second page: shield → lock → swap → audit
+
+[`settlement.html`](./settlement.html) is a separate self-contained page showing the DvP lifecycle
+as chain state you watch change. Alice starts with 100 ACME, Bob with 5,000 USDC, both public.
+Five buttons, each one a real contract call:
+
+| Step | Call | What moves on chain |
+| --- | --- | --- |
+| **1 · Shield** | `Erc20CoinVault.depositV2` | `transferFrom` sends the tokens to the vault; a commitment `Poseidon4(pk_spend, salt, amount, tokenId)` is inserted as a leaf, and an `EncryptedNote` is emitted alongside it. |
+| **2 · Lock** | `EnygmaDvp.submitPartialSettlement` ×2 | Each leg locks its nullifier and registers a `swapId` with a deadline. No token moves and nothing is spent — locking is not spending. |
+| **3 · Swap** | `EnygmaDvp.exchangeOnGroupPair` | Both nullifiers published, both input leaves spent, two new leaves inserted with ownership swapped — in one transaction. |
+| **4 · Audit** | `EnygmaDvp.registerAuditor` | An auditor is registered; then a party discloses `sk_view`. Decryption on the page is a real AEAD open. |
+| **5 · Unshield** | `Erc20CoinVault.withdraw` | Nullify and `transfer` back out, so the tokens land in public balances under their new owners. |
+
+Two things the page is careful about, because they are where a demo usually cheats:
+
+**The vault has a history, and it does not stand still.** Eight deposits are already in the tree
+when the page loads — the vault did not open this morning. Alice then shields into leaf 8, three
+unrelated deposits land while she waits, and only then does Bob shield into leaf 12. On top of
+that an ambient ticker adds one more unrelated deposit every four seconds for as long as the page
+is open, so the anonymity set keeps growing while you work; the chain header has a
+**network traffic: on/off** control to pause it. Nobody chooses their neighbours in the tree, and
+a two-leaf tree would make the spend proof's privacy vacuous no matter how sound the circuit is.
+
+**The chain has no per-leaf spend state.** A nullifier is `H(sk_spend, leafIndex)` and cannot be
+run backwards, so the ledger genuinely cannot say which leaf a nullifier retired. The tree pane
+therefore renders every leaf identically, forever — no spent markers, no greying out — and states
+the anonymity set outright: *15 leaves under this root · 2 retired, which 2 is unknown*. A
+**reveal openings** toggle shows the owners and amounts with a standing warning that none of it is
+on chain; it exists to make the contrast visible, not to describe the ledger.
+
+The **Groth16 statement** pane spells out the same thing as data: `merkleRoot`, the nullifier, the
+output commitments and the deadline are public inputs; `leafIndex`, `salt`, `amount`, `tokenId`,
+`sk_spend` and the Merkle path are private witness, rendered as redactions. The proof says *"I know
+an opening of some leaf under this root"* — never which one.
+
+The other headline is in the balances panel: after step 3 the vault's **public ERC-20 balances are
+unchanged**. Ownership moved inside the shielded set and nothing about it reached the token
+contracts. Step 5 proves the swap was real by taking the tokens back out under the new owners.
+
+The audit step is worth clicking twice. With only Alice's view key the auditor opens exactly her
+two notes — the 100 ACME she shielded and the 5,000 USDC she ended up with — while every other note
+stays an AEAD failure. A view key is per-party, and it carries no spend authority.
+
+Same substitution boundary as `index.html`: SHA-256 stands in for Poseidon, a derived pairwise
+secret for ML-KEM encapsulation. Commitments, nullifiers, the Merkle root, the HKDF derivations and
+every AES-GCM open are computed for real in the browser.
+
 ## Tests
 
-Twelve headless suites drive the page in Chromium and check the cryptography from the outside —
+Thirteen headless suites drive the pages in Chromium and check the cryptography from the outside —
 re-deriving values with their own code and comparing, rather than trusting what is rendered.
 
 ```bash
@@ -139,6 +187,7 @@ PLAYWRIGHT_PATH=/path/to/playwright CHROMIUM_PATH=/path/to/chrome npm test
 | `inv-test.cjs` | Fresh accounts are `Com(0,0) = 𝒪` and identical for every bank; total supply is invariant across transfers. |
 | `aud-test.cjs` | Decapsulating a disclosed capsule verifies that index; a commitment that disagrees is *not* marked audited; a bank opening its own channel is not an audit. |
 | `bridge-test.cjs` | The Institutional Bridge tab: supply is unchanged in both directions, note-hash binding, Merkle root, owner unattributability per persona, that bringing a note back publishes a nullifier and spends the leaf without deleting it, double-spend rejection, escrow reconciliation, and that a freeze blocks both legs. Also that no swap UI survives here. |
+| `settlement-test.cjs` | [`settlement.html`](./settlement.html): the five steps end to end — commitments and the Merkle root re-derived from their openings, nullifiers re-derived from their own spend keys, that the chain panel leaks no owner/asset/amount, that the vault's public balances are unchanged across the swap, that one view key opens its owner's notes and genuinely fails on the other's, and that supply is conserved from shield to unshield. Overrides `DEMO_PAGE` for itself — use `SETTLEMENT_PAGE` to point it elsewhere. |
 | `swap-test.cjs` | The DvP network: all three output commitments re-derived from their openings, both nullifiers, salts as HKDF of the shared secret under separate labels, a fresh IV per sealing, a UI run end to end, and the revert path returning your own asset. |
 | `nf-test.cjs` | The notes table exposes no per-leaf spend state, the published nullifier set never names a leaf, the contract's check order is stated where spending happens, and only a leaf's own holder can decide by recomputing its nullifier. |
 | `frz-test.cjs`, `frz-test2.cjs` | The operator's halt blocks `transfer`, `withdraw` and `deposit` — including mid-walkthrough — and grants no visibility. |
