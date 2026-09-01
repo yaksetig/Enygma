@@ -116,11 +116,21 @@ Five buttons, each one a real contract call:
 
 | Step | Call | What moves on chain |
 | --- | --- | --- |
-| **1 · Shield** | `Erc20CoinVault.depositV2` | `transferFrom` sends the tokens to the vault; a commitment `Poseidon4(pk_spend, salt, amount, tokenId)` is inserted as a leaf, and an `EncryptedNote` is emitted alongside it. |
+| **1 · Shield** | `Erc20CoinVault.depositV2` | `transferFrom` sends the tokens to the vault; a commitment `Poseidon4(pk_spend, salt, amount, tokenId)` is inserted as a leaf, and an `EncryptedNote` is emitted alongside it. Alice's and Bob's deposits are built on screen one value at a time — see below. |
 | **2 · Lock** | `EnygmaDvp.submitPartialSettlement` ×2 | Each leg locks its nullifier and registers a `swapId` with a deadline. No token moves and nothing is spent — locking is not spending. |
 | **3 · Swap** | `EnygmaDvp.exchangeOnGroupPair` | Both nullifiers published, both input leaves spent, two new leaves inserted with ownership swapped — in one transaction. |
 | **4 · Audit** | `EnygmaDvp.registerAuditor` | An auditor is registered; then a party discloses `sk_view`. Decryption on the page is a real AEAD open. |
 | **5 · Unshield** | `Erc20CoinVault.withdraw` | Nullify and `transfer` back out, so the tokens land in public balances under their new owners. |
+
+**The commitment is constructed in front of you.** When Alice or Bob shields, a panel walks the
+six stages — read `pk_spend` off the registry, draw a fresh salt, assemble the preimage, hash,
+`transferFrom`, `insertLeaf` — with the salt and the digest scrambling before they settle. The
+opening is laid out as the four values it is, and the commitment is rendered as 32 individual
+bytes, so its fixed shape is visible: whatever goes in, the same 32 bytes come out. Underneath,
+the same deposit is recomputed for one unit more and shown byte-for-byte against the original —
+about 31 of 32 bytes move. That is what stops an observer searching the tree for an amount. The
+values on screen are the ones actually committed to; the suite checks the rendered salt against
+the leaf and re-derives the commitment from it.
 
 Two things the page is careful about, because they are where a demo usually cheats:
 

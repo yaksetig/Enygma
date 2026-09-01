@@ -94,6 +94,42 @@ const totals = (bal, t) => bal[t].Alice + bal[t].Bob + bal[t].Others + bal[t].Va
   pass(derived.all, "every commitment re-derives as Poseidon4(pk_spend, salt, amount, tokenId)");
   pass(derived.rootRe === derived.root, "the Merkle root re-derives from the leaf list");
 
+  /* the commitment is built on screen, value by value — and those values are the real ones */
+  console.log("\n    the commitment construction panel");
+  const mint = await pg.evaluate(() => ({
+    shown: document.getElementById("mintCard").style.display !== "none",
+    title: document.getElementById("mintTitle").innerText,
+    body:  document.getElementById("mintGrid").innerText,
+    cells: document.querySelectorAll("#mintGrid .bytes")[0].children.length,
+    diffs: document.querySelectorAll("#mintGrid .byte.diff").length,
+    stagesDone: document.querySelectorAll("#mintStages .mst.ok").length,
+  }));
+  pass(mint.shown && /Bob shields 5,000 USDC/.test(mint.title),
+       "the panel shows the last commitment built, value by value");
+  pass(["pk_spend","salt","amount","tokenId"].every(k => mint.body.includes(k)),
+       "all four inputs to the commitment are named");
+  pass(/Poseidon4\(pk_spend, salt, amount, tokenId\)/.test(mint.body),
+       "the hash it feeds is written out in full");
+  pass(mint.cells === 32, `the commitment renders as ${mint.cells} bytes — a fixed shape whatever went in`);
+  pass(mint.diffs > 24,
+       `the avalanche panel shows ${mint.diffs} of 32 bytes moving for a one-unit change in amount`);
+  pass(mint.stagesDone === 6, `all six construction stages completed (${mint.stagesDone})`);
+  pass(!/undefined|NaN/.test(mint.body), "no placeholder leaked into the panel");
+
+  // the panel is not decoration: the salt on screen is the salt in the leaf
+  const shownSalt = await pg.evaluate(() => {
+    const rows = [...document.querySelectorAll("#mintGrid .mrow")];
+    const r = rows.find(x => x.innerText.includes("salt"));
+    return r.querySelector(".v").innerText.trim().split(/\s+/)[0];
+  });
+  pass(shownSalt === bobLeaf.salt,
+       "the salt rendered on screen is the one actually committed to, not a decorative value");
+  const reCommit = await pg.evaluate(async (s) => {
+    const D = window.__ENYGMA_DVP;
+    return D.commit(D.partyOf("Bob").pkSpend, s.salt, s.amt, D.TOK[s.tok].id);
+  }, bobLeaf);
+  pass(reCommit === bobLeaf.C, "and that opening re-derives the commitment the panel displayed");
+
   // the chain pane renders hashes only
   const chainText = await pg.evaluate(() => document.getElementById("leaves").innerText);
   pass(!/Alice|Bob|acct|ACME|USDC/.test(chainText),

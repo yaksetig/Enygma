@@ -90,6 +90,52 @@ h1,h2,h3,h4{margin:0; font-weight:650; letter-spacing:-.01em;}
 .mynote.spent{opacity:.5;}
 .mynote.spent .amt{text-decoration:line-through;}
 
+
+/* ── commitment construction ──────────────────────────────── */
+.mintcard{border-color:var(--accent-soft-border);}
+.mstages{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:13px;}
+.mst{font-family:var(--mono);font-size:9.5px;letter-spacing:.03em;border:1px solid var(--border);
+     border-radius:999px;padding:3px 10px;color:var(--text-faint);background:var(--surface-2);
+     display:flex;align-items:center;gap:5px;transition:all .18s;}
+.mst .d{width:5px;height:5px;border-radius:50%;background:var(--border);}
+.mst.on{border-color:var(--accent);background:var(--accent-soft);color:var(--accent-ink);font-weight:700;}
+.mst.on .d{background:var(--accent);animation:pulse 1s infinite;}
+.mst.ok{border-color:color-mix(in srgb,var(--teal) 32%,transparent);background:var(--teal-soft);color:var(--teal);}
+.mst.ok .d{background:var(--teal);}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:.3;}}
+
+.mgrid{display:grid;grid-template-columns:1fr;gap:11px;}
+.mbox{border:1px solid var(--border);border-radius:9px;overflow:hidden;}
+.mbox .mh{font-family:var(--mono);font-size:9.5px;letter-spacing:.05em;text-transform:uppercase;font-weight:700;
+          padding:6px 11px;border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+.mbox.in .mh{background:var(--surface-2);color:var(--text-muted);}
+.mbox.out .mh{background:var(--accent-soft);color:var(--accent-ink);}
+.mbox .mh .note{font-weight:500;text-transform:none;letter-spacing:0;color:var(--text-faint);font-size:9.5px;}
+.mrow{display:grid;grid-template-columns:96px 74px 1fr;gap:10px;padding:6px 11px;font-family:var(--mono);
+      font-size:11px;align-items:baseline;border-top:1px solid var(--border);}
+.mrow:first-of-type{border-top:0;}
+.mrow .k{color:var(--text-faint);}
+.mrow .sz{color:var(--text-faint);font-size:9.5px;}
+.mrow .v{overflow-wrap:anywhere;color:var(--text);}
+.mrow .v.wait{color:var(--text-faint);}
+.mrow .v .src{color:var(--text-faint);font-size:9.5px;margin-left:6px;}
+.mrow.fresh{background:var(--amber-soft);}
+.marrow{text-align:center;font-family:var(--mono);font-size:11px;color:var(--accent-ink);padding:1px 0;}
+.marrow .fn{background:var(--accent-soft);border:1px solid var(--accent-soft-border);border-radius:7px;
+            padding:4px 11px;display:inline-block;}
+
+.bytes{display:flex;flex-wrap:wrap;gap:3px;padding:11px;}
+.byte{font-family:var(--mono);font-size:10px;width:23px;height:21px;display:grid;place-items:center;
+      border-radius:4px;background:var(--surface-2);color:var(--text);border:1px solid var(--border);}
+.byte.hot{background:var(--accent);color:#fff;border-color:var(--accent);}
+.byte.diff{background:var(--rose-soft);color:var(--rose);border-color:color-mix(in srgb,var(--rose) 30%,transparent);}
+.bfoot{padding:0 11px 10px;font-size:11px;color:var(--text-muted);line-height:1.55;}
+.bfoot b{color:var(--text);}
+.aval{margin-top:9px;border:1px solid var(--border);border-radius:8px;overflow:hidden;}
+.aval .ah{font-family:var(--mono);font-size:9.5px;letter-spacing:.05em;text-transform:uppercase;font-weight:700;
+          padding:6px 11px;background:var(--rose-soft);color:var(--rose);border-bottom:1px solid var(--border);}
+@media (min-width:900px){ .mgrid{grid-template-columns:1fr;} }
+
 /* ── the chain ────────────────────────────────────────────── */
 .chain{border:1px solid var(--accent-soft-border);border-radius:var(--r);overflow:hidden;
        box-shadow:0 1px 2px rgba(23,25,34,.04), 0 14px 34px -18px rgba(67,54,196,.34);}
@@ -232,6 +278,18 @@ td.who-c{white-space:nowrap;}
 <main class="wrap">
 
   <div class="row2" id="wallets"></div>
+
+
+  <section class="card mintcard" id="mintCard" style="display:none;">
+    <div class="chd">
+      <h3 id="mintTitle">Building a commitment</h3>
+      <span class="tag" id="mintTag">Erc20CoinVault.depositV2</span>
+    </div>
+    <div class="cb">
+      <div class="mstages" id="mintStages"></div>
+      <div class="mgrid" id="mintGrid"></div>
+    </div>
+  </section>
 
   <section class="chain">
     <div class="chain-head">
@@ -432,10 +490,10 @@ function tx(method, from, to, detail){
 }
 function flashBal(who, tok){ S.flash.add(who+"|"+tok); setTimeout(()=>{ S.flash.delete(who+"|"+tok); }, 950); }
 
-async function addLeaf(owner, tokKey, amt){
+async function addLeaf(owner, tokKey, amt, pre){
   const p = partyOf(owner);
-  const salt = rand(32);
-  const C = await commit(p.pkSpend, salt, amt, TOK[tokKey].id);
+  const salt = pre ? pre.salt : rand(32);
+  const C = pre ? pre.C : await commit(p.pkSpend, salt, amt, TOK[tokKey].id);
   // EncryptedNote: capsule + ChaCha/AES ciphertext of tokenId‖amount, openable by the view key
   const secret = await hkdf(p.skView, "enygma/note/"+salt, 32);
   const leaf = { i:S.leaves.length, C, owner, tok:tokKey, amt, salt, state:"unspent",
@@ -451,16 +509,111 @@ async function spendLeaf(leaf){
 }
 
 /* ── STEP 1 — shield ──────────────────────────────────────────────────────── */
+/* ── the commitment, built one value at a time ─────────────────────────────
+   A deposit is four values hashed into one. Watching that happen is the only way to see why
+   the salt is there and why the output tells an observer nothing: it is the same 32 bytes
+   whatever went in, and it moves completely if any input moves by one. */
+const MSTAGES = ["read pk_spend", "draw salt", "assemble preimage",
+                 "Poseidon4", "transferFrom", "insertLeaf"];
+
+function mStages(active){
+  $("#mintStages").innerHTML = MSTAGES.map((t, i) =>
+    `<span class="mst ${i < active ? "ok" : i === active ? "on" : ""}"><span class="d"></span>${t}</span>`).join("");
+}
+const mRow = (k, sz, v, cls) =>
+  `<div class="mrow ${cls || ""}"><span class="k">${k}</span><span class="sz">${sz}</span>` +
+  `<span class="v ${v ? "" : "wait"}">${v || "—"}</span></div>`;
+const byteCells = (hex, diffAgainst) =>
+  (hex.match(/.{2}/g) || []).map((b, i) => {
+    const d = diffAgainst && diffAgainst.match(/.{2}/g)[i] !== b;
+    return `<span class="byte ${d ? "diff" : ""}">${b}</span>`;
+  }).join("");
+
+/* tick random hex into a slot before settling on the real value */
+async function scrambleInto(sel, finalHex, frames){
+  const el = $(sel); if(!el) return;
+  for(let i = 0; i < (reduced ? 0 : (frames || 7)); i++){
+    el.textContent = rand(finalHex.length / 2).slice(0, finalHex.length);
+    await wait(55);
+  }
+  el.textContent = finalHex;
+}
+
+async function animateShield(who, tokKey, amt){
+  const p = partyOf(who), t = TOK[tokKey];
+  const card = $("#mintCard");
+  card.style.display = "";
+  $("#mintTitle").textContent = `${who} shields ${fmt(amt)} ${tokKey}`;
+  $("#mintTag").textContent = "Erc20CoinVault.depositV2(params, ciphertextI, ciphertextII)";
+
+  const paint = (rows, out) => { $("#mintGrid").innerHTML = rows + (out || ""); };
+  const inBox = (pk, salt, a, tok, freshSalt) =>
+    `<div class="mbox in"><div class="mh">The opening — four values, kept by the owner
+       <span class="note">this is what a note <em>is</em></span></div>
+      ${mRow("params[1] pk_spend", "32 bytes", pk ? `<span id="mPk">${cut(pk,18,10)}</span><span class="src">from UserRegistry</span>` : "")}
+      ${mRow("params[2] salt", "32 bytes", salt !== null ? `<span id="mSalt">${salt}</span><span class="src">${freshSalt ? "drawn now, never reused" : ""}</span>` : "", freshSalt ? "fresh" : "")}
+      ${mRow("params[0] amount", "uint256", a !== null ? `${fmt(a)} <span class="src">${tokKey}</span>` : "")}
+      ${mRow("params[3] tokenId", "uint256", tok !== null ? `${tok} <span class="src">the ${tokKey} vault</span>` : "")}
+    </div>`;
+
+  card.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "center" });
+
+  // 1 — the spend key is already public, read off the registry
+  mStages(0); paint(inBox(null, null, null, null)); await wait(650);
+  mStages(0); paint(inBox(p.pkSpend, null, null, null)); await wait(750);
+
+  // 2 — fresh randomness. This is the whole reason two identical deposits do not collide.
+  mStages(1); paint(inBox(p.pkSpend, "", null, null, true));
+  const salt = rand(32);
+  await scrambleInto("#mSalt", salt, 9);
+  await wait(600);
+
+  // 3 — the amount and the asset join it
+  mStages(2); paint(inBox(p.pkSpend, salt, amt, t.id, true)); await wait(850);
+
+  // 4 — hashed to one field element
+  mStages(3);
+  const C = await commit(p.pkSpend, salt, amt, t.id);
+  paint(inBox(p.pkSpend, salt, amt, t.id) +
+    `<div class="marrow"><span class="fn">↓ Poseidon4(pk_spend, salt, amount, tokenId)</span></div>` +
+    `<div class="mbox out"><div class="mh">The commitment — this, and only this, is published
+       <span class="note">32 bytes, whatever went in</span></div>
+      <div class="bytes" id="mBytes"></div>
+      <div class="bfoot">Hiding: nothing above can be read back out of it.
+        Binding: the opening that produced it is the only one that ever will.</div></div>`);
+  const cells = $("#mBytes");
+  for(let f = 0; f < (reduced ? 0 : 8); f++){ cells.innerHTML = byteCells(rand(32)); await wait(60); }
+  cells.innerHTML = byteCells(C);
+  await wait(700);
+
+  // the avalanche: one unit of difference, a completely different commitment
+  const C2 = await commit(p.pkSpend, salt, amt + 1, t.id);
+  const nDiff = (C.match(/.{2}/g) || []).filter((b, i) => C2.match(/.{2}/g)[i] !== b).length;
+  $("#mintGrid").insertAdjacentHTML("beforeend",
+    `<div class="aval"><div class="ah">the same deposit for ${fmt(amt + 1)} ${tokKey} instead — every red byte differs</div>
+      <div class="bytes">${byteCells(C2, C)}</div>
+      <div class="bfoot"><b>${nDiff} of 32 bytes change</b> for a difference of one unit. An observer holding
+        the published commitment cannot search for the amount, the owner or the asset — there is nothing
+        to compare against.</div></div>`);
+  await wait(1100);
+
+  return { salt, C };
+}
+
 async function shieldOne(who, tokKey, amt, loud, quiet){
   const p = partyOf(who), h = holderOf(who);
+  const pre = loud ? await animateShield(who, tokKey, amt) : null;
+  if(loud) mStages(4);
   S.bal[tokKey][h] -= amt;  S.bal[tokKey].Vault += amt;
   flashBal(h, tokKey); flashBal("Vault", tokKey);
-  const leaf = await addLeaf(who, tokKey, amt);
+  if(loud){ render(); await wait(800); mStages(5); }
+  const leaf = await addLeaf(who, tokKey, amt, pre);
+  if(loud){ mStages(6); render(); await wait(500); }
   tx("Erc20CoinVault.depositV2", p.addr, VAULT,
      loud ? `transferFrom(${who}, vault, <em>${fmt(amt)} ${tokKey}</em>) · insertLeaf(C=${cut(leaf.C,10,6)}) · emit Commitment, EncryptedNote`
           : `insertLeaf(C=${cut(leaf.C,10,6)}) · emit Commitment, EncryptedNote`);
   if(quiet) return;
-  render(); await wait(loud ? 620 : 0);
+  render(); if(!loud) await wait(0);
 }
 
 /* Alice shields into a tree that already has a history, unrelated deposits land while she waits,
@@ -782,6 +935,7 @@ $("#btnShareB").addEventListener("click", ()=>{ $("#btnShareB").disabled = true;
 $("#btnReset").addEventListener("click", async ()=>{
   $("#btnShareA").disabled = true; $("#btnShareB").disabled = true;
   $("#reveal").checked = false;
+  document.getElementById("mintCard").style.display = "none";
   await boot();
   setTraffic(true);
 });
