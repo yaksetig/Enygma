@@ -14,6 +14,7 @@ const SUITES = [
   ["bridge-test.cjs","bridge round trip, note binding, nullifier on spend"],
   ["nf-test.cjs",    "nullifier set — no per-leaf spend state is shown"],
   ["swap-test.cjs",  "DvP network — atomic swap, salts, revert path"],
+  ["settlement-test.cjs", "settlement.html — private securities DvP, venue invariance"],
   ["frz-test.cjs",   "operator freeze"],
   ["frz-test2.cjs",  "freeze during the guided walkthrough"],
   ["faq-test.cjs",   "protocol explainer + technical FAQ"],
