@@ -112,23 +112,22 @@ part. The test suites re-derive each of them independently from the exposed stat
 
 [`settlement.html`](./settlement.html) is a separate self-contained page showing the DvP lifecycle
 as chain state you watch change. Alice starts with 100 ACME, Bob with 5,000 USDC, both public.
-Five buttons, each one a real contract call:
+Six guided actions, with auditor registration completed before either party transacts:
 
 | Step | Call | What moves on chain |
 | --- | --- | --- |
+| **0 · Register** | `EnygmaDvp.registerAuditor` | Governance registers the auditor public key for group 0. Shield, lock and swap remain unavailable until this setup transaction completes. |
 | **1 · Shield** | `Erc20CoinVault.depositV2` | `transferFrom` sends the tokens to the vault; a commitment `Poseidon4(pk_spend, salt, amount, tokenId)` is inserted as a leaf, and an `EncryptedNote` is emitted alongside it. Alice's and Bob's deposits are built on screen one value at a time — see below. |
 | **2 · Lock** | `EnygmaDvp.submitPartialSettlement` ×2 | Each leg locks its nullifier and registers a `swapId` with a deadline. No token moves and nothing is spent — locking is not spending. |
 | **3 · Swap** | `EnygmaDvp.exchangeOnGroupPair` | Both nullifiers published, both input leaves spent, two new leaves inserted with ownership swapped — in one transaction. |
-| **4 · Audit** | `EnygmaDvp.registerAuditor` | An auditor is registered; then a party discloses `sk_view`. Decryption on the page is a real AEAD open. |
+| **4 · Audit** | off-chain `sk_view` disclosure | The auditor is already registered. A party may now disclose its view key; decryption on the page is a real AEAD open. |
 | **5 · Unshield** | `Erc20CoinVault.withdraw` | Nullify and `transfer` back out, so the tokens land in public balances under their new owners. |
 
 **The commitment is constructed in front of you.** When Alice or Bob shields, a panel walks the
 six stages — read `pk_spend` off the registry, draw a fresh salt, assemble the preimage, hash,
 `transferFrom`, `insertLeaf` — with the salt and the digest scrambling before they settle. The
 opening is laid out as the four values it is, and the commitment is rendered as 32 individual
-bytes, so its fixed shape is visible: whatever goes in, the same 32 bytes come out. Underneath,
-the same deposit is recomputed for one unit more and shown byte-for-byte against the original —
-about 31 of 32 bytes move. That is what stops an observer searching the tree for an amount. The
+bytes, so its fixed shape is visible before it is inserted into the Merkle tree as a leaf. The
 values on screen are the ones actually committed to; the suite checks the rendered salt against
 the leaf and re-derives the commitment from it.
 
@@ -161,6 +160,10 @@ contracts. Step 5 proves the swap was real by taking the tokens back out under t
 The audit step is worth clicking twice. With only Alice's view key the auditor opens exactly her
 two notes — the 100 ACME she shielded and the 5,000 USDC she ended up with — while every other note
 stays an AEAD failure. A view key is per-party, and it carries no spend authority.
+
+**Reset starts from zero.** The initial visit opens on a populated historical tree, but Reset
+clears every leaf and nullifier, returns to the pre-registration step, and pauses ambient traffic
+so the empty tree remains visible until traffic is switched on again.
 
 Same substitution boundary as `index.html`: SHA-256 stands in for Poseidon, a derived pairwise
 secret for ML-KEM encapsulation. Commitments, nullifiers, the Merkle root, the HKDF derivations and

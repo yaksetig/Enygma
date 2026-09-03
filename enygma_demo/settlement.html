@@ -127,13 +127,7 @@ h1,h2,h3,h4{margin:0; font-weight:650; letter-spacing:-.01em;}
 .bytes{display:flex;flex-wrap:wrap;gap:3px;padding:11px;}
 .byte{font-family:var(--mono);font-size:10px;width:23px;height:21px;display:grid;place-items:center;
       border-radius:4px;background:var(--surface-2);color:var(--text);border:1px solid var(--border);}
-.byte.hot{background:var(--accent);color:#fff;border-color:var(--accent);}
-.byte.diff{background:var(--rose-soft);color:var(--rose);border-color:color-mix(in srgb,var(--rose) 30%,transparent);}
 .bfoot{padding:0 11px 10px;font-size:11px;color:var(--text-muted);line-height:1.55;}
-.bfoot b{color:var(--text);}
-.aval{margin-top:9px;border:1px solid var(--border);border-radius:8px;overflow:hidden;}
-.aval .ah{font-family:var(--mono);font-size:9.5px;letter-spacing:.05em;text-transform:uppercase;font-weight:700;
-          padding:6px 11px;background:var(--rose-soft);color:var(--rose);border-bottom:1px solid var(--border);}
 @media (min-width:900px){ .mgrid{grid-template-columns:1fr;} }
 
 /* ── the chain ────────────────────────────────────────────── */
@@ -261,9 +255,10 @@ td.who-c{white-space:nowrap;}
 <header class="bar">
   <div class="bar-in">
     <div class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h13M17 8l-3-3M17 8l-3 3"/><path d="M20 16H7M7 16l3-3M7 16l3 3"/></svg></div>
-    <div class="title"><b>Enygma DvP</b><span>shield · lock · swap · audit</span></div>
+    <div class="title"><b>Enygma DvP</b><span>register · shield · lock · swap · audit</span></div>
     <div class="sp"></div>
     <div class="steps" id="steps">
+      <button class="sbtn" id="btnRegisterAuditor" data-step="0" type="button"><span class="n">0</span>Register auditor</button>
       <button class="sbtn" data-step="1" type="button"><span class="n">1</span>Shield</button>
       <button class="sbtn" data-step="2" type="button"><span class="n">2</span>Lock</button>
       <button class="sbtn" data-step="3" type="button"><span class="n">3</span>Swap</button>
@@ -431,15 +426,16 @@ const TRAFFIC_MS = 4000;   // one unrelated deposit every four seconds, ongoing
 const AMOUNTS = { ACME:[15,40,60,125,250,300,640,900], USDC:[275,640,820,1200,1850,2400,3100,4500] };
 const pick = (a) => a[Math.floor(Math.random()*a.length)];
 
-async function boot(){
+async function boot({ seedHistory = true, traffic = true } = {}){
   if(S && S.timer) clearInterval(S.timer);
   const alice = await mkParty("Alice", "var(--alice)");
   const bob   = await mkParty("Bob",   "var(--bob)");
   const others = [];
   for(let i = 0; i < POOL_SIZE; i++) others.push(await mkParty("acct" + (i + 1), "var(--text-faint)"));
   S = {
-    block: 0, step: 1, busy: false, reveal: false,
-    traffic: true, timer: null, crowdIdx: 0,
+    block: 0, step: 0, busy: false, reveal: false,
+    traffic, timer: null, crowdIdx: 0,
+    auditorRegistered: false, auditStarted: false,
     alice, bob, others, parties: [alice, bob, ...others],
     bal: { ACME:{Alice:100, Bob:0, Others:60000, Vault:0},
            USDC:{Alice:0, Bob:5000, Others:600000, Vault:0} },
@@ -449,10 +445,10 @@ async function boot(){
     txs: [], root: null,
     flash: new Set(),
   };
-  // the vault already has a history when you arrive
-  for(let i = 0; i < SEEDED; i++) await crowdInsert(true);
+  // The first visit has a history; Reset deliberately returns to a blank tree.
+  if(seedHistory) for(let i = 0; i < SEEDED; i++) await crowdInsert(true);
   render();
-  startTraffic();
+  setTraffic(traffic);
 }
 
 const partyOf = (name) => S.parties.find(p => p.name === name);
@@ -481,6 +477,7 @@ function setTraffic(on){
   S.traffic = on;
   const b = $("#btnTraffic");
   if(b){ b.textContent = on ? "network traffic: on" : "network traffic: paused"; b.dataset.on = String(on); }
+  if(on && !S.timer) startTraffic();
 }
 
 /* ── chain helpers ────────────────────────────────────────────────────────── */
@@ -508,11 +505,17 @@ async function spendLeaf(leaf){
   S.nfs.push({ nf: await nullif(p.skSpend, leaf.i), by: leaf.owner });
 }
 
+/* ── STEP 0 — register the auditor before the parties transact ───────────── */
+async function stepRegisterAuditor(){
+  S.auditorRegistered = true;
+  tx("EnygmaDvp.registerAuditor", "owner", DVP, `auditorPublicKey registered · group 0`);
+  S.step = 1; render();
+}
+
 /* ── STEP 1 — shield ──────────────────────────────────────────────────────── */
 /* ── the commitment, built one value at a time ─────────────────────────────
-   A deposit is four values hashed into one. Watching that happen is the only way to see why
-   the salt is there and why the output tells an observer nothing: it is the same 32 bytes
-   whatever went in, and it moves completely if any input moves by one. */
+   A deposit is four values hashed into one fixed-size field element, which is then inserted as
+   a leaf in the commitment tree. */
 const MSTAGES = ["read pk_spend", "draw salt", "assemble preimage",
                  "Poseidon4", "transferFrom", "insertLeaf"];
 
@@ -523,11 +526,8 @@ function mStages(active){
 const mRow = (k, sz, v, cls) =>
   `<div class="mrow ${cls || ""}"><span class="k">${k}</span><span class="sz">${sz}</span>` +
   `<span class="v ${v ? "" : "wait"}">${v || "—"}</span></div>`;
-const byteCells = (hex, diffAgainst) =>
-  (hex.match(/.{2}/g) || []).map((b, i) => {
-    const d = diffAgainst && diffAgainst.match(/.{2}/g)[i] !== b;
-    return `<span class="byte ${d ? "diff" : ""}">${b}</span>`;
-  }).join("");
+const byteCells = hex =>
+  (hex.match(/.{2}/g) || []).map(b => `<span class="byte">${b}</span>`).join("");
 
 /* tick random hex into a slot before settling on the real value */
 async function scrambleInto(sel, finalHex, frames){
@@ -577,25 +577,13 @@ async function animateShield(who, tokKey, amt){
   paint(inBox(p.pkSpend, salt, amt, t.id) +
     `<div class="marrow"><span class="fn">↓ Poseidon4(pk_spend, salt, amount, tokenId)</span></div>` +
     `<div class="mbox out"><div class="mh">The commitment — this, and only this, is published
-       <span class="note">32 bytes, whatever went in</span></div>
+       <span class="note">32-byte field element</span></div>
       <div class="bytes" id="mBytes"></div>
-      <div class="bfoot">Hiding: nothing above can be read back out of it.
-        Binding: the opening that produced it is the only one that ever will.</div></div>`);
+      <div class="bfoot">Inserted into the Merkle tree as the deposit's leaf value.</div></div>`);
   const cells = $("#mBytes");
   for(let f = 0; f < (reduced ? 0 : 8); f++){ cells.innerHTML = byteCells(rand(32)); await wait(60); }
   cells.innerHTML = byteCells(C);
   await wait(700);
-
-  // the avalanche: one unit of difference, a completely different commitment
-  const C2 = await commit(p.pkSpend, salt, amt + 1, t.id);
-  const nDiff = (C.match(/.{2}/g) || []).filter((b, i) => C2.match(/.{2}/g)[i] !== b).length;
-  $("#mintGrid").insertAdjacentHTML("beforeend",
-    `<div class="aval"><div class="ah">the same deposit for ${fmt(amt + 1)} ${tokKey} instead — every red byte differs</div>
-      <div class="bytes">${byteCells(C2, C)}</div>
-      <div class="bfoot"><b>${nDiff} of 32 bytes change</b> for a difference of one unit. An observer holding
-        the published commitment cannot search for the amount, the owner or the asset — there is nothing
-        to compare against.</div></div>`);
-  await wait(1100);
 
   return { salt, C };
 }
@@ -682,12 +670,11 @@ async function stepSwap(){
 
 /* ── STEP 4 — audit ───────────────────────────────────────────────────────── */
 async function stepAudit(){
-  S.auditorRegistered = true;
-  tx("EnygmaDvp.registerAuditor", "owner", DVP, `auditorPublicKey registered · group 0`);
+  S.auditStarted = true;
   S.step = 4.5; render();
-  $("#btnShareA").disabled = false; $("#btnShareB").disabled = false;
 }
 async function share(who){
+  if(!S.auditorRegistered || !S.auditStarted || S[who].sharedView) return;
   S[who].sharedView = true;
   tx("offchain", S[who].name, "auditor", `discloses sk_view — <em>view key only</em>, no spend authority`);
   if(S.alice.sharedView) S.step = 5;
@@ -726,9 +713,10 @@ function renderSteps(){
     const n = +b.dataset.step;
     b.classList.toggle("done", n < Math.floor(S.step));
     b.classList.toggle("next", n === Math.floor(S.step));
-    // step 4 stays "current" while the view keys are being shared, but must not re-register
-    b.disabled = S.busy || n !== Math.floor(S.step) || (n === 4 && S.auditorRegistered);
+    // step 4 stays "current" while the view keys are being shared, but only starts once
+    b.disabled = S.busy || n !== Math.floor(S.step) || (n === 4 && S.auditStarted);
   });
+  renderAuditControls();
 }
 
 function renderWallets(){
@@ -886,11 +874,17 @@ function renderLog(){
     : '<div style="padding:14px;" class="empty">no transactions yet</div>';
 }
 
-/* The auditor genuinely attempts every EncryptedNote with whatever keys it has. */
-async function renderAudit(){
+function renderAuditControls(){
   const held = [S.alice.sharedView && "Alice", S.bob.sharedView && "Bob"].filter(Boolean);
   $("#audTag").textContent = !S.auditorRegistered ? "not registered"
     : held.length ? "view keys held: " + held.join(", ") : "registered · no view key held";
+  $("#btnShareA").disabled = S.busy || !S.auditStarted || S.alice.sharedView;
+  $("#btnShareB").disabled = S.busy || !S.auditStarted || S.bob.sharedView;
+}
+
+/* The auditor genuinely attempts every EncryptedNote with whatever keys it has. */
+async function renderAudit(){
+  renderAuditControls();
 
   if(!S.leaves.length){ $("#audRows").innerHTML = '<div class="empty">nothing on chain to audit</div>'; return; }
 
@@ -919,14 +913,18 @@ async function renderAudit(){
 }
 
 /* ── wiring ───────────────────────────────────────────────────────────────── */
-const RUN = { 1:stepShield, 2:stepLock, 3:stepSwap, 4:stepAudit, 5:stepUnshield };
+const RUN = { 0:stepRegisterAuditor, 1:stepShield, 2:stepLock, 3:stepSwap, 4:stepAudit, 5:stepUnshield };
 
-$("#steps").addEventListener("click", async (e)=>{
-  const b = e.target.closest(".sbtn"); if(!b || S.busy) return;
-  const n = +b.dataset.step; if(n !== Math.floor(S.step)) return;
+async function runStep(n){
+  if(S.busy || n !== Math.floor(S.step) || (n === 4 && S.auditStarted)) return;
   S.busy = true; renderSteps();
   await RUN[n]();
   S.busy = false; renderSteps();
+}
+
+$("#steps").addEventListener("click", async (e)=>{
+  const b = e.target.closest(".sbtn"); if(!b) return;
+  await runStep(+b.dataset.step);
 });
 $("#btnTraffic").addEventListener("click", ()=>setTraffic(!S.traffic));
 $("#reveal").addEventListener("change", (e)=>{ S.reveal = e.target.checked; renderLeaves(); });
@@ -936,8 +934,7 @@ $("#btnReset").addEventListener("click", async ()=>{
   $("#btnShareA").disabled = true; $("#btnShareB").disabled = true;
   $("#reveal").checked = false;
   document.getElementById("mintCard").style.display = "none";
-  await boot();
-  setTraffic(true);
+  await boot({ seedHistory:false, traffic:false });
 });
 
 /* test surface */

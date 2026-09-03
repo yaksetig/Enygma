@@ -30,7 +30,8 @@ async function step(pg, n){
 }
 const snap = (pg) => pg.evaluate(() => {
   const S = window.__ENYGMA_DVP.state();
-  return { block: S.block, bal: S.bal, root: S.root, reveal: S.reveal, dvp: { ...S.dvp },
+  return { block: S.block, bal: S.bal, root: S.root, reveal: S.reveal,
+           auditorRegistered: S.auditorRegistered, auditStarted: S.auditStarted, dvp: { ...S.dvp },
            leaves: S.leaves.map(l => ({ i:l.i, C:l.C, owner:l.owner, tok:l.tok, amt:l.amt,
                                         salt:l.salt, state:l.state, ct:l.note.ct })),
            nfs: S.nfs.slice(), txs: S.txs.length };
@@ -65,6 +66,30 @@ const totals = (bal, t) => bal[t].Alice + bal[t].Bob + bal[t].Others + bal[t].Va
   pass(g.reveal === false, "the reveal toggle is off by default — the page opens on what the chain sees");
 
   const ACME0 = totals(g.bal, "ACME"), USDC0 = totals(g.bal, "USDC");
+
+  /* ── 0 · register auditor ──────────────────────────────────────────────── */
+  console.log("\n--- 0 · register: governance setup before Alice or Bob transacts ---");
+  const beforeReg = await pg.evaluate(() => ({
+    audit: document.getElementById("audRows").innerText,
+    registerDisabled: document.getElementById("btnRegisterAuditor").disabled,
+    shieldDisabled: document.querySelector('.sbtn[data-step="1"]').disabled,
+  }));
+  pass(/not registered/.test(beforeReg.audit) && !beforeReg.registerDisabled,
+       "registration is the first available action and the auditor initially reads nothing");
+  pass(beforeReg.shieldDisabled, "shielding is locked until the auditor is registered");
+
+  await step(pg, 0);
+  const s0 = await snap(pg);
+  const afterReg = await pg.evaluate(() => ({
+    audit: document.getElementById("audRows").innerText,
+    shareDisabled: document.getElementById("btnShareA").disabled &&
+                   document.getElementById("btnShareB").disabled,
+    log: document.getElementById("log").innerText,
+  }));
+  pass(s0.auditorRegistered && /registerAuditor/.test(afterReg.log),
+       "registerAuditor is recorded before the shield, lock or swap transactions");
+  pass(/AEAD auth failure/.test(afterReg.audit) && afterReg.shareDisabled,
+       "the registered auditor has no view key and disclosure remains locked until the audit step");
 
   /* ── 1 · shield ────────────────────────────────────────────────────────── */
   console.log("\n--- 1 · shield: ERC-20 in, commitment out, into a populated tree ---");
@@ -101,7 +126,7 @@ const totals = (bal, t) => bal[t].Alice + bal[t].Bob + bal[t].Others + bal[t].Va
     title: document.getElementById("mintTitle").innerText,
     body:  document.getElementById("mintGrid").innerText,
     cells: document.querySelectorAll("#mintGrid .bytes")[0].children.length,
-    diffs: document.querySelectorAll("#mintGrid .byte.diff").length,
+    byteGroups: document.querySelectorAll("#mintGrid .bytes").length,
     stagesDone: document.querySelectorAll("#mintStages .mst.ok").length,
   }));
   pass(mint.shown && /Bob shields 5,000 USDC/.test(mint.title),
@@ -111,8 +136,8 @@ const totals = (bal, t) => bal[t].Alice + bal[t].Bob + bal[t].Others + bal[t].Va
   pass(/Poseidon4\(pk_spend, salt, amount, tokenId\)/.test(mint.body),
        "the hash it feeds is written out in full");
   pass(mint.cells === 32, `the commitment renders as ${mint.cells} bytes — a fixed shape whatever went in`);
-  pass(mint.diffs > 24,
-       `the avalanche panel shows ${mint.diffs} of 32 bytes moving for a one-unit change in amount`);
+  pass(mint.byteGroups === 1 && /Merkle tree/.test(mint.body),
+       "the panel shows one actual commitment and identifies it as the Merkle-tree leaf value");
   pass(mint.stagesDone === 6, `all six construction stages completed (${mint.stagesDone})`);
   pass(!/undefined|NaN/.test(mint.body), "no placeholder leaked into the panel");
 
@@ -227,14 +252,22 @@ const totals = (bal, t) => bal[t].Alice + bal[t].Bob + bal[t].Others + bal[t].Va
 
   /* ── 4 · audit ─────────────────────────────────────────────────────────── */
   console.log("\n--- 4 · audit: a view key opens its owner's notes and nothing else ---");
-  const beforeReg = await pg.evaluate(() => document.getElementById("audRows").innerText);
-  pass(/not registered/.test(beforeReg) && !/100 ACME|5,000 USDC/.test(beforeReg),
-       "before registration the auditor reads nothing");
+  const beforeAudit = await pg.evaluate(() => ({
+    audit: document.getElementById("audRows").innerText,
+    shareDisabled: document.getElementById("btnShareA").disabled &&
+                   document.getElementById("btnShareB").disabled,
+  }));
+  pass(/AEAD auth failure/.test(beforeAudit.audit) && beforeAudit.shareDisabled,
+       "the auditor is already registered, but disclosure waits for the audit step");
 
   await step(pg, 4);
-  const afterReg = await pg.evaluate(() => document.getElementById("audRows").innerText);
-  pass(/AEAD auth failure/.test(afterReg) && !/Alice ·|Bob ·/.test(afterReg),
-       "registered but keyless, every note is a genuine AEAD failure");
+  const auditStarted = await pg.evaluate(() => ({
+    state: window.__ENYGMA_DVP.state().auditStarted,
+    shareEnabled: !document.getElementById("btnShareA").disabled &&
+                  !document.getElementById("btnShareB").disabled,
+  }));
+  pass(auditStarted.state && auditStarted.shareEnabled,
+       "the audit step enables the two explicit view-key sharing actions");
 
   await pg.click("#btnShareA");
   await pg.waitForFunction(() => window.__ENYGMA_DVP.state().alice.sharedView, null, { timeout: 10000 });
@@ -282,8 +315,10 @@ const totals = (bal, t) => bal[t].Alice + bal[t].Bob + bal[t].Others + bal[t].Va
   await w(pg, 400);
   await pg.evaluate(() => window.__ENYGMA_DVP.setTraffic(false));
   const reset = await snap(pg);
-  pass(reset.leaves.length === 8 && reset.nfs.length === 0 && reset.bal.ACME.Alice === 100 && !reset.reveal,
-       "reset returns the chain to a fresh genesis with reveal off");
+  pass(reset.leaves.length === 0 && reset.root === null && reset.nfs.length === 0 &&
+       reset.bal.ACME.Alice === 100 &&
+       !reset.reveal && !reset.auditorRegistered,
+       "reset returns the chain to a blank, pre-registration genesis with reveal off");
 
   /* the vault does not stand still — and that is the point, since the anonymity set is the tree */
   console.log("\n--- ambient traffic keeps the anonymity set growing ---");
