@@ -2,7 +2,7 @@
   "name": "enygma-demo",
   "version": "1.0.0",
   "private": true,
-  "description": "Interactive single-file demo of the Enygma privacy protocols (payments, DvP, key setup)",
+  "description": "Interactive walkthrough of the unified Enygma protocol suite",
   "scripts": {
     "test": "node tests/run-all.cjs"
   },

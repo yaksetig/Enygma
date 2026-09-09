@@ -1,44 +1,33 @@
 #!/usr/bin/env node
-/* Runs every suite in sequence and prints a summary.
- * Each suite exits non-zero if any of its checks failed; so does this runner. */
-const { spawnSync } = require("child_process");
+const { spawn, spawnSync } = require("child_process");
 const path = require("path");
+const http = require("http");
 
-const SUITES = [
-  ["keys-test.cjs",  "suite shell — one identity into all four protocols"],
-  ["env-test.cjs",   "payment envelope + Retrieve (trial decryption)"],
-  ["pk-test.cjs",    "settlement vs client-payment legs, padded payloads"],
-  ["flow-test.cjs",  "tabs, guided walkthrough, manual payment derivation"],
-  ["inv-test.cjs",   "identity balances and supply invariance"],
-  ["aud-test.cjs",   "audit by decapsulation, mismatch handling"],
-  ["bridge-test.cjs","bridge round trip, note binding, nullifier on spend"],
-  ["nf-test.cjs",    "nullifier set — no per-leaf spend state is shown"],
-  ["swap-test.cjs",  "DvP network — atomic swap, salts, revert path"],
-  ["settlement-test.cjs", "settlement.html — private securities DvP, venue invariance"],
-  ["frz-test.cjs",   "operator freeze"],
-  ["frz-test2.cjs",  "freeze during the guided walkthrough"],
-  ["faq-test.cjs",   "protocol explainer + technical FAQ"],
-];
+const root = path.join(__dirname, "..");
+const suites = ["demo-test.cjs", "source-test.cjs"];
+const server = spawn(process.execPath, [path.join(__dirname, "static-server.cjs")], { cwd: root, stdio: ["ignore", "pipe", "pipe"] });
 
-let failed = [], total = 0;
-for(const [file, what] of SUITES){
-  process.stdout.write(`\n\x1b[1m▸ ${file}\x1b[0m — ${what}\n`);
-  const r = spawnSync(process.execPath, [path.join(__dirname, file)], { encoding: "utf8" });
-  const out = (r.stdout || "") + (r.stderr || "");
-  const passes = (out.match(/ {2}PASS {2}/g) || []).length;
-  const fails  = (out.match(/ {2}FAIL {2}/g) || []).length;
-  total += passes;
-  if(r.status !== 0 || fails){
-    failed.push(file);
-    process.stdout.write(out);
-  } else {
-    process.stdout.write(`  ${passes} checks passed\n`);
+function ready() {
+  return new Promise((resolve, reject) => {
+    let attempts = 0;
+    const probe = () => {
+      const request = http.get("http://127.0.0.1:4193/", response => { response.resume(); resolve(); });
+      request.on("error", () => attempts++ < 40 ? setTimeout(probe, 100) : reject(new Error("Test server did not start.")));
+    };
+    probe();
+  });
+}
+
+(async () => {
+  try {
+    await ready();
+    for (const suite of suites) {
+      process.stdout.write(`\n▸ ${suite}\n`);
+      const result = spawnSync(process.execPath, [path.join(__dirname, suite)], { cwd: root, encoding: "utf8", env: { ...process.env, DEMO_URL: "http://127.0.0.1:4193" } });
+      process.stdout.write((result.stdout || "") + (result.stderr || ""));
+      if (result.status !== 0) process.exitCode = 1;
+    }
+  } finally {
+    server.kill();
   }
-}
-
-console.log("\n" + "─".repeat(60));
-if(failed.length){
-  console.log(`\x1b[31m${failed.length} suite(s) failed:\x1b[0m ${failed.join(", ")}`);
-  process.exit(1);
-}
-console.log(`\x1b[32mAll ${SUITES.length} suites passed — ${total} checks.\x1b[0m`);
+})().catch(error => { console.error(error); server.kill(); process.exit(1); });
