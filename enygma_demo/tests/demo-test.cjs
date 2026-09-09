@@ -303,20 +303,94 @@ function pass(name) { passed += 1; console.log(`  PASS  ${name}`); }
     assert.equal(await page.locator('.scenario-progress a[href="#/dvp/unshield"]').getByText(/Optional unshield/i).count(), 1);
     pass("DvP audit view uses registration-time access and keeps the outsider view opaque");
 
-    const auctionActions = [
-      ["auctioneer", "auctioneer"], ["mint", "mint"], ["open", "open"],
-      ["bids", "bid"], ["bids", "bid"], ["batch", "batch"], ["settle", "settle"],
-      ["challenge", "challenge"], ["challenge", "recover"]
-    ];
-    for (const [screen, action] of auctionActions) {
-      await page.goto(`${BASE_URL}/#/auctions/${screen}`);
-      await page.click(`[data-action="${action}"]`); await page.waitForTimeout(40);
-    }
+    await page.goto(`${BASE_URL}/#/auctions/auctioneer`);
+    assert.match(await page.locator(".scenario-page").innerText(), /auctioneer—not the operator—generates/i);
+    await page.click('[data-action="auctioneer"]'); await page.waitForTimeout(40);
     state = await page.evaluate(() => window.__ENYGMA_DEMO__.state());
-    assert.equal(state.protocols.auctions.flow.challengeOpen, false);
-    assert(state.protocols.auctions.flow.auctioneer.publicKey.startsWith("mlkem_pub_"));
-    assert.notEqual(state.protocols.auctions.flow.auctioneer.publicKey, state.protocols.auctions.auditor.publicKey);
-    pass("auction setup, bids, batch, settlement, challenge, and recovery paths");
+    assert(state.protocols.auctions.flow.auction.auctioneerKey.publicKey.startsWith("mlkem_pk_"));
+    assert.notEqual(state.protocols.auctions.flow.auction.auctioneerKey.publicKey, state.protocols.auctions.auditor.publicKey);
+    await page.goto(`${BASE_URL}/#/auctions/auctioneer-registration`);
+    assert.match(await page.locator(".registration-binding").innerText(), /auction_class_a_01/i);
+    await page.click('[data-action="register-auctioneer"]'); await page.waitForTimeout(40);
+    state = await page.evaluate(() => window.__ENYGMA_DEMO__.state());
+    assert.equal(state.protocols.auctions.flow.auction.auctioneerRegistered, true);
+    pass("auctioneer generates its own key and the operator binds it to one auction");
+
+    await page.goto(`${BASE_URL}/#/auctions/mint-asset`);
+    await page.click('[data-action="mint-nft"]'); await page.waitForTimeout(40);
+    await page.goto(`${BASE_URL}/#/auctions/list-asset`);
+    await page.fill("#auctionDuration", "14");
+    await page.click('[data-action="list-asset"]'); await page.waitForTimeout(40);
+    state = await page.evaluate(() => window.__ENYGMA_DEMO__.state());
+    assert.equal(state.protocols.auctions.flow.auction.assetType, "Class A Share");
+    assert.equal(state.protocols.auctions.flow.auction.assetTokenId, "CLASS-A-0042");
+    assert.equal(state.protocols.auctions.flow.auction.biddingDuration, 14);
+    assert.equal(state.protocols.auctions.trees["Class A Share"].leafIds.length, 1);
+    assert.match(await page.locator(".listing-visibility").innerText(), /Bidders are shown[\s\S]*Class A Share[\s\S]*details remain private/i);
+    pass("seller lists a specific NFT while bidders see only the asset type and timeout");
+
+    await page.goto(`${BASE_URL}/#/auctions/fund-bidder`);
+    await page.fill("#auctionMintCashAmount", "1000");
+    await page.click('[data-action="mint-cash"]'); await page.waitForTimeout(40);
+    await page.goto(`${BASE_URL}/#/auctions/shield-bidder`);
+    await page.fill("#auctionShieldCashAmount", "650");
+    await page.click('[data-action="shield-cash"]'); await page.waitForTimeout(40);
+    state = await page.evaluate(() => window.__ENYGMA_DEMO__.state());
+    const auctionFundingNote = state.protocols.auctions.notes.find(note => note.origin === "auction_funding");
+    assert.equal(auctionFundingNote.amount, 650);
+    assert.equal(await page.locator('[data-tree-asset="USD"] .owned-leaf').count(), 1);
+    await page.goto(`${BASE_URL}/#/auctions/submit-bid`);
+    assert.match(await page.locator(".bid-target").innerText(), /Class A Share[\s\S]*details withheld/i);
+    await page.click('[data-action="submit-bid"]'); await page.waitForTimeout(40);
+    state = await page.evaluate(() => window.__ENYGMA_DEMO__.state());
+    assert.equal(state.protocols.auctions.flow.auction.bids[0].amount, 650);
+    assert.equal(state.protocols.auctions.notes.find(note => note.id === auctionFundingNote.id).status, "locked");
+    assert.doesNotMatch(await page.locator(".bid-target").innerText(), /CLASS-A-0042/);
+    pass("bidder funds, shields, and locks one exact private USD note as a sealed bid");
+
+    await page.goto(`${BASE_URL}/#/auctions/bidding-window`);
+    await page.click('[data-action="collect-bids"]'); await page.waitForTimeout(40);
+    assert.equal(await page.locator(".opaque-bid-stream > div").count(), 5);
+    assert.doesNotMatch(await page.locator(".opaque-bid-stream").innerText(), /\b(?:650|610|575|540|420) USD\b/);
+    await page.click('[data-action="close-bidding"]'); await page.waitForTimeout(40);
+    state = await page.evaluate(() => window.__ENYGMA_DEMO__.state());
+    assert.equal(state.protocols.auctions.flow.auction.status, "closed");
+    assert.equal(state.protocols.auctions.flow.auction.blocksRemaining, 0);
+    await page.goto(`${BASE_URL}/#/auctions/bid-review`);
+    assert.doesNotMatch(await page.locator(".auction-view.public").innerText(), /\b(?:650|610|575|540|420) USD\b/);
+    assert.match(await page.locator(".private-bid-table").innerText(), /650 USD[\s\S]*610 USD/i);
+    assert.match(await page.locator(".scenario-page").innerText(), /Auctioneer[\s\S]*Auditor/i);
+    pass("timeout closes bidding before auctioneer and auditor open all valid bids");
+
+    await page.goto(`${BASE_URL}/#/auctions/winner-proof`);
+    assert.match(await page.locator(".proof-statement").innerText(), /Out of all valid bids, this specific bid has the highest amount/i);
+    await page.click('[data-action="prove-winner"]'); await page.waitForTimeout(40);
+    state = await page.evaluate(() => window.__ENYGMA_DEMO__.state());
+    assert.equal(state.protocols.auctions.flow.auction.winnerProof.privateWinningAmount, 650);
+    assert.equal(state.protocols.auctions.flow.auction.winnerProof.validBidCount, 5);
+    assert.doesNotMatch(await page.locator(".winner-announcement").innerText(), /650/);
+    assert.match(await page.locator(".winner-announcement").innerText(), /Winning amount remains private/i);
+    pass("auctioneer announces only the winning commitment and highest-valid-bid proof");
+
+    await page.goto(`${BASE_URL}/#/auctions/settlement`);
+    await page.click('[data-action="challenge"]'); await page.waitForTimeout(40);
+    state = await page.evaluate(() => window.__ENYGMA_DEMO__.state());
+    assert.equal(state.protocols.auctions.flow.auction.challengeOpen, true);
+    await page.click('[data-action="settle"]'); await page.waitForTimeout(40);
+    state = await page.evaluate(() => window.__ENYGMA_DEMO__.state());
+    assert.equal(state.protocols.auctions.flow.auction.status, "settled");
+    assert.equal(state.protocols.auctions.flow.auction.challengeOpen, false);
+    assert.equal(state.protocols.auctions.flow.auction.settlement.winnerPartyId, "party-0");
+    assert.equal(state.protocols.auctions.notes.find(note => note.id === auctionFundingNote.id).status, "spent");
+    assert.equal(state.protocols.auctions.notes.filter(note => note.origin === "auction_output").length, 2);
+    assert.equal(state.protocols.auctions.notes.filter(note => note.origin === "auction_recovery").length, 4);
+    assert.equal(state.protocols.auctions.trees["Class A Share"].leafIds.length, 2);
+    assert.equal(state.protocols.auctions.trees.USD.leafIds.length, 6);
+    assert.match(await page.locator(".settlement-outputs").innerText(), /Public winning amount[\s\S]*Not disclosed/i);
+    await page.goto(`${BASE_URL}/#/auctions/audit`);
+    assert.equal(await page.locator('[data-share]').count(), 0);
+    assert.match(await page.locator(".auction-visibility-matrix").innerText(), /Public network[\s\S]*Cannot open any bid amount[\s\S]*Auditor[\s\S]*Cannot bid, choose, or spend/i);
+    pass("challenged winner proof verifies before atomic NFT-for-USD settlement and losing-bid recovery");
 
     await page.goto(`${BASE_URL}/#/retail/traffic`);
     const before = await page.evaluate(() => ({ tx: window.__ENYGMA_DEMO__.state().protocols.retail.transactions.length, leaves: window.__ENYGMA_DEMO__.state().protocols.retail.leaves.length }));

@@ -1,7 +1,7 @@
 import { PARTY_NAMES, PROTOCOL_IDS, PROTOCOLS } from "./config.js";
 
-const STORAGE_KEY = "enygma-demo-state-v9";
-const VERSION = 9;
+const STORAGE_KEY = "enygma-demo-state-v10";
+const VERSION = 10;
 
 function seedNumber(value) {
   let hash = 2166136261;
@@ -54,6 +54,35 @@ function defaultDvpTerms() {
     expiryBlocks: 30,
     securityInputNoteId: null,
     cashInputNoteId: null
+  };
+}
+
+function defaultAuction() {
+  return {
+    reference: "auction_class_a_01",
+    title: "Class A Share Auction",
+    assetType: "Class A Share",
+    assetTokenId: "CLASS-A-0042",
+    cashToken: "USD",
+    sellerPartyId: "party-2",
+    bidderPartyId: "party-0",
+    auctioneerKey: null,
+    auctioneerRegistered: false,
+    nftMinted: false,
+    sellerPublicNft: 0,
+    nftNoteId: null,
+    listed: false,
+    biddingDuration: 12,
+    settlementDuration: 8,
+    blocksRemaining: 12,
+    publicCash: 0,
+    privateCash: 0,
+    bids: [],
+    otherBidsCollected: false,
+    status: "draft",
+    winnerProof: null,
+    challengeOpen: false,
+    settlement: null
   };
 }
 
@@ -242,12 +271,7 @@ function blankProtocol(id) {
       dvpTransfer: null,
       securityLocked: false,
       cashLocked: false,
-      auctioneer: null,
-      minted: false,
-      auctionOpen: false,
-      bids: 0,
-      batchReady: false,
-      challengeOpen: false
+      auction: defaultAuction()
     }
   };
 }
@@ -517,7 +541,7 @@ export class DemoEngine extends EventTarget {
         protocol.leaves.push({
           id: token("leaf_", `${tx.id}:${index}`, 20),
           commitment: options.leafCommitments?.[index] || (options.leaves === 1 ? tx.encryptedPayload?.commitment : null) || token("0x", `${tx.id}:commitment:${index}`, 64),
-          assetId: options.leafAssets?.[index] || options.encryptedNote?.tokenId || options.assetId || "DEFAULT",
+          assetId: options.leafAssets?.[index] || options.assetId || options.encryptedNote?.tokenId || "DEFAULT",
           sourceTxId: tx.id,
           provenance: { from: tx.from, to: tx.to, action: type },
         });
@@ -698,14 +722,173 @@ export class DemoEngine extends EventTarget {
         tx = this.addTransaction(id, action, "Buyer unshielded 25 acquired security units to the public vault", { from: 1, to: 1 });
         break;
       }
-      case "auctions:auctioneer": p.flow.auctioneer = { publicKey: token("mlkem_pub_", `${id}:auctioneer`, 80) }; tx = this.addTransaction(id, action, "Separate auctioneer bid-decryption key generated"); break;
-      case "auctions:mint": p.flow.minted = true; tx = this.addTransaction(id, action, "Auction lot minted and escrowed", { leaves: 1 }); break;
-      case "auctions:open": p.flow.auctionOpen = true; tx = this.addTransaction(id, action, "Sealed-bid auction opened"); break;
-      case "auctions:bid": p.flow.bids += 1; tx = this.addTransaction(id, action, `Sealed bid ${p.flow.bids} accepted`); break;
-      case "auctions:batch": p.flow.batchReady = true; tx = this.addTransaction(id, action, `${p.flow.bids} sealed bids batched`); break;
-      case "auctions:settle": p.flow.auctionOpen = false; tx = this.addTransaction(id, action, "Auction settled to winning commitment", { leaves: 2 }); break;
-      case "auctions:challenge": p.flow.challengeOpen = true; tx = this.addTransaction(id, action, "Settlement challenge opened", { status: "challenged" }); break;
-      case "auctions:recover": p.flow.challengeOpen = false; tx = this.addTransaction(id, action, "Challenge resolved and escrow recovered", { status: "recovered" }); break;
+      case "auctions:auctioneer": {
+        const auction = p.flow.auction;
+        if (auction.auctioneerKey) throw new Error("The auctioneer key has already been generated for this auction.");
+        auction.auctioneerKey = {
+          secretKey: token("mlkem_sk_", `${id}:${auction.reference}:auctioneer-secret`, 80),
+          publicKey: token("mlkem_pk_", `${id}:${auction.reference}:auctioneer-public`, 80)
+        };
+        tx = this.receipt(id, action, `Auctioneer generated its bid-decryption key for ${auction.title}`);
+        break;
+      }
+      case "auctions:register-auctioneer": {
+        const auction = p.flow.auction;
+        if (!auction.auctioneerKey) throw new Error("The auctioneer must generate its auction key first.");
+        auction.auctioneerRegistered = true;
+        tx = this.addTransaction(id, action, `Operator registered the auctioneer public key for ${auction.reference}`);
+        break;
+      }
+      case "auctions:mint-nft": {
+        const auction = p.flow.auction;
+        if (!auction.auctioneerRegistered) throw new Error("Register the auctioneer for this auction first.");
+        auction.nftMinted = true;
+        auction.sellerPublicNft = 1;
+        tx = this.addTransaction(id, action, `Issuer minted one ${auction.assetType} to ${p.registrations[2].name}`, { from: 0, to: 2 });
+        break;
+      }
+      case "auctions:list-asset": {
+        const auction = p.flow.auction;
+        if (!auction.nftMinted || auction.sellerPublicNft !== 1) throw new Error("The seller must own the asset before listing it.");
+        const duration = Math.max(2, Math.round(Number(payload.duration) || 12));
+        const owner = p.registrations[2];
+        auction.biddingDuration = duration;
+        auction.blocksRemaining = duration;
+        auction.sellerPublicNft = 0;
+        auction.listed = true;
+        auction.status = "bidding";
+        tx = this.addTransaction(id, action, `${owner.name} listed ${auction.assetType} with a ${duration}-block bidding window`, { leaves: 1, assetId: auction.assetType, from: 2, to: 2, encryptedNote: { scope: "auction_asset", leg: "locked auction asset", ownerPartyId: "party-2", spendPublicKey: owner.spendPublicKey, tokenId: auction.assetTokenId, amount: 1 } });
+        const note = recordPrivateNote(p, tx, { ownerPartyId: "party-2", ownerName: owner.name, spendPublicKey: owner.spendPublicKey, assetId: auction.assetType, amount: 1, origin: "auction_asset" });
+        if (note) note.status = "locked";
+        auction.nftNoteId = note?.id || null;
+        break;
+      }
+      case "auctions:mint-cash": {
+        const auction = p.flow.auction;
+        if (!auction.listed) throw new Error("The seller must list the auction asset before bidder funding begins.");
+        const amount = positiveAmount(payload.amount, "USD mint amount");
+        auction.publicCash += amount;
+        tx = this.addTransaction(id, action, `Operator minted ${amount.toLocaleString("en-US")} USD to the bidder`, { from: 0, to: 0 });
+        break;
+      }
+      case "auctions:shield-cash": {
+        const auction = p.flow.auction;
+        const amount = positiveAmount(payload.amount, "USD shielding amount");
+        if (amount > auction.publicCash) throw new Error("The shielding amount exceeds the bidder’s public USD balance.");
+        const owner = p.registrations[0];
+        auction.publicCash -= amount;
+        auction.privateCash += amount;
+        tx = this.addTransaction(id, action, `${owner.name} shielded ${amount.toLocaleString("en-US")} USD into a private bidding note`, { leaves: 1, from: 0, to: 0, encryptedNote: { scope: "auction_funding", leg: "bidder funding", ownerPartyId: "party-0", spendPublicKey: owner.spendPublicKey, tokenId: auction.cashToken, amount } });
+        recordPrivateNote(p, tx, { ownerPartyId: "party-0", ownerName: owner.name, spendPublicKey: owner.spendPublicKey, assetId: auction.cashToken, amount, origin: "auction_funding" });
+        break;
+      }
+      case "auctions:submit-bid": {
+        const auction = p.flow.auction;
+        if (auction.status !== "bidding") throw new Error("This auction is not accepting bids.");
+        const inputNote = p.notes.find(note => note.id === payload.noteId && note.ownerPartyId === "party-0" && note.origin === "auction_funding" && note.status === "unspent");
+        if (!inputNote) throw new Error("Select one available private USD note for the bid.");
+        const bidder = p.registrations[0];
+        inputNote.status = "locked";
+        tx = this.addTransaction(id, action, `${bidder.name} submitted a sealed bid for ${auction.assetType}`, { from: 0, to: 2, encryptedNote: { scope: "auction_bid", leg: "sealed bid", ownerPartyId: "party-0", spendPublicKey: bidder.spendPublicKey, tokenId: auction.cashToken, amount: inputNote.amount } });
+        const revertSalt = token("salt_", `${id}:${auction.reference}:bid:0:revert`, 40);
+        auction.bids.push({
+          id: token("bid_", `${id}:${auction.reference}:0`, 18), bidderPartyId: "party-0", bidderName: bidder.name,
+          amount: inputNote.amount, inputNoteId: inputNote.id, commitA: tx.encryptedPayload.commitment,
+          commitB: token("0x", `${p.registrations[2].spendPublicKey}:${tx.id}:seller-payout:${inputNote.amount}`, 64),
+          revertSalt, revertCommit: token("0x", `${bidder.spendPublicKey}:${revertSalt}:${auction.cashToken}:${inputNote.amount}`, 64),
+          ciphertext: tx.ciphertext, proof: tx.proof, valid: true, status: "active"
+        });
+        break;
+      }
+      case "auctions:collect-bids": {
+        const auction = p.flow.auction;
+        if (!auction.bids.some(bid => bid.bidderPartyId === "party-0")) throw new Error("Submit your bid before receiving the remaining bids.");
+        if (auction.otherBidsCollected) throw new Error("The remaining bids have already been received.");
+        const bidders = [{ index: 1, amount: 420 }, { index: 3, amount: 575 }, { index: 4, amount: 610 }, { index: 5, amount: 540 }];
+        for (const item of bidders) {
+          const bidder = p.registrations[item.index];
+          const bidTx = this.addTransaction(id, "sealed-bid", `${bidder.name} submitted a sealed bid`, { from: item.index, to: 2, encryptedNote: { scope: "auction_bid", leg: "sealed bid", ownerPartyId: bidder.partyId, spendPublicKey: bidder.spendPublicKey, tokenId: auction.cashToken, amount: item.amount } });
+          const revertSalt = token("salt_", `${id}:${auction.reference}:bid:${item.index}:revert`, 40);
+          auction.bids.push({
+            id: token("bid_", `${id}:${auction.reference}:${item.index}`, 18), bidderPartyId: bidder.partyId, bidderName: bidder.name,
+            amount: item.amount, inputNoteId: null, commitA: bidTx.encryptedPayload.commitment,
+            commitB: token("0x", `${p.registrations[2].spendPublicKey}:${bidTx.id}:seller-payout:${item.amount}`, 64),
+            revertSalt, revertCommit: token("0x", `${bidder.spendPublicKey}:${revertSalt}:${auction.cashToken}:${item.amount}`, 64),
+            ciphertext: bidTx.ciphertext, proof: bidTx.proof, valid: true, status: "active"
+          });
+        }
+        auction.otherBidsCollected = true;
+        tx = this.receipt(id, action, "Four additional sealed bids entered the auction");
+        break;
+      }
+      case "auctions:close-bidding": {
+        const auction = p.flow.auction;
+        if (auction.bids.length < 2) throw new Error("At least two valid bids are required for this walkthrough.");
+        auction.blocksRemaining = 0;
+        auction.status = "closed";
+        tx = this.receipt(id, action, `The ${auction.biddingDuration}-block bidding window expired; submissions closed`);
+        break;
+      }
+      case "auctions:prove-winner": {
+        const auction = p.flow.auction;
+        if (auction.status !== "closed") throw new Error("The bidding timeout must expire before bids can be opened.");
+        const validBids = auction.bids.filter(bid => bid.valid && bid.status === "active");
+        const winner = validBids.reduce((best, bid) => !best || bid.amount > best.amount ? bid : best, null);
+        if (!winner) throw new Error("No valid bids are available.");
+        auction.winnerProof = {
+          id: token("proof_", `${id}:${auction.reference}:highest-valid-bid`, 54),
+          winnerBidId: winner.id,
+          winnerCommitment: winner.commitA,
+          validBidCount: validBids.length,
+          privateWinningAmount: winner.amount,
+          statement: "The selected commitment is an active valid bid and its hidden amount is greater than or equal to every other active valid bid."
+        };
+        auction.status = "winner_announced";
+        tx = this.addTransaction(id, action, "Auctioneer announced the winning bid commitment with a highest-valid-bid proof", { from: 2, to: 0 });
+        break;
+      }
+      case "auctions:challenge": {
+        const auction = p.flow.auction;
+        if (!auction.winnerProof || auction.settlement) throw new Error("A pending winner proof is required before challenge.");
+        auction.challengeOpen = true;
+        tx = this.addTransaction(id, action, "Winner proof challenged; contract verification required", { status: "challenged" });
+        break;
+      }
+      case "auctions:settle": {
+        const auction = p.flow.auction;
+        if (!auction.winnerProof || auction.settlement) throw new Error("The auctioneer must announce a proven winner before settlement.");
+        const winner = auction.bids.find(bid => bid.id === auction.winnerProof.winnerBidId);
+        const winnerRegistration = p.registrations.find(item => item.partyId === winner.bidderPartyId);
+        const seller = p.registrations[2];
+        const nftPayload = encryptedNotePayload(id, `${auction.reference}:nft-output`, { scope: "auction_settlement", leg: "asset delivery", ownerPartyId: winner.bidderPartyId, spendPublicKey: winnerRegistration.spendPublicKey, tokenId: auction.assetTokenId, amount: 1 });
+        const cashPayload = encryptedNotePayload(id, `${auction.reference}:cash-output`, { scope: "auction_settlement", leg: "seller proceeds", ownerPartyId: seller.partyId, spendPublicKey: seller.spendPublicKey, tokenId: auction.cashToken, amount: winner.amount, commitment: winner.commitB });
+        const losers = auction.bids.filter(bid => bid.id !== winner.id && bid.status === "active");
+        const recoveryPayloads = losers.map(bid => {
+          const registration = p.registrations.find(item => item.partyId === bid.bidderPartyId);
+          return encryptedNotePayload(id, `${auction.reference}:${bid.id}:recovery`, { scope: "auction_recovery", leg: "losing bid recovery", ownerPartyId: bid.bidderPartyId, spendPublicKey: registration.spendPublicKey, tokenId: auction.cashToken, amount: bid.amount, salt: bid.revertSalt, commitment: bid.revertCommit });
+        });
+        const payloads = [nftPayload, cashPayload, ...recoveryPayloads];
+        tx = this.addTransaction(id, "atomic-auction-settlement", `${auction.challengeOpen ? "Challenged proof verified; " : "Winner proof accepted; "}auction DvP settled atomically`, { leaves: payloads.length, from: 2, to: this.state.identities.findIndex(identity => identity.id === winner.bidderPartyId), leafCommitments: payloads.map(item => item.commitment), leafAssets: [auction.assetType, ...payloads.slice(1).map(() => auction.cashToken)] });
+        const nftInput = p.notes.find(note => note.id === auction.nftNoteId);
+        if (nftInput) nftInput.status = "spent";
+        for (const bid of auction.bids) {
+          bid.status = bid.id === winner.id ? "won" : "recovered";
+          const input = p.notes.find(note => note.id === bid.inputNoteId);
+          if (input) input.status = "spent";
+        }
+        recordPrivateNote(p, tx, { payload: nftPayload, ownerPartyId: winner.bidderPartyId, ownerName: winnerRegistration.name, spendPublicKey: winnerRegistration.spendPublicKey, assetId: auction.assetType, amount: 1, origin: "auction_output" });
+        recordPrivateNote(p, tx, { payload: cashPayload, ownerPartyId: seller.partyId, ownerName: seller.name, spendPublicKey: seller.spendPublicKey, assetId: auction.cashToken, amount: winner.amount, origin: "auction_output" });
+        recoveryPayloads.forEach((payloadItem, index) => {
+          const bid = losers[index];
+          const registration = p.registrations.find(item => item.partyId === bid.bidderPartyId);
+          recordPrivateNote(p, tx, { payload: payloadItem, ownerPartyId: bid.bidderPartyId, ownerName: registration.name, spendPublicKey: registration.spendPublicKey, assetId: auction.cashToken, amount: bid.amount, origin: "auction_recovery" });
+        });
+        auction.privateCash = winner.bidderPartyId === "party-0" ? Math.max(0, auction.privateCash - winner.amount) : auction.privateCash;
+        auction.challengeOpen = false;
+        auction.status = "settled";
+        auction.settlement = { txId: tx.id, winnerBidId: winner.id, winnerCommitment: winner.commitA, winnerPartyId: winner.bidderPartyId, validBidCount: auction.winnerProof.validBidCount };
+        break;
+      }
       default: throw new Error(`Unsupported protocol action: ${id}:${action}`);
     }
     this.persist();

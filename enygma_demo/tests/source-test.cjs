@@ -8,6 +8,7 @@ const source = deployable.map(file => fs.readFileSync(path.join(root, file), "ut
 const retiredCurve = new RegExp(["baby", "jub"].join("\\s*"), "i");
 const environmentFraming = new RegExp(["simu" + "lat", "fix" + "ture", "mock" + "ed", "presentation" + "-only"].join("|"), "i");
 const dvpSource = source.slice(source.indexOf("function dvpSteps"), source.indexOf("function auctionSteps"));
+const auctionSource = source.slice(source.indexOf("function auctionSteps"), source.indexOf("function scenarioSteps"));
 const checks = [
   [!retiredCurve.test(source), "no retired auditor-curve references"],
   [!/crypto\.subtle|WebCrypto|Pedersen|Poseidon|Merkle proof/i.test(source), "no real cryptographic implementation"],
@@ -29,6 +30,13 @@ const checks = [
   [/function dvpAuditCard/.test(source) && /Auditor access established during registration/.test(source) && /The same settlement, three different views/.test(source), "DvP auditing reuses registration-time access and compares privacy perspectives"],
   [!/id: "traffic"|id: "chain"/.test(dvpSource), "DvP has no trailing traffic or public-chain stages"],
   [/label: "Optional unshield"/.test(source), "DvP unshielding is explicitly optional"],
+  [/case "auctions:register-auctioneer"/.test(source) && /auction\.auctioneerRegistered/.test(source) && /Register auctioneer for this auction/.test(auctionSource), "auctioneer key is bound to one specific auction"],
+  [/case "auctions:mint-nft"/.test(source) && /case "auctions:list-asset"/.test(source) && /Bidders are shown/.test(auctionSource), "auction asset is minted before listing and bidder-visible details are constrained"],
+  [/case "auctions:mint-cash"/.test(source) && /case "auctions:shield-cash"/.test(source) && /case "auctions:submit-bid"/.test(source), "auction bid consumes a funded private USD note"],
+  [/case "auctions:close-bidding"/.test(source) && /case "auctions:prove-winner"/.test(source) && /highest-valid-bid proof/.test(source), "bidding closes at timeout before the auctioneer proves the winner"],
+  [/privateWinningAmount/.test(source) && /Winning amount remains private/.test(auctionSource) && /Public winning amount/.test(auctionSource), "winner announcement and settlement do not publish the winning amount"],
+  [/atomic-auction-settlement/.test(source) && /auction_recovery/.test(source) && /asset-tree-stack/.test(auctionSource), "auction settlement atomically creates asset, payout, and loser-recovery notes"],
+  [!/publicChainCard\(p\)|auditCard\(p\)/.test(auctionSource), "auction uses protocol-specific privacy views instead of generic audit and chain cards"],
   [!environmentFraming.test(source), "professional environment language throughout"],
   [source.includes("#5B4BE0") && source.includes("#B87708") && source.includes("#171922"), "Rayls light palette is centralized"]
 ];

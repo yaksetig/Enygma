@@ -19,9 +19,9 @@ export const PROTOCOLS = {
   },
   auctions: {
     name: "Sealed-bid Auctions", short: "Auctions", icon: "SA",
-    description: "Role-separated auction setup, sealed bids, batching, settlement, challenges, and recovery.",
+    description: "Auction-specific roles, private funded bids, highest-bid proofs, and atomic asset settlement.",
     contracts: ["SealedAuction", "AuctionVerifier", "BidVault", "SettlementVault"],
-    actions: ["auctioneer", "mint", "bid", "settle", "challenge"]
+    actions: ["auctioneer", "register-auctioneer", "mint-nft", "list-asset", "mint-cash", "shield-cash", "submit-bid", "collect-bids", "close-bidding", "prove-winner", "challenge", "settle"]
   }
 };
 
