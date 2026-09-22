@@ -1,7 +1,7 @@
-import { PARTY_NAMES, PROTOCOL_IDS, PROTOCOLS } from "./config.js";
+import { PARTY_NAMES, PROTOCOL_IDS, PROTOCOLS, PROTOCOL_PRIMITIVES, spendPublicKeyFor, initializationSteps } from "./config.js";
 
-const STORAGE_KEY = "enygma-demo-state-v10";
-const VERSION = 10;
+const STORAGE_KEY = "enygma-demo-state-v12";
+const VERSION = 12;
 
 function seedNumber(value) {
   let hash = 2166136261;
@@ -24,6 +24,25 @@ function deriveHex(label, length = 64) {
 
 function token(prefix, label, length = 64) {
   return `${prefix}${deriveHex(label, length)}`;
+}
+
+function spendPublicKeys(secret) {
+  return {
+    spendPublicKey: token("spend_pk_", `Poseidon(${secret})`),
+    institutionalSpendPublicKey: token("spend_pk_", `Poseidon(${secret},${secret}) mod subgroup-order`)
+  };
+}
+
+function deploymentRecord(protocol, spec, address) {
+  const resolve = value => protocol.contracts.find(item => (item.instance || item.name) === value)?.address ?? value;
+  return {
+    id: spec.instance || spec.name,
+    name: spec.name,
+    instance: spec.instance,
+    address: address || token("0x", `${protocol.id}:contract:${spec.instance || spec.name}`, 40),
+    constructorArgs: (spec.constructorArgs || []).map(resolve),
+    libraries: Object.fromEntries((spec.libraries || []).map(name => [name, resolve(name)]))
+  };
 }
 
 function pairwiseChannels(id, registrations) {
@@ -70,6 +89,7 @@ function defaultAuction() {
     auctioneerRegistered: false,
     nftMinted: false,
     sellerPublicNft: 0,
+    assetQuantity: 0,
     nftNoteId: null,
     listed: false,
     biddingDuration: 12,
@@ -106,9 +126,38 @@ function positiveAmount(value, label) {
   return Math.min(amount, 1_000_000_000_000);
 }
 
+function retailTagCandidateIndices(mode, totalUsers, recipientIndex, excludedIndices = []) {
+  if (mode === "none") return [recipientIndex];
+  if (mode === "subset") {
+    const candidates = [recipientIndex];
+    const decoys = Math.max(1, Math.floor(Math.sqrt(totalUsers)));
+    for (let offset = 1; candidates.length < decoys + 1; offset += 1) {
+      const index = (recipientIndex + offset * 2) % totalUsers;
+      if (!candidates.includes(index)) candidates.push(index);
+    }
+    return candidates.sort((a, b) => a - b);
+  }
+  if (mode === "rift") {
+    const excluded = new Set(excludedIndices.filter(index => index !== recipientIndex));
+    return Array.from({ length: totalUsers }, (_, index) => index).filter(index => !excluded.has(index));
+  }
+  return Array.from({ length: totalUsers }, (_, index) => index);
+}
+
+function payloadPrimitives(id, scope) {
+  return {
+    commitmentAlgorithm: PROTOCOL_PRIMITIVES[id].commitment,
+    keyDerivation: PROTOCOL_PRIMITIVES[id].derivation,
+    encryption: scope === "dvp_leg" ? PROTOCOL_PRIMITIVES.dvp.swapEncryption : "AES-256-GCM",
+    encryptedFields: scope === "dvp_leg" ? ["token_id", "amount", "salt_star"] : ["token_id", "amount"]
+  };
+}
+
 function encryptedNotePayload(id, txId, details) {
   const salt = details.salt || token("salt_", `${id}:${txId}:${details.leg || "note"}:salt`, 40);
-  const commitment = details.commitment || token("0x", `${details.spendPublicKey || details.ownerPartyId}:${salt}:${details.tokenId}:${details.amount}`, 64);
+  const commitment = details.commitment || (id === "institutional"
+    ? token("C_", `${id}:${txId}:Pedersen:${details.amount}:${salt}`)
+    : token("0x", `${details.spendPublicKey || details.ownerPartyId}:${salt}:${details.amount}:${details.tokenId}`, 64));
   return {
     scope: details.scope || "private_note",
     leg: details.leg || "note",
@@ -120,7 +169,7 @@ function encryptedNotePayload(id, txId, details) {
     commitment,
     ciphertext: token("enc_note_", `${id}:${txId}:salt-token-amount`, 64),
     symmetricKey: token("tx_key_", `${id}:${txId}:symmetric-key`, 64),
-    encryptedFields: ["salt", "token_id", "amount"]
+    ...payloadPrimitives(id, details.scope)
   };
 }
 
@@ -230,6 +279,7 @@ function blankProtocol(id) {
     id,
     stage: 0,
     contracts: [],
+    deploymentActions: [],
     auditor: null,
     auditorConfigured: false,
     registrations: [],
@@ -252,6 +302,7 @@ function blankProtocol(id) {
       frozen: false,
       bridgeReady: false,
       retailRecipient: null,
+      retailTagChannel: null,
       issued: 0,
       locked: false,
       settlement: "idle",
@@ -307,7 +358,22 @@ export class DemoEngine extends EventTarget {
     try {
       const parsed = JSON.parse(sessionStorage.getItem(STORAGE_KEY));
       if (parsed?.version === VERSION && parsed.protocols) {
+        // Keep existing walkthrough progress while adding the institutional derivation.
+        for (const identity of [...(parsed.identities || []), parsed.identityCeremony].filter(Boolean)) {
+          if (identity.spendPublicKey && !identity.institutionalSpendPublicKey) {
+            identity.institutionalSpendPublicKey = spendPublicKeys(identity.spendPrivateKey).institutionalSpendPublicKey;
+          }
+        }
         const institutional = parsed.protocols.institutional;
+        // Institutional balances are account commitments, not note-tree leaves.
+        if (institutional) {
+          institutional.leaves = [];
+          institutional.trees = {};
+        }
+        for (const registration of institutional?.registrations || []) {
+          const identity = parsed.identities.find(item => item.id === registration.partyId);
+          if (identity) registration.spendPublicKey = spendPublicKeyFor(identity, "institutional");
+        }
         if (institutional?.flow && !Array.isArray(institutional.flow.channelPairs)) {
           institutional.flow.channelPairs = institutional.flow.channels ? pairwiseChannels("institutional", institutional.registrations) : [];
         }
@@ -316,7 +382,20 @@ export class DemoEngine extends EventTarget {
           if (dvpFlow.dvpTerms.status === "agreed" && dvpFlow.dvpTransfer?.status === "open" && !dvpFlow.cashLocked && !dvpFlow.securityLocked) dvpFlow.dvpTransfer = null;
         }
         for (const protocol of Object.values(parsed.protocols)) {
+          if (protocol.stage > 0) {
+            const previous = protocol.contracts || [];
+            protocol.contracts = [];
+            for (const spec of PROTOCOLS[protocol.id].contracts) {
+              const existing = previous.find(item => item.name === spec.name && (item.instance || "") === spec.instance);
+              protocol.contracts.push(deploymentRecord(protocol, spec, existing?.address));
+            }
+            protocol.deploymentActions ||= initializationSteps(protocol.id);
+          } else {
+            protocol.deploymentActions ||= [];
+          }
+          if (protocol.auditor) protocol.auditor.algorithm = "ML-KEM-768";
           for (const tx of protocol.transactions || []) {
+            tx.proofSystem = PROTOCOL_PRIMITIVES[protocol.id].proof;
             if (!tx.encryptedPayload && protocol.id === "dvp" && ["lock-security", "lock-cash"].includes(tx.type)) {
               const leg = tx.type === "lock-security" ? "security" : "cash";
               const terms = protocol.flow.dvpTerms;
@@ -329,12 +408,13 @@ export class DemoEngine extends EventTarget {
                 amount: leg === "security" ? terms.quantity : terms.cashAmount
               });
             }
+            if (tx.encryptedPayload) Object.assign(tx.encryptedPayload, payloadPrimitives(protocol.id, tx.encryptedPayload.scope));
           }
           rebuildCommitmentTrees(protocol);
         }
         const retailFlow = parsed.protocols.retail?.flow;
         if (retailFlow && typeof retailFlow.retailRecipient === "undefined") retailFlow.retailRecipient = null;
-        if (retailFlow) delete retailFlow.channelMode;
+        if (retailFlow && typeof retailFlow.retailTagChannel === "undefined") retailFlow.retailTagChannel = null;
         return parsed;
       }
     } catch { /* A clean session is a valid starting point. */ }
@@ -360,7 +440,8 @@ export class DemoEngine extends EventTarget {
 
   receipt(id, kind, label, audit = false) {
     const protocol = this.protocol(id);
-    const ordinal = protocol.ledger.length + 1;
+    const ordinal = (protocol.receiptCount ?? Math.max(0, ...protocol.ledger.map(item => item.block - 9000))) + 1;
+    protocol.receiptCount = ordinal;
     const entry = {
       id: token("rcpt_", `${id}:${kind}:${ordinal}`, 18),
       kind,
@@ -377,13 +458,21 @@ export class DemoEngine extends EventTarget {
   async deploy(id) {
     const protocol = this.protocol(id);
     if (protocol.stage !== 0) return;
-    await this.pause(420);
-    protocol.contracts = PROTOCOLS[id].contracts.map((name, index) => ({
-      name,
-      address: token("0x", `${id}:contract:${index}`, 40),
-    }));
+    for (const spec of PROTOCOLS[id].contracts.slice(protocol.contracts.length)) {
+      await this.pause(160);
+      protocol.contracts.push(deploymentRecord(protocol, spec));
+      this.receipt(id, "deploy-contract", `${spec.instance || spec.name} deployed`);
+      this.persist();
+    }
+    for (const step of initializationSteps(id).slice(protocol.deploymentActions.length)) {
+      await this.pause(100);
+      const resolve = value => protocol.contracts.find(item => item.id === value)?.address ?? value;
+      protocol.deploymentActions.push({ ...step, targetAddress: resolve(step.target), resolvedArgs: step.args.map(resolve) });
+      this.receipt(id, "initialize-contract", `${step.target}.${step.method}(${step.args.join(", ")})`);
+      this.persist();
+    }
     protocol.stage = 1;
-    this.receipt(id, "deploy", `${protocol.contracts.length} protocol contracts deployed`);
+    this.receipt(id, "deploy", `${protocol.contracts.length} contracts deployed and initialized`);
     this.persist();
   }
 
@@ -392,12 +481,12 @@ export class DemoEngine extends EventTarget {
     if (protocol.stage !== 1) return;
     await this.pause(360);
     protocol.auditor = {
-      algorithm: "ML-KEM",
+      algorithm: "ML-KEM-768",
       publicKey: token("mlkem_pub_", `${id}:auditor:public`, 80),
       privateKey: token("mlkem_sec_", `${id}:auditor:private`, 80),
     };
     protocol.stage = 2;
-    this.receipt(id, "auditor", "Auditor ML-KEM keypair generated", true);
+    this.receipt(id, "auditor", "Auditor ML-KEM-768 keypair generated", true);
     this.persist();
   }
 
@@ -430,7 +519,7 @@ export class DemoEngine extends EventTarget {
     const ceremony = this.state.identityCeremony;
     if (protocol.stage !== 3 || this.state.identities.length || ceremony.phase !== "spend_secret") return;
     await this.pause(620);
-    ceremony.spendPublicKey = token("spend_pk_", `${ceremony.spendPrivateKey}:hash`, 64);
+    Object.assign(ceremony, spendPublicKeys(ceremony.spendPrivateKey));
     ceremony.phase = "spend_public";
     this.persist();
   }
@@ -455,7 +544,7 @@ export class DemoEngine extends EventTarget {
     this.state.identities = PARTY_NAMES.map((name, index) => ({
       id: `party-${index}`,
       name,
-      spendPublicKey: index === 0 ? ceremony.spendPublicKey : token("spend_pk_", `global:${index}:spend:public`, 64),
+      ...(index === 0 ? { spendPublicKey: ceremony.spendPublicKey, institutionalSpendPublicKey: ceremony.institutionalSpendPublicKey } : spendPublicKeys(token("spend_sk_", `global:${index}:spend:private`, 64))),
       spendPrivateKey: index === 0 ? ceremony.spendPrivateKey : token("spend_sk_", `global:${index}:spend:private`, 64),
       viewPublicKey: index === 0 ? ceremony.viewPublicKey : token("mlkem_pk_", `global:${index}:view:public`, 80),
       viewPrivateKey: index === 0 ? ceremony.viewPrivateKey : token("mlkem_sk_", `global:${index}:view:private`, 80),
@@ -483,7 +572,7 @@ export class DemoEngine extends EventTarget {
     protocol.registrations.push({
       partyId: identity.id,
       name: identity.name,
-      spendPublicKey: identity.spendPublicKey,
+      spendPublicKey: spendPublicKeyFor(identity, id),
       viewPublicKey: identity.viewPublicKey,
       policy,
       auditEnvelope: null,
@@ -528,6 +617,7 @@ export class DemoEngine extends EventTarget {
       to: this.state.identities[to]?.id ?? "system",
       hash: token("0x", `${id}:transaction:${ordinal}`, 64),
       proof: token("proof_", `${id}:proof:${ordinal}`, 54),
+      proofSystem: PROTOCOL_PRIMITIVES[id].proof,
       ciphertext: token("ciphertext_", `${id}:ciphertext:${ordinal}`, 66),
       status: options.status ?? "confirmed",
       background: Boolean(options.background),
@@ -564,25 +654,44 @@ export class DemoEngine extends EventTarget {
         tx = this.addTransaction(id, action, `${p.flow.channelPairs.length} pairwise channels established`);
         break;
       }
-      case "institutional:payment": tx = this.addTransaction(id, action, "Private payment envelope posted", { leaves: 2, encryptedNote: { ownerPartyId: "party-3", tokenId: "USD", amount: 125000 } }); break;
+      case "institutional:payment": tx = this.addTransaction(id, action, "Private payment envelope posted", { encryptedNote: { ownerPartyId: "party-3", tokenId: "USD", amount: 125000 } }); break;
       case "institutional:freeze": p.flow.frozen = true; tx = this.addTransaction(id, action, "Channel frozen by policy operator"); break;
       case "institutional:resume": p.flow.frozen = false; tx = this.addTransaction(id, action, "Channel resumed by policy operator"); break;
-      case "institutional:bridge": p.flow.bridgeReady = true; tx = this.addTransaction(id, action, "Private bridge transfer completed", { leaves: 2, encryptedNote: { ownerPartyId: "party-4", tokenId: "USD", amount: 75000 } }); break;
-      case "retail:prepare-recipient": {
-        const recipient = p.registrations[1];
-        if (!recipient) throw new Error("Register the recipient before preparing a payment.");
+      case "institutional:bridge": p.flow.bridgeReady = true; tx = this.addTransaction(id, action, "Private bridge transfer completed", { encryptedNote: { ownerPartyId: "party-4", tokenId: "USD", amount: 75000 } }); break;
+      case "retail:configure-tags": {
+        const recipientIndex = Number(payload.recipientIndex);
+        const recipient = p.registrations[recipientIndex];
+        const mode = ["none", "subset", "rift", "full"].includes(payload.mode) ? payload.mode : "full";
+        if (!recipient || recipient.partyId === "party-0") throw new Error("Select a registered recipient other than the payer.");
+        const excludedIndices = mode === "rift" ? (payload.excludedIndices || []).map(Number).filter(index => Number.isInteger(index) && index >= 0 && index < p.registrations.length && index !== recipientIndex) : [];
+        const candidateIndices = retailTagCandidateIndices(mode, p.registrations.length, recipientIndex, excludedIndices);
         p.flow.retailRecipient = {
           partyId: recipient.partyId,
           name: recipient.name,
           spendPublicKey: recipient.spendPublicKey,
           viewPublicKey: recipient.viewPublicKey
         };
-        tx = this.receipt(id, action, `${recipient.name} public keys retrieved from the participant registry`);
+        p.flow.retailTagChannel = {
+          id: token("tag_channel_", `${id}:party-0:${recipient.partyId}:${mode}`, 22),
+          senderPartyId: "party-0",
+          recipientPartyId: recipient.partyId,
+          mode,
+          excludedIndices,
+          candidateIndices,
+          bitmap: Array.from({ length: p.registrations.length }, (_, index) => candidateIndices.includes(index) ? "1" : "0").join(""),
+          c1: token("mlkem_ct_", `${id}:${recipient.viewPublicKey}:tag-channel`, 54),
+          c2: token("channel_ct_", `${id}:${recipient.partyId}:${mode}:channel-data`, 54)
+        };
+        tx = this.addTransaction(id, action, `Payer established a ${mode} private-tag channel with ${candidateIndices.length} bitmap candidates`, { from: 0, to: recipientIndex });
         break;
       }
       case "retail:payment": {
-        if (!p.flow.retailRecipient) throw new Error("Retrieve the recipient’s registered public keys first.");
-        tx = this.addTransaction(id, action, `Private payment sent to ${p.flow.retailRecipient.name}`, { leaves: 2, from: 0, to: 1, encryptedNote: { ownerPartyId: "party-1", tokenId: "USD", amount: 30 } });
+        if (!p.flow.retailRecipient || !p.flow.retailTagChannel) throw new Error("Establish the private-tag channel before creating a payment.");
+        const amount = positiveAmount(payload.amount, "Payment amount");
+        const recipientIndex = p.registrations.findIndex(item => item.partyId === p.flow.retailRecipient.partyId);
+        tx = this.addTransaction(id, action, `Private payment sent to ${p.flow.retailRecipient.name}`, { leaves: 2, from: 0, to: recipientIndex, encryptedNote: { ownerPartyId: p.flow.retailRecipient.partyId, tokenId: "USD", amount } });
+        tx.tagChannelId = p.flow.retailTagChannel.id;
+        tx.privateTag = token("tag_", `${id}:${tx.id}:${p.flow.retailTagChannel.id}`, 40);
         break;
       }
       case "retail:scan": {
@@ -742,14 +851,16 @@ export class DemoEngine extends EventTarget {
       case "auctions:mint-nft": {
         const auction = p.flow.auction;
         if (!auction.auctioneerRegistered) throw new Error("Register the auctioneer for this auction first.");
+        const quantity = positiveAmount(payload.quantity, "Class A share quantity");
         auction.nftMinted = true;
-        auction.sellerPublicNft = 1;
-        tx = this.addTransaction(id, action, `Issuer minted one ${auction.assetType} to ${p.registrations[2].name}`, { from: 0, to: 2 });
+        auction.assetQuantity = quantity;
+        auction.sellerPublicNft = quantity;
+        tx = this.addTransaction(id, action, `Issuer minted a non-fungible certificate representing ${quantity.toLocaleString("en-US")} Class A shares to ${p.registrations[2].name}`, { from: 0, to: 2 });
         break;
       }
       case "auctions:list-asset": {
         const auction = p.flow.auction;
-        if (!auction.nftMinted || auction.sellerPublicNft !== 1) throw new Error("The seller must own the asset before listing it.");
+        if (!auction.nftMinted || auction.sellerPublicNft !== auction.assetQuantity) throw new Error("The seller must own the complete certificate before listing it.");
         const duration = Math.max(2, Math.round(Number(payload.duration) || 12));
         const owner = p.registrations[2];
         auction.biddingDuration = duration;
@@ -757,8 +868,8 @@ export class DemoEngine extends EventTarget {
         auction.sellerPublicNft = 0;
         auction.listed = true;
         auction.status = "bidding";
-        tx = this.addTransaction(id, action, `${owner.name} listed ${auction.assetType} with a ${duration}-block bidding window`, { leaves: 1, assetId: auction.assetType, from: 2, to: 2, encryptedNote: { scope: "auction_asset", leg: "locked auction asset", ownerPartyId: "party-2", spendPublicKey: owner.spendPublicKey, tokenId: auction.assetTokenId, amount: 1 } });
-        const note = recordPrivateNote(p, tx, { ownerPartyId: "party-2", ownerName: owner.name, spendPublicKey: owner.spendPublicKey, assetId: auction.assetType, amount: 1, origin: "auction_asset" });
+        tx = this.addTransaction(id, action, `${owner.name} listed a certificate for ${auction.assetQuantity.toLocaleString("en-US")} Class A shares with a ${duration}-block bidding window`, { leaves: 1, assetId: auction.assetType, from: 2, to: 2, encryptedNote: { scope: "auction_asset", leg: "locked auction asset", ownerPartyId: "party-2", spendPublicKey: owner.spendPublicKey, tokenId: auction.assetTokenId, amount: auction.assetQuantity } });
+        const note = recordPrivateNote(p, tx, { ownerPartyId: "party-2", ownerName: owner.name, spendPublicKey: owner.spendPublicKey, assetId: auction.assetType, amount: auction.assetQuantity, origin: "auction_asset" });
         if (note) note.status = "locked";
         auction.nftNoteId = note?.id || null;
         break;
@@ -787,15 +898,21 @@ export class DemoEngine extends EventTarget {
         if (auction.status !== "bidding") throw new Error("This auction is not accepting bids.");
         const inputNote = p.notes.find(note => note.id === payload.noteId && note.ownerPartyId === "party-0" && note.origin === "auction_funding" && note.status === "unspent");
         if (!inputNote) throw new Error("Select one available private USD note for the bid.");
+        const bidAmount = positiveAmount(payload.amount, "Bid amount");
+        if (bidAmount > inputNote.amount) throw new Error("The bid cannot exceed the selected private note.");
         const bidder = p.registrations[0];
-        inputNote.status = "locked";
-        tx = this.addTransaction(id, action, `${bidder.name} submitted a sealed bid for ${auction.assetType}`, { from: 0, to: 2, encryptedNote: { scope: "auction_bid", leg: "sealed bid", ownerPartyId: "party-0", spendPublicKey: bidder.spendPublicKey, tokenId: auction.cashToken, amount: inputNote.amount } });
+        const changeAmount = inputNote.amount - bidAmount;
+        const changePayload = changeAmount > 0 ? encryptedNotePayload(id, `${auction.reference}:bidder-change:${auction.bids.length}`, { scope: "auction_change", leg: "bidder change", ownerPartyId: "party-0", spendPublicKey: bidder.spendPublicKey, tokenId: auction.cashToken, amount: changeAmount }) : null;
+        inputNote.status = "spent";
+        auction.privateCash -= bidAmount;
+        tx = this.addTransaction(id, action, `${bidder.name} submitted a ${bidAmount.toLocaleString("en-US")} USD sealed bid and retained ${changeAmount.toLocaleString("en-US")} USD as private change`, { leaves: changePayload ? 1 : 0, leafCommitments: changePayload ? [changePayload.commitment] : [], leafAssets: changePayload ? [auction.cashToken] : [], from: 0, to: 2, encryptedNote: { scope: "auction_bid", leg: "sealed bid", ownerPartyId: "party-0", spendPublicKey: bidder.spendPublicKey, tokenId: auction.cashToken, amount: bidAmount } });
+        const changeNote = changePayload ? recordPrivateNote(p, tx, { payload: changePayload, ownerPartyId: "party-0", ownerName: bidder.name, spendPublicKey: bidder.spendPublicKey, assetId: auction.cashToken, amount: changeAmount, origin: "auction_change" }) : null;
         const revertSalt = token("salt_", `${id}:${auction.reference}:bid:0:revert`, 40);
         auction.bids.push({
           id: token("bid_", `${id}:${auction.reference}:0`, 18), bidderPartyId: "party-0", bidderName: bidder.name,
-          amount: inputNote.amount, inputNoteId: inputNote.id, commitA: tx.encryptedPayload.commitment,
-          commitB: token("0x", `${p.registrations[2].spendPublicKey}:${tx.id}:seller-payout:${inputNote.amount}`, 64),
-          revertSalt, revertCommit: token("0x", `${bidder.spendPublicKey}:${revertSalt}:${auction.cashToken}:${inputNote.amount}`, 64),
+          amount: bidAmount, inputNoteId: inputNote.id, changeNoteId: changeNote?.id || null, commitA: tx.encryptedPayload.commitment,
+          commitB: token("0x", `${p.registrations[2].spendPublicKey}:${tx.id}:seller-payout:${bidAmount}`, 64),
+          revertSalt, revertCommit: token("0x", `${bidder.spendPublicKey}:${revertSalt}:${auction.cashToken}:${bidAmount}`, 64),
           ciphertext: tx.ciphertext, proof: tx.proof, valid: true, status: "active"
         });
         break;
@@ -838,6 +955,7 @@ export class DemoEngine extends EventTarget {
         auction.winnerProof = {
           id: token("proof_", `${id}:${auction.reference}:highest-valid-bid`, 54),
           winnerBidId: winner.id,
+          winnerPartyId: winner.bidderPartyId,
           winnerCommitment: winner.commitA,
           validBidCount: validBids.length,
           privateWinningAmount: winner.amount,
@@ -860,7 +978,7 @@ export class DemoEngine extends EventTarget {
         const winner = auction.bids.find(bid => bid.id === auction.winnerProof.winnerBidId);
         const winnerRegistration = p.registrations.find(item => item.partyId === winner.bidderPartyId);
         const seller = p.registrations[2];
-        const nftPayload = encryptedNotePayload(id, `${auction.reference}:nft-output`, { scope: "auction_settlement", leg: "asset delivery", ownerPartyId: winner.bidderPartyId, spendPublicKey: winnerRegistration.spendPublicKey, tokenId: auction.assetTokenId, amount: 1 });
+        const nftPayload = encryptedNotePayload(id, `${auction.reference}:nft-output`, { scope: "auction_settlement", leg: "asset delivery", ownerPartyId: winner.bidderPartyId, spendPublicKey: winnerRegistration.spendPublicKey, tokenId: auction.assetTokenId, amount: auction.assetQuantity });
         const cashPayload = encryptedNotePayload(id, `${auction.reference}:cash-output`, { scope: "auction_settlement", leg: "seller proceeds", ownerPartyId: seller.partyId, spendPublicKey: seller.spendPublicKey, tokenId: auction.cashToken, amount: winner.amount, commitment: winner.commitB });
         const losers = auction.bids.filter(bid => bid.id !== winner.id && bid.status === "active");
         const recoveryPayloads = losers.map(bid => {
@@ -876,14 +994,14 @@ export class DemoEngine extends EventTarget {
           const input = p.notes.find(note => note.id === bid.inputNoteId);
           if (input) input.status = "spent";
         }
-        recordPrivateNote(p, tx, { payload: nftPayload, ownerPartyId: winner.bidderPartyId, ownerName: winnerRegistration.name, spendPublicKey: winnerRegistration.spendPublicKey, assetId: auction.assetType, amount: 1, origin: "auction_output" });
+        recordPrivateNote(p, tx, { payload: nftPayload, ownerPartyId: winner.bidderPartyId, ownerName: winnerRegistration.name, spendPublicKey: winnerRegistration.spendPublicKey, assetId: auction.assetType, amount: auction.assetQuantity, origin: "auction_output" });
         recordPrivateNote(p, tx, { payload: cashPayload, ownerPartyId: seller.partyId, ownerName: seller.name, spendPublicKey: seller.spendPublicKey, assetId: auction.cashToken, amount: winner.amount, origin: "auction_output" });
         recoveryPayloads.forEach((payloadItem, index) => {
           const bid = losers[index];
           const registration = p.registrations.find(item => item.partyId === bid.bidderPartyId);
           recordPrivateNote(p, tx, { payload: payloadItem, ownerPartyId: bid.bidderPartyId, ownerName: registration.name, spendPublicKey: registration.spendPublicKey, assetId: auction.cashToken, amount: bid.amount, origin: "auction_recovery" });
         });
-        auction.privateCash = winner.bidderPartyId === "party-0" ? Math.max(0, auction.privateCash - winner.amount) : auction.privateCash;
+        if (winner.bidderPartyId !== "party-0") auction.privateCash += auction.bids.find(bid => bid.bidderPartyId === "party-0")?.amount || 0;
         auction.challengeOpen = false;
         auction.status = "settled";
         auction.settlement = { txId: tx.id, winnerBidId: winner.id, winnerCommitment: winner.commitA, winnerPartyId: winner.bidderPartyId, validBidCount: auction.winnerProof.validBidCount };

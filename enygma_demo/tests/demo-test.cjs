@@ -38,7 +38,7 @@ function pass(name) { passed += 1; console.log(`  PASS  ${name}`); }
     assert(state.identityCeremony.spendPublicKey.startsWith("spend_pk_"));
     assert.equal(state.identityCeremony.viewPrivateKey, null);
     assert.equal(await page.locator(".public-output.is-ready").count(), 1);
-    assert.match(await page.locator(".spend-card").innerText(), /obtained by hashing the spend secret key/i);
+    assert.match(await page.locator(".spend-card").innerText(), /Poseidon\(sk_spend, sk_spend\) mod ℓ/);
     pass("spend public key follows its hash operation");
 
     await clickAndWait(page, '[data-command="identity-view-secret"]');
@@ -54,7 +54,7 @@ function pass(name) { passed += 1; console.log(`  PASS  ${name}`); }
     assert.equal(state.identityCeremony.phase, "complete");
     assert(state.identityCeremony.viewPublicKey.startsWith("mlkem_pk_"));
     assert.equal(await page.locator(".public-output.is-ready").count(), 2);
-    assert.match(await page.locator(".view-card").innerText(), /ML-KEM key generation/i);
+    assert.match(await page.locator(".view-card").innerText(), /ML-KEM-768 key generation/i);
     await clickAndWait(page, '[data-command="identity-confirm"]');
     assert.equal(await page.locator('[data-executing-entity="Registering participant"]').isVisible(), true);
     pass("view public key completes the sequential ceremony");
@@ -63,7 +63,7 @@ function pass(name) { passed += 1; console.log(`  PASS  ${name}`); }
     assert.equal(await page.locator(".registry-table tbody tr").count(), 1);
     assert.equal(await page.locator('[data-party-row="1"]').count(), 0);
     assert.deepEqual(await page.locator(".registry-table th").allTextContents(), ["Participant", "Spend public key", "View public key", "1 · Register keys", "2 · Share with auditor"]);
-    assert.equal(await page.locator('[data-party-row="0"] [data-key="spend"] code').textContent(), state.identities[0].spendPublicKey);
+    assert.equal(await page.locator('[data-party-row="0"] [data-key="spend"] code').textContent(), state.identities[0].institutionalSpendPublicKey);
     assert.equal(await page.locator('[data-party-row="0"] [data-key="view"] code').textContent(), state.identities[0].viewPublicKey);
     await clickAndWait(page, '[data-command="register-participant-keys"]');
     state = await page.evaluate(() => window.__ENYGMA_DEMO__.state());
@@ -81,7 +81,7 @@ function pass(name) { passed += 1; console.log(`  PASS  ${name}`); }
     state = await page.evaluate(() => window.__ENYGMA_DEMO__.state());
     assert.deepEqual(state.protocols.institutional.registrations.map(r => r.partyId), Array.from({ length: 10 }, (_, i) => `party-${i}`));
     assert(state.protocols.institutional.registrations.every(r => r.policy === "long_term" && r.auditEnvelope));
-    assert.equal(await page.locator(".scenario-page .registry-table tbody tr").count(), 10);
+    assert.equal(await page.locator(".network-registry tbody tr").count(), 10);
     assert.equal(await page.locator("#setupWorkspace").isHidden(), true);
     assert.equal(await page.locator("#progress").isHidden(), true);
     assert.equal(await page.locator(".scenario-page > article").count(), 1);
@@ -95,13 +95,33 @@ function pass(name) { passed += 1; console.log(`  PASS  ${name}`); }
       const registrations = state.protocols[id].registrations;
       assert.equal(registrations.length, 10);
       registrations.forEach((registration, index) => {
-        assert.equal(registration.spendPublicKey, state.identities[index].spendPublicKey);
+        assert.equal(registration.spendPublicKey, id === "institutional" ? state.identities[index].institutionalSpendPublicKey : state.identities[index].spendPublicKey);
         assert.equal(registration.viewPublicKey, state.identities[index].viewPublicKey);
       });
       assert(registrations.every(r => r.policy === "long_term" && r.auditEnvelope));
       assert.equal(state.protocols[id].selectiveRegulator.name, "Additional regulator");
+      await page.goto(`${BASE_URL}/#/${id}`);
+      assert.equal(await page.locator(".network-registry tbody tr").count(), 10);
+      assert.equal(await page.locator('.network-registry [data-public-party-row="0"] .registry-key').count(), 2);
+      await page.locator(".protocol-primitives summary").click();
+      const primitives = await page.locator(".protocol-primitives").innerText();
+      assert.match(primitives, /ML-KEM-768/);
+      assert.match(primitives, /Groth16 over BN254/);
+      if (id === "institutional") {
+        assert.match(primitives, /Poseidon\(sk_spend, sk_spend\) mod ℓ/);
+        assert.match(primitives, /Pedersen on BabyJubJub/);
+      } else {
+        assert.match(primitives, /Poseidon\(sk_spend\)/);
+        assert.match(primitives, /Poseidon\(pk_spend, salt, amount, token_id\)/);
+        assert.match(primitives, /HKDF-SHA256/);
+        assert.match(primitives, /AES-256-GCM/);
+      }
+      if (id === "dvp") assert.match(primitives, /ChaCha20-Poly1305/);
+      if (id === "retail") assert.match(primitives, /Poseidon\(block_number, pk_spend, ss_field\)/);
     }
-    pass("exact global spend and ML-KEM view keys are reused in all registries");
+    assert.notEqual(state.identities[0].spendPublicKey, state.identities[0].institutionalSpendPublicKey);
+    pass("registries use the protocol-specific Poseidon spend key and shared ML-KEM-768 view key");
+    pass("the public participant registry remains visible throughout every protocol");
     pass("all participants use long-term auditing in every protocol");
     assert(ids.every(id => state.protocols[id].leaves.length === 0));
     pass("every commitment tree starts empty with no seeded leaves");
@@ -130,13 +150,31 @@ function pass(name) { passed += 1; console.log(`  PASS  ${name}`); }
     await page.click('[data-action="resume"]'); await page.waitForTimeout(40);
     await page.goto(`${BASE_URL}/#/institutional/payment`);
     await page.click('[data-action="payment"]'); await page.waitForTimeout(40);
+    await page.goto(`${BASE_URL}/#/institutional/chain`);
+    assert.match(await page.locator(".scenario-page").innerText(), /Pedersen commitments on BabyJubJub/);
+    assert.equal(await page.locator(".commitment-tree").count(), 0);
+    assert.equal((await page.evaluate(() => window.__ENYGMA_DEMO__.state())).protocols.institutional.leaves.length, 0);
     pass("institutional payment, freeze, and recovery paths");
 
     await page.goto(`${BASE_URL}/#/retail/payment`);
     assert.equal(await page.locator('[data-action="payment"]').isDisabled(), true);
     assert.equal(await page.getByText(/direct tagged channel|rotating recipient tag/i).count(), 0);
-    await page.goto(`${BASE_URL}/#/retail/recipient`);
-    await page.click('[data-action="prepare-recipient"]'); await page.waitForTimeout(40);
+    await page.goto(`${BASE_URL}/#/retail/private-tags`);
+    assert.equal(await page.locator(".tag-mode-card").count(), 4);
+    assert.equal(await page.locator(".tag-registry-table tbody tr").count(), 10);
+    assert.equal(await page.locator('.tag-registry-table [data-tag-party-row="1"] [data-key="spend"] code').textContent(), state.protocols.retail.registrations[1].spendPublicKey);
+    assert.equal(await page.locator('.tag-registry-table [data-tag-party-row="1"] [data-key="view"] code').textContent(), state.protocols.retail.registrations[1].viewPublicKey);
+    assert.equal(await page.locator('.tag-mode-card[data-retail-tag-mode="full"][aria-pressed="true"]').count(), 1);
+    assert.equal(await page.locator(".tag-registry-table .bitmap-membership.included").count(), 10);
+    await page.click('[data-retail-tag-mode="none"]');
+    assert.equal(await page.locator(".tag-registry-table .bitmap-membership.included").count(), 1);
+    await page.click('[data-retail-tag-mode="subset"]');
+    assert.equal(await page.locator(".tag-registry-table .bitmap-membership.included").count(), 4);
+    await page.click('[data-retail-tag-mode="rift"]');
+    assert.equal(await page.locator(".tag-registry-table .bitmap-membership.included").count(), 8);
+    assert.equal(await page.locator('[data-tag-party-row="1"] [data-retail-exclusion]').count(), 0);
+    await page.click('[data-retail-tag-mode="full"]');
+    await page.click('[data-action="configure-tags"]'); await page.waitForTimeout(40);
     state = await page.evaluate(() => window.__ENYGMA_DEMO__.state());
     assert.deepEqual(state.protocols.retail.flow.retailRecipient, {
       partyId: state.protocols.retail.registrations[1].partyId,
@@ -144,16 +182,30 @@ function pass(name) { passed += 1; console.log(`  PASS  ${name}`); }
       spendPublicKey: state.protocols.retail.registrations[1].spendPublicKey,
       viewPublicKey: state.protocols.retail.registrations[1].viewPublicKey
     });
-    assert.equal(await page.locator(".recipient-key-grid .key-value").count(), 2);
+    assert.equal(state.protocols.retail.flow.retailTagChannel.mode, "full");
+    assert.equal(state.protocols.retail.flow.retailTagChannel.bitmap, "1111111111");
+    assert.equal(state.protocols.retail.flow.retailTagChannel.candidateIndices.length, 10);
+    assert.match(await page.locator(".channel-record").innerText(), /Full privacy[\s\S]*1111111111/i);
+    pass("retail private-tag table visualizes None, Subset, Rift, and Full bitmap membership");
     await page.goto(`${BASE_URL}/#/retail/payment`);
-    assert.match(await page.locator(".payment-construction").innerText(), /ML-KEM encapsulation[\s\S]*Commitments[\s\S]*ZK proof[\s\S]*Submit/);
+    assert.equal(await page.getByText(/Retrieve Atlas Bank keys|Retrieve the recipient’s public keys/i).count(), 0);
+    assert.match(await page.locator(".registry-binding-visual").innerText(), /Atlas Bank[\s\S]*pk_spend[\s\S]*Recipient commitment[\s\S]*pk_view[\s\S]*Encrypted note data/i);
+    assert.match(await page.locator(".payment-construction").innerText(), /Registry binding[\s\S]*Commitments[\s\S]*Groth16 proof[\s\S]*Private tag/);
+    await page.fill("#retailPaymentAmount", "45");
     await page.click('[data-action="payment"]'); await page.waitForTimeout(40);
     state = await page.evaluate(() => window.__ENYGMA_DEMO__.state());
     const retailPayment = state.protocols.retail.transactions.find(tx => tx.type === "payment");
     assert.equal(retailPayment.from, "party-0");
     assert.equal(retailPayment.to, "party-1");
+    assert.equal(retailPayment.encryptedPayload.amount, 45);
+    assert(retailPayment.privateTag.startsWith("tag_"));
     assert.equal(state.protocols.retail.leaves.filter(leaf => leaf.sourceTxId === retailPayment.id).length, 2);
-    pass("retail payment uses registered recipient keys and the standard per-payment ML-KEM flow");
+    await page.goto(`${BASE_URL}/#/retail/scan`);
+    assert.equal(await page.locator(".scan-table tbody tr").count(), 10);
+    await page.click('[data-action="scan"]'); await page.waitForTimeout(40);
+    assert.equal(await page.locator(".scan-table tr.scan-match").count(), 1);
+    assert.match(await page.locator(".scan-table tr.scan-match").innerText(), /Atlas Bank[\s\S]*Note opened and commitment matched/i);
+    pass("retail payment binds registry keys visually and candidate wallets process the published bitmap");
 
     await page.goto(`${BASE_URL}/#/dvp/terms-proposal`);
     assert.match(await page.locator(".dvp-parties").innerText(), /Boreal Markets[\s\S]*Atlas Bank/);
@@ -317,17 +369,25 @@ function pass(name) { passed += 1; console.log(`  PASS  ${name}`); }
     pass("auctioneer generates its own key and the operator binds it to one auction");
 
     await page.goto(`${BASE_URL}/#/auctions/mint-asset`);
+    assert.equal(await page.locator("#auctionAssetQuantity").count(), 1);
+    await page.fill("#auctionAssetQuantity", "25");
     await page.click('[data-action="mint-nft"]'); await page.waitForTimeout(40);
+    state = await page.evaluate(() => window.__ENYGMA_DEMO__.state());
+    assert.equal(state.protocols.auctions.flow.auction.assetQuantity, 25);
+    assert.equal(state.protocols.auctions.flow.auction.sellerPublicNft, 25);
+    assert.match(await page.locator(".nft-certificate").innerText(), /Shares represented[\s\S]*25/i);
     await page.goto(`${BASE_URL}/#/auctions/list-asset`);
     await page.fill("#auctionDuration", "14");
     await page.click('[data-action="list-asset"]'); await page.waitForTimeout(40);
     state = await page.evaluate(() => window.__ENYGMA_DEMO__.state());
     assert.equal(state.protocols.auctions.flow.auction.assetType, "Class A Share");
     assert.equal(state.protocols.auctions.flow.auction.assetTokenId, "CLASS-A-0042");
+    assert.equal(state.protocols.auctions.flow.auction.assetQuantity, 25);
     assert.equal(state.protocols.auctions.flow.auction.biddingDuration, 14);
     assert.equal(state.protocols.auctions.trees["Class A Share"].leafIds.length, 1);
+    assert.equal(state.protocols.auctions.notes.find(note => note.origin === "auction_asset").amount, 25);
     assert.match(await page.locator(".listing-visibility").innerText(), /Bidders are shown[\s\S]*Class A Share[\s\S]*details remain private/i);
-    pass("seller lists a specific NFT while bidders see only the asset type and timeout");
+    pass("seller chooses the Class A certificate quantity before listing it with a timeout");
 
     await page.goto(`${BASE_URL}/#/auctions/fund-bidder`);
     await page.fill("#auctionMintCashAmount", "1000");
@@ -340,35 +400,48 @@ function pass(name) { passed += 1; console.log(`  PASS  ${name}`); }
     assert.equal(auctionFundingNote.amount, 650);
     assert.equal(await page.locator('[data-tree-asset="USD"] .owned-leaf').count(), 1);
     await page.goto(`${BASE_URL}/#/auctions/submit-bid`);
-    assert.match(await page.locator(".bid-target").innerText(), /Class A Share[\s\S]*details withheld/i);
+    assert.match(await page.locator(".bid-target").innerText(), /Class A Share[\s\S]*certificate ID, quantity, and metadata withheld/i);
+    assert.equal(await page.locator("#auctionBidAmount").count(), 1);
+    await page.fill("#auctionBidAmount", "600");
     await page.click('[data-action="submit-bid"]'); await page.waitForTimeout(40);
     state = await page.evaluate(() => window.__ENYGMA_DEMO__.state());
-    assert.equal(state.protocols.auctions.flow.auction.bids[0].amount, 650);
-    assert.equal(state.protocols.auctions.notes.find(note => note.id === auctionFundingNote.id).status, "locked");
+    const auctionChangeNote = state.protocols.auctions.notes.find(note => note.origin === "auction_change");
+    assert.equal(state.protocols.auctions.flow.auction.bids[0].amount, 600);
+    assert.equal(state.protocols.auctions.notes.find(note => note.id === auctionFundingNote.id).status, "spent");
+    assert.equal(auctionChangeNote.amount, 50);
+    assert.equal(auctionChangeNote.status, "unspent");
+    assert.equal(state.protocols.auctions.flow.auction.privateCash, 50);
+    assert(state.protocols.auctions.leaves.some(leaf => leaf.id === auctionChangeNote.leafId));
+    assert.match(await page.locator(".sealed-bid-receipt").innerText(), /Your private bid[\s\S]*600 USD[\s\S]*Private change[\s\S]*50 USD/i);
     assert.doesNotMatch(await page.locator(".bid-target").innerText(), /CLASS-A-0042/);
-    pass("bidder funds, shields, and locks one exact private USD note as a sealed bid");
+    pass("bidder chooses a partial bid and receives the unspent note value as private change");
 
     await page.goto(`${BASE_URL}/#/auctions/bidding-window`);
     await page.click('[data-action="collect-bids"]'); await page.waitForTimeout(40);
     assert.equal(await page.locator(".opaque-bid-stream > div").count(), 5);
-    assert.doesNotMatch(await page.locator(".opaque-bid-stream").innerText(), /\b(?:650|610|575|540|420) USD\b/);
+    assert.doesNotMatch(await page.locator(".opaque-bid-stream").innerText(), /\b(?:600|610|575|540|420) USD\b/);
     await page.click('[data-action="close-bidding"]'); await page.waitForTimeout(40);
     state = await page.evaluate(() => window.__ENYGMA_DEMO__.state());
     assert.equal(state.protocols.auctions.flow.auction.status, "closed");
     assert.equal(state.protocols.auctions.flow.auction.blocksRemaining, 0);
     await page.goto(`${BASE_URL}/#/auctions/bid-review`);
-    assert.doesNotMatch(await page.locator(".auction-view.public").innerText(), /\b(?:650|610|575|540|420) USD\b/);
-    assert.match(await page.locator(".private-bid-table").innerText(), /650 USD[\s\S]*610 USD/i);
+    assert.doesNotMatch(await page.locator(".auction-view.public").innerText(), /\b(?:600|610|575|540|420) USD\b/);
+    assert.match(await page.locator(".private-bid-table").innerText(), /600 USD[\s\S]*610 USD/i);
     assert.match(await page.locator(".scenario-page").innerText(), /Auctioneer[\s\S]*Auditor/i);
     pass("timeout closes bidding before auctioneer and auditor open all valid bids");
 
     await page.goto(`${BASE_URL}/#/auctions/winner-proof`);
     assert.match(await page.locator(".proof-statement").innerText(), /Out of all valid bids, this specific bid has the highest amount/i);
+    assert.equal(await page.locator(".proof-bid-table tr.winning-bid").count(), 1);
+    assert.match(await page.locator(".proof-bid-table tr.winning-bid").innerText(), /Delta Custody[\s\S]*610 USD[\s\S]*Highest valid/i);
+    assert.equal(await page.locator(".zk-circuit .circuit-flow section").count(), 4);
+    assert.match(await page.locator(".zk-circuit").innerText(), /amount\* ≥ amountᵢ[\s\S]*winning commitment \+ π[\s\S]*No amount is a public output/i);
     await page.click('[data-action="prove-winner"]'); await page.waitForTimeout(40);
     state = await page.evaluate(() => window.__ENYGMA_DEMO__.state());
-    assert.equal(state.protocols.auctions.flow.auction.winnerProof.privateWinningAmount, 650);
+    assert.equal(state.protocols.auctions.flow.auction.winnerProof.privateWinningAmount, 610);
     assert.equal(state.protocols.auctions.flow.auction.winnerProof.validBidCount, 5);
-    assert.doesNotMatch(await page.locator(".winner-announcement").innerText(), /650/);
+    assert.equal(state.protocols.auctions.flow.auction.winnerProof.winnerPartyId, "party-4");
+    assert.doesNotMatch(await page.locator(".winner-announcement").innerText(), /610/);
     assert.match(await page.locator(".winner-announcement").innerText(), /Winning amount remains private/i);
     pass("auctioneer announces only the winning commitment and highest-valid-bid proof");
 
@@ -380,17 +453,32 @@ function pass(name) { passed += 1; console.log(`  PASS  ${name}`); }
     state = await page.evaluate(() => window.__ENYGMA_DEMO__.state());
     assert.equal(state.protocols.auctions.flow.auction.status, "settled");
     assert.equal(state.protocols.auctions.flow.auction.challengeOpen, false);
-    assert.equal(state.protocols.auctions.flow.auction.settlement.winnerPartyId, "party-0");
+    assert.equal(state.protocols.auctions.flow.auction.settlement.winnerPartyId, "party-4");
     assert.equal(state.protocols.auctions.notes.find(note => note.id === auctionFundingNote.id).status, "spent");
+    assert.equal(state.protocols.auctions.notes.find(note => note.id === auctionChangeNote.id).status, "unspent");
+    assert.equal(state.protocols.auctions.notes.find(note => note.origin === "auction_recovery" && note.ownerPartyId === "party-0").amount, 600);
+    assert.equal(state.protocols.auctions.flow.auction.privateCash, 650);
     assert.equal(state.protocols.auctions.notes.filter(note => note.origin === "auction_output").length, 2);
     assert.equal(state.protocols.auctions.notes.filter(note => note.origin === "auction_recovery").length, 4);
     assert.equal(state.protocols.auctions.trees["Class A Share"].leafIds.length, 2);
-    assert.equal(state.protocols.auctions.trees.USD.leafIds.length, 6);
+    assert.equal(state.protocols.auctions.notes.find(note => note.origin === "auction_output" && note.assetId === "Class A Share").amount, 25);
+    assert.equal(state.protocols.auctions.trees.USD.leafIds.length, 7);
     assert.match(await page.locator(".settlement-outputs").innerText(), /Public winning amount[\s\S]*Not disclosed/i);
+    assert.equal(await page.locator('[data-auction-perspective="public"][aria-selected="true"]').count(), 1);
+    assert.equal(await page.locator(".public-perspective .owned-leaf").count(), 0);
+    assert.doesNotMatch(await page.locator(".public-perspective").innerText(), /Atlas Bank|Boreal Markets|Delta Custody|controls this leaf/i);
+    assert.match(await page.locator(".public-perspective").innerText(), /ownership hidden/i);
+    await page.click('[data-auction-perspective="wallet"]');
+    assert.equal(await page.locator(".wallet-perspective .owned-leaf").count(), 2);
+    assert.match(await page.locator(".wallet-perspective").innerText(), /recognized by this wallet/i);
+    assert.doesNotMatch(await page.locator(".wallet-perspective").innerText(), /controls this leaf/i);
+    await page.click('[data-auction-perspective="auditor"]');
+    assert.equal(await page.locator(".auditor-output-table tbody tr").count(), 6);
+    assert.match(await page.locator(".auditor-output-table").innerText(), /Delta Custody[\s\S]*25 Class A Share[\s\S]*Boreal Markets[\s\S]*610 USD/i);
     await page.goto(`${BASE_URL}/#/auctions/audit`);
     assert.equal(await page.locator('[data-share]').count(), 0);
     assert.match(await page.locator(".auction-visibility-matrix").innerText(), /Public network[\s\S]*Cannot open any bid amount[\s\S]*Auditor[\s\S]*Cannot bid, choose, or spend/i);
-    pass("challenged winner proof verifies before atomic NFT-for-USD settlement and losing-bid recovery");
+    pass("auction settlement separates neutral public, private wallet, and authorized auditor views");
 
     await page.goto(`${BASE_URL}/#/retail/traffic`);
     const before = await page.evaluate(() => ({ tx: window.__ENYGMA_DEMO__.state().protocols.retail.transactions.length, leaves: window.__ENYGMA_DEMO__.state().protocols.retail.leaves.length }));
@@ -418,6 +506,33 @@ function pass(name) { passed += 1; console.log(`  PASS  ${name}`); }
     assert.equal((await page.evaluate(() => window.__ENYGMA_DEMO__.state())).protocols.retail.registrations.length, 10);
     assert.equal(new URL(page.url()).hash, "#/retail/audit");
     pass("hash routes and session restoration retain progress");
+
+    const savedProgress = await page.evaluate(() => {
+      const saved = window.__ENYGMA_DEMO__.state();
+      for (const identity of [...saved.identities, saved.identityCeremony]) delete identity.institutionalSpendPublicKey;
+      for (const registration of saved.protocols.institutional.registrations) {
+        registration.spendPublicKey = saved.identities.find(identity => identity.id === registration.partyId).spendPublicKey;
+      }
+      for (const protocol of Object.values(saved.protocols)) {
+        protocol.auditor.algorithm = "ML-KEM";
+        for (const tx of protocol.transactions) {
+          if (tx.encryptedPayload) {
+            delete tx.encryptedPayload.encryption;
+            tx.encryptedPayload.encryptedFields = ["salt", "token_id", "amount"];
+          }
+        }
+      }
+      sessionStorage.setItem("enygma-demo-state-v12", JSON.stringify(saved));
+      return saved.protocols.retail.transactions.length;
+    });
+    await page.reload();
+    state = await page.evaluate(() => window.__ENYGMA_DEMO__.state());
+    assert.equal(state.protocols.retail.transactions.length, savedProgress);
+    assert.equal(state.protocols.institutional.registrations[0].spendPublicKey, state.identities[0].institutionalSpendPublicKey);
+    assert.notEqual(state.protocols.institutional.registrations[0].spendPublicKey, state.protocols.retail.registrations[0].spendPublicKey);
+    assert.equal(state.protocols.retail.auditor.algorithm, "ML-KEM-768");
+    assert.match(await page.locator(".auditable-transaction").first().innerText(), /AES-256-GCM · encrypted: token_id · amount/);
+    pass("older sessions adopt the corrected primitives without losing protocol progress");
 
     await page.evaluate(() => window.__ENYGMA_DEMO__.engine.resetProtocol("retail"));
     state = await page.evaluate(() => window.__ENYGMA_DEMO__.state());

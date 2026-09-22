@@ -8,3 +8,6 @@
 /gnark_circuits/poseidon/test
 
 artifacts/
+
+# Demo launcher component logs
+/demo/logs/

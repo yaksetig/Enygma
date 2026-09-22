@@ -6,1285 +6,1087 @@
 <title>Enygma Retail Payments · Live Demo</title>
 <style>
 :root {
-  --bg:        #06101c;
-  --s1:        #09172a;
-  --s2:        #0d1f37;
-  --s3:        #112644;
-  --bd:        #152e4d;
-  --bd2:       #1b3d66;
-  --teal:      #3dd4b0;
-  --teal-dim:  rgba(61,212,176,.08);
-  --teal-glow: #0d6b5a;
-  --blue:      #52b8ff;
-  --blue-dim:  rgba(82,184,255,.09);
-  --blue-glow: #1a5a9a;
-  --green:     #3dcc75;
-  --green-dim: rgba(61,204,117,.08);
-  --green-glow:#0d5a2a;
-  --red:       #ff5566;
-  --red-dim:   rgba(255,85,102,.07);
-  --amber:     #ffcc40;
-  --purple:    #c3a0ff;
-  --purple-dim:rgba(195,160,255,.08);
-  --orange:    #ff9040;
-  --orange-dim:rgba(255,144,64,.08);
-  --text:      #c0d8f0;
-  --text2:     #8ab0d0;
-  --muted:     #3a5e7a;
-  --label:     #6090b8;
-  --mono: 'SF Mono','Fira Code',Consolas,'Courier New',monospace;
-  --sans: -apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-serif;
-  --r: 7px; --r2: 11px;
+  --bg:#eef2f7; --s1:#ffffff; --s2:#f6f9fc; --s3:#eaf0f7;
+  --bd:#dae3ed; --bd2:#bfcedd;
+  --teal:#0e8a71; --teal-dim:rgba(14,138,113,.10); --teal-glow:#7ecfba;
+  --blue:#1467b6; --blue-dim:rgba(20,103,182,.10); --blue-glow:#8fc1e8;
+  --green:#1d8b4b; --green-dim:rgba(29,139,75,.10); --green-glow:#8bd0a5;
+  --red:#c22a3c;  --red-dim:rgba(194,42,60,.09);
+  --amber:#8d6100; --amber-dim:rgba(141,97,0,.11);
+  --purple:#6738c2; --purple-dim:rgba(103,56,194,.10);
+  --orange:#bc540e; --orange-dim:rgba(188,84,14,.11);
+  --text:#16232f; --text2:#3b5165; --muted:#7a8da1; --label:#566c81;
+  /* Text that sits on a filled accent — the accents are dark in this theme. */
+  --on-accent:#ffffff;
+  --mono:'SF Mono','Fira Code',Consolas,'Courier New',monospace;
+  --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-serif;
+  --r:7px; --r2:11px;
 }
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html, body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 13px; line-height: 1.55; min-height: 100vh; overflow-x: hidden; }
-::-webkit-scrollbar { width: 5px; height: 5px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--bd2); border-radius: 3px; }
+*,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
+html,body { background:var(--bg); color:var(--text); font-family:var(--sans); font-size:13px; line-height:1.55; min-height:100vh; }
+body { display:flex; flex-direction:column; }
+::-webkit-scrollbar { width:6px; height:6px; }
+::-webkit-scrollbar-track { background:transparent; }
+::-webkit-scrollbar-thumb { background:var(--bd2); border-radius:3px; }
+button { font-family:inherit; }
+.mono { font-family:var(--mono); }
 
 /* ── Header ─────────────────────────────────────────────────────────────── */
-.header { padding: 9px 18px; border-bottom: 1px solid var(--bd); background: var(--s1); display: flex; align-items: center; gap: 14px; flex-wrap: wrap; position: sticky; top: 0; z-index: 100; }
-.brand { font-family: var(--mono); font-size: 8.5px; letter-spacing: .26em; text-transform: uppercase; color: var(--teal); font-weight: 700; }
-.title { font-size: 13.5px; font-weight: 700; letter-spacing: -.1px; flex: 1; }
-.title small { font-weight: 400; color: var(--label); font-size: 11px; margin-left: 6px; }
-.mode-wrap { display: flex; align-items: center; gap: 8px; }
-.mode-label { font-family: var(--mono); font-size: 9px; color: var(--muted); letter-spacing: .08em; }
-.mode-toggle { display: flex; border: 1px solid var(--bd); border-radius: 5px; overflow: hidden; }
-.mode-btn { padding: 5px 12px; font-family: var(--mono); font-size: 10px; font-weight: 600; background: none; border: none; color: var(--muted); cursor: pointer; letter-spacing: .05em; transition: background .15s, color .15s; }
-.mode-btn.active { background: var(--teal-dim); color: var(--teal); }
-.mode-btn:first-child { border-right: 1px solid var(--bd); }
-.mode-tip { font-size: 10.5px; color: var(--muted); font-style: italic; max-width: 240px; display: none; }
-body.mode-tag .mode-tip { display: block; }
-.controls { display: flex; align-items: center; gap: 10px; }
-.status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex-shrink: 0; transition: background .3s, box-shadow .3s; }
-.status-dot.running { background: var(--blue); box-shadow: 0 0 8px var(--blue); animation: pulse-dot 1.2s infinite; }
-.status-dot.success { background: var(--green); box-shadow: 0 0 8px var(--green); }
-.status-dot.error   { background: var(--red);   box-shadow: 0 0 8px var(--red); }
-@keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:.3} }
-#statusText { font-family: var(--mono); font-size: 10px; color: var(--label); min-width: 56px; }
-#runBtn { background: var(--teal); color: #031410; border: none; border-radius: 5px; padding: 6px 18px; font-family: var(--mono); font-size: 10.5px; font-weight: 700; letter-spacing: .07em; cursor: pointer; transition: opacity .2s, transform .1s; }
-#runBtn:hover:not(:disabled) { opacity: .82; transform: translateY(-1px); }
-#runBtn:disabled { opacity: .3; cursor: not-allowed; }
-.present-toggle { display: flex; align-items: center; gap: 5px; padding: 5px 12px; border-radius: 5px; border: 1px solid var(--bd); background: var(--s2); color: var(--muted); font-family: var(--mono); font-size: 9.5px; cursor: pointer; transition: border-color .2s, color .2s, background .2s; }
-.present-toggle:hover { border-color: var(--teal); color: var(--teal); }
-.present-toggle.active { border-color: var(--teal); color: var(--teal); background: var(--teal-dim); }
-html.presentation-mode { zoom: 1.25; }
+.header { padding:9px 18px; border-bottom:1px solid var(--bd); background:var(--s1); display:flex; align-items:center; gap:16px; flex-wrap:wrap; position:sticky; top:0; z-index:100; }
+.brand { font-family:var(--mono); font-size:8.5px; letter-spacing:.26em; text-transform:uppercase; color:var(--teal); font-weight:700; }
+.title { font-size:13.5px; font-weight:700; }
+.title small { font-weight:400; color:var(--label); font-size:11px; margin-left:6px; }
+.header-spacer { flex:1; }
+.health { display:flex; gap:12px; align-items:center; }
+.health-item { display:flex; align-items:center; gap:5px; font-family:var(--mono); font-size:9.5px; color:var(--muted); letter-spacing:.05em; }
+.dot { width:7px; height:7px; border-radius:50%; background:var(--muted); flex-shrink:0; transition:background .3s, box-shadow .3s; }
+.dot.ok { background:var(--green); box-shadow:0 0 7px var(--green-glow); }
+.dot.bad { background:var(--red); box-shadow:0 0 7px var(--red); }
+.present-toggle { display:flex; align-items:center; gap:5px; padding:5px 12px; border-radius:5px; border:1px solid var(--bd); background:var(--s2); color:var(--muted); font-family:var(--mono); font-size:9.5px; cursor:pointer; transition:border-color .2s,color .2s,background .2s; }
+.present-toggle:hover { border-color:var(--teal); color:var(--teal); }
+.present-toggle.active { border-color:var(--teal); color:var(--teal); background:var(--teal-dim); }
+html.presentation-mode { zoom:1.22; }
 
-/* ── Progress + steps ───────────────────────────────────────────────────── */
-.progress-wrap { height: 2px; background: var(--bd); }
-.progress-bar  { height: 100%; width: 0%; background: linear-gradient(90deg, var(--teal), var(--blue)); transition: width .5s ease; }
-.steps-wrap { padding: 10px 18px 9px; background: var(--s1); border-bottom: 1px solid var(--bd); overflow-x: auto; }
-.steps { display: flex; gap: 0; align-items: center; min-width: max-content; }
-.step-item { display: flex; align-items: center; font-family: var(--mono); font-size: 9px; letter-spacing: .04em; }
-.step-pill { padding: 3px 10px; border: 1px solid var(--bd); border-radius: 20px; color: var(--muted); background: var(--s2); white-space: nowrap; transition: all .25s; }
-.step-pill.tag-only { border-style: dashed; }
-.step-item.running .step-pill { border-color: var(--blue); color: var(--blue); background: var(--blue-dim); animation: pulse-pill 1.4s infinite; }
-.step-item.success .step-pill { border-color: var(--teal); color: var(--teal); background: var(--teal-dim); }
-.step-item.error   .step-pill { border-color: var(--red);  color: var(--red);  background: var(--red-dim); }
-@keyframes pulse-pill { 0%,100%{opacity:1} 50%{opacity:.55} }
-.step-arrow { color: var(--bd2); padding: 0 4px; font-size: 10px; }
-.step-item.tag-only { transition: opacity .2s; }
-body.mode-plain .step-item.tag-only { opacity: 0; pointer-events: none; }
+/* ── Guided rail ────────────────────────────────────────────────────────── */
+.rail { display:flex; align-items:center; gap:0; padding:9px 18px; background:var(--s1); border-bottom:1px solid var(--bd); overflow-x:auto; }
+.rail-step { display:flex; align-items:center; gap:7px; padding:3px 12px 3px 4px; border:1px solid var(--bd); border-radius:20px; background:var(--s2); font-family:var(--mono); font-size:9.5px; letter-spacing:.04em; color:var(--muted); white-space:nowrap; transition:all .25s; }
+.rail-num { width:16px; height:16px; border-radius:50%; background:var(--bd); color:var(--label); display:flex; align-items:center; justify-content:center; font-size:8.5px; font-weight:700; flex-shrink:0; }
+.rail-step.active { border-color:var(--blue); color:var(--blue); background:var(--blue-dim); }
+.rail-step.active .rail-num { background:var(--blue); color:var(--on-accent); }
+.rail-step.done { border-color:var(--teal); color:var(--teal); background:var(--teal-dim); }
+.rail-step.done .rail-num { background:var(--teal); color:var(--on-accent); }
+.rail-arrow { color:var(--bd2); padding:0 6px; font-size:11px; }
 
-/* ── Three-column layout ─────────────────────────────────────────────────── */
-.body-wrap { display: grid; grid-template-columns: 230px 1fr 230px; grid-template-rows: 1fr auto; height: calc(100vh - 108px); overflow: hidden; }
-@media (max-width: 860px) { .body-wrap { grid-template-columns: 1fr; grid-template-rows: auto auto auto auto; height: auto; } }
+/* ── Layout ─────────────────────────────────────────────────────────────── */
+.layout { display:grid; grid-template-columns:minmax(0,1fr); gap:0; align-items:start; flex:1 1 auto; min-height:0; }
+.col { min-width:0; }
+.col-controls { background:var(--s1); border-bottom:1px solid var(--bd); }
+.col-chain    { background:var(--s1); border-top:1px solid var(--bd); }
+.col-center   { order:-1; }
 
-/* ── Participant panels ───────────────────────────────────────────────────── */
-.participant { display: flex; flex-direction: column; border-right: 1px solid var(--bd); overflow-y: auto; overflow-x: hidden; }
-.participant:last-of-type { border-right: none; border-left: 1px solid var(--bd); }
-.participant-header { padding: 10px 14px 8px; border-bottom: 1px solid var(--bd); background: var(--s1); display: flex; align-items: center; gap: 10px; position: sticky; top: 0; z-index: 10; }
-.p-avatar { width: 28px; height: 28px; border-radius: 50%; font-size: 13px; display: flex; align-items: center; justify-content: center; font-weight: 700; flex-shrink: 0; }
-.p-avatar.alice { background: rgba(61,212,176,.12); color: var(--teal); border: 1px solid var(--teal-glow); }
-.p-avatar.bob   { background: rgba(82,184,255,.10); color: var(--blue); border: 1px solid var(--blue-glow); }
-.p-name { font-weight: 700; font-size: 13px; }
-.p-role { font-family: var(--mono); font-size: 8.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); margin-top: 1px; }
-.p-fields { padding: 10px 14px; flex: 1; display: flex; flex-direction: column; gap: 10px; }
-.p-row { display: flex; flex-direction: column; gap: 3px; }
-.p-key  { font-family: var(--mono); font-size: 8.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
-.p-val  { font-family: var(--mono); font-size: 10.5px; color: var(--label); min-height: 16px; transition: color .3s; }
-.p-val.set { color: var(--text); }
-.p-val.dim { color: var(--muted); }
-.hex-val { font-family: var(--mono); font-size: 10.5px; color: var(--text); cursor: pointer; word-break: break-all; border-bottom: 1px dashed var(--bd2); display: inline-block; }
-.hex-val:hover { color: var(--blue); border-color: var(--blue); }
-.hex-val::after { content: ' ▸'; font-size: 8px; color: var(--muted); }
-.hex-val.expanded::after { content: ' ▾'; }
-.hex-wrap { display: inline-flex; align-items: center; gap: 4px; }
-.hex-copy-btn { font-family: var(--mono); font-size: 8px; background: none; border: 1px solid var(--bd2); color: var(--muted); border-radius: 3px; padding: 0 4px; cursor: pointer; line-height: 1.6; transition: border-color .2s, color .2s; flex-shrink: 0; }
-.hex-copy-btn:hover { border-color: var(--blue); color: var(--blue); }
-.hex-copy-btn.copied { border-color: var(--green); color: var(--green); }
-.balance-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; border-radius: 4px; font-family: var(--mono); font-size: 11px; }
-.balance-chip.deposited { background: var(--teal-dim);  color: var(--teal);  border: 1px solid var(--teal-glow); }
-.balance-chip.spent     { background: var(--red-dim);   color: var(--red);   border: 1px solid rgba(255,85,102,.2); }
-.balance-chip.received  { background: var(--green-dim); color: var(--green); border: 1px solid var(--green-glow); }
-.balance-chip.change    { background: var(--blue-dim);  color: var(--blue);  border: 1px solid var(--blue-glow); }
-.section-sep { height: 1px; background: var(--bd); margin: 8px 14px 0; }
+/* Desk and projector width: three columns that scroll independently, so the
+   paired tables never leave the screen while you work down the control rail. */
+@media (min-width:1400px) {
+  html, body { height:100%; overflow:hidden; }
+  .layout { grid-template-columns:minmax(300px,340px) minmax(0,1fr) minmax(320px,380px); grid-template-rows:minmax(0,1fr); align-items:stretch; overflow:hidden; }
+  .col { min-height:0; overflow-y:auto; }
+  .col-center { order:0; }
+  .col-controls { border-right:1px solid var(--bd); border-bottom:none; }
+  .col-chain { border-left:1px solid var(--bd); border-top:none; }
+}
+/* Narrower laptops: controls beside the tables, chain across the bottom. */
+@media (min-width:1080px) and (max-width:1399px) {
+  .layout { grid-template-columns:300px minmax(0,1fr); }
+  .col-center { order:0; }
+  .col-controls { border-right:1px solid var(--bd); border-bottom:none; }
+  .col-chain { grid-column:1 / -1; }
+  .col-chain #chainPanel { display:grid; grid-template-columns:repeat(auto-fit,minmax(290px,1fr)); gap:10px; align-items:start; }
+  .col-chain .chain-card { margin-bottom:0; }
+}
 
-/* ── Center panel ────────────────────────────────────────────────────────── */
-.center-panel { display: flex; flex-direction: column; gap: 0; overflow-y: auto; overflow-x: hidden; background: var(--bg); border-right: 1px solid var(--bd); }
+/* ── Cards / panels ─────────────────────────────────────────────────────── */
+.panel { border-bottom:1px solid var(--bd); padding:13px 15px; }
+.panel-head { display:flex; align-items:center; gap:8px; margin-bottom:10px; }
+.panel-step { width:18px; height:18px; border-radius:50%; background:var(--bd); color:var(--label); display:flex; align-items:center; justify-content:center; font-family:var(--mono); font-size:9px; font-weight:700; flex-shrink:0; }
+.panel-step.done { background:var(--teal); color:var(--on-accent); }
+.panel-step.active { background:var(--blue); color:var(--on-accent); }
+.panel-title { font-size:11.5px; font-weight:700; letter-spacing:.02em; }
+.panel-sub { font-size:10.5px; color:var(--muted); margin:-4px 0 10px 26px; line-height:1.5; }
+.panel.locked { opacity:.42; }
+.panel.locked .btn, .panel.locked input, .panel.locked select, .panel.locked .mode-btn, .panel.locked .actor-btn { pointer-events:none; }
 
-/* ── Intro / orientation card ───────────────────────────────────────────── */
-.intro-card { margin: 12px 14px 0; border-radius: var(--r2); background: var(--s2); border: 1px solid var(--bd2); border-left: 3px solid var(--teal); overflow: hidden; flex-shrink: 0; }
-.intro-hdr { display: flex; align-items: center; gap: 8px; padding: 9px 12px; cursor: pointer; user-select: none; }
-.intro-title { font-family: var(--mono); font-size: 8.5px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: var(--teal); }
-.intro-toggle-ic { margin-left: auto; color: var(--muted); font-size: 11px; }
-.intro-body { padding: 0 12px 12px; font-size: 11.5px; color: var(--text2); line-height: 1.6; }
-.intro-body p { margin-bottom: 8px; }
-.intro-body strong { color: var(--text); }
-.intro-modes { display: flex; flex-direction: column; gap: 5px; margin-top: 4px; }
-.intro-mode-row { display: flex; gap: 8px; align-items: baseline; }
-.intro-mode-tag { font-family: var(--mono); font-size: 8px; font-weight: 700; padding: 2px 7px; border-radius: 10px; flex-shrink: 0; letter-spacing: .06em; }
-.intro-mode-tag.plain { color: var(--blue); border: 1px solid var(--blue-glow); background: var(--blue-dim); }
-.intro-mode-tag.tag   { color: var(--purple); border: 1px solid rgba(195,160,255,.3); background: var(--purple-dim); }
+.btn { display:inline-flex; align-items:center; justify-content:center; gap:7px; width:100%; padding:8px 14px; border:none; border-radius:6px; font-family:var(--mono); font-size:10.5px; font-weight:700; letter-spacing:.06em; cursor:pointer; transition:opacity .2s, transform .1s, background .2s; }
+.btn-primary { background:var(--teal); color:var(--on-accent); }
+.btn-blue    { background:var(--blue); color:var(--on-accent); }
+.btn-ghost   { background:var(--s3); color:var(--text2); border:1px solid var(--bd2); }
+.btn:hover:not(:disabled) { opacity:.85; transform:translateY(-1px); }
+/* Fading a filled accent leaves white text on a pale wash; use a neutral
+   disabled style so the label stays readable. */
+.btn:disabled { background:var(--s3); color:var(--muted); box-shadow:inset 0 0 0 1px var(--bd); cursor:not-allowed; transform:none; }
+.btn-row { display:flex; gap:8px; }
 
-/* ── Step Visualizer Card ────────────────────────────────────────────────── */
-.step-viz-card { margin: 12px 14px 0; border-radius: var(--r2); background: var(--s2); border: 1px solid var(--bd2); overflow: hidden; flex-shrink: 0; }
-.svz-header { padding: 8px 12px 7px; border-bottom: 1px solid var(--bd); display: flex; align-items: center; justify-content: space-between; }
-.svz-step-label { font-family: var(--mono); font-size: 8.5px; letter-spacing: .16em; text-transform: uppercase; color: var(--teal); font-weight: 700; }
-.svz-badge { font-family: var(--mono); font-size: 8px; padding: 2px 8px; border-radius: 10px; }
-.svz-badge.idle    { color: var(--muted); border: 1px solid var(--bd); }
-.svz-badge.running { color: var(--blue); border: 1px solid var(--blue-glow); background: var(--blue-dim); animation: pulse-dot 1.2s infinite; }
-.svz-badge.success { color: var(--teal); border: 1px solid var(--teal-glow); background: var(--teal-dim); }
-.svz-badge.error   { color: var(--red);  border: 1px solid var(--red);       background: var(--red-dim); }
-.svz-diagram { padding: 12px 14px; min-height: 90px; display: flex; flex-direction: column; justify-content: center; gap: 8px; }
-.svz-desc { padding: 8px 12px; border-top: 1px solid var(--bd); font-size: 11px; color: var(--text2); line-height: 1.6; background: rgba(0,0,0,.15); }
-.svz-idle { text-align: center; color: var(--muted); font-family: var(--mono); font-size: 10px; font-style: italic; }
+.field { margin-bottom:9px; }
+.field-label { font-family:var(--mono); font-size:8.5px; letter-spacing:.13em; text-transform:uppercase; color:var(--muted); margin-bottom:4px; display:block; }
+select, input[type=number] { width:100%; padding:6px 9px; background:var(--s3); border:1px solid var(--bd2); border-radius:5px; color:var(--text); font-family:var(--mono); font-size:11px; }
+select:focus, input:focus { outline:none; border-color:var(--blue); }
 
-/* actor boxes */
-.svz-actors { display: flex; align-items: center; justify-content: space-between; gap: 4px; }
-.svz-actor  { display: flex; flex-direction: column; align-items: center; gap: 3px; flex: 1; }
-.svz-actor-box { width: 100%; padding: 5px 4px; border-radius: 5px; text-align: center; font-family: var(--mono); font-size: 9.5px; font-weight: 700; border: 1px solid; transition: all .4s; }
-.svz-actor-box.alice    { border-color: var(--teal-glow); color: var(--teal); background: var(--teal-dim); }
-.svz-actor-box.bob      { border-color: var(--blue-glow); color: var(--blue); background: var(--blue-dim); }
-.svz-actor-box.relay    { border-color: rgba(255,144,64,.35); color: var(--orange); background: var(--orange-dim); }
-.svz-actor-box.contract { border-color: rgba(195,160,255,.3); color: var(--purple); background: var(--purple-dim); }
-.svz-actor-box.chain    { border-color: var(--green-glow); color: var(--green); background: var(--green-dim); }
-.svz-actor-box.gnark    { border-color: rgba(255,204,64,.3); color: var(--amber); background: rgba(255,204,64,.06); }
-.svz-actor-name { font-family: var(--mono); font-size: 7px; color: var(--muted); text-transform: uppercase; letter-spacing: .1em; }
+/* ── Actor selector ─────────────────────────────────────────────────────── */
+.actor-row { display:flex; gap:6px; margin-bottom:10px; }
+.actor-btn { flex:1; padding:7px 4px; border:1px solid var(--bd); border-radius:6px; background:var(--s2); color:var(--muted); cursor:pointer; text-align:center; transition:all .2s; }
+.actor-btn .an { font-size:11.5px; font-weight:700; display:block; }
+.actor-btn .ai { font-family:var(--mono); font-size:8.5px; letter-spacing:.1em; }
+.actor-btn:hover:not(:disabled) { border-color:var(--bd2); color:var(--text2); }
+.actor-btn.active { border-color:var(--teal); background:var(--teal-dim); color:var(--teal); }
+.actor-btn:disabled { opacity:.35; cursor:not-allowed; }
 
-/* animated flow arrows */
-.svz-arrow-wrap { display: flex; flex-direction: column; align-items: center; flex-shrink: 0; gap: 1px; }
-.svz-arrow-line { width: 28px; height: 1px; background: var(--bd2); position: relative; overflow: hidden; }
-.svz-arrow-line::after { content: ''; position: absolute; top: 0; left: -60%; width: 60%; height: 100%; background: linear-gradient(90deg, transparent, var(--teal), transparent); animation: flow-anim 1.4s linear infinite; }
-@keyframes flow-anim { to { left: 110%; } }
-.svz-arrow-head { color: var(--muted); font-size: 10px; line-height: 1; }
-.svz-arrow-label { font-family: var(--mono); font-size: 7px; color: var(--muted); white-space: nowrap; }
+.identity { border:1px solid var(--bd); border-radius:var(--r); background:var(--s2); padding:10px 11px; }
+.id-row { display:flex; align-items:baseline; gap:8px; padding:3px 0; border-bottom:1px solid var(--bd); }
+.id-row:last-child { border-bottom:none; }
+.id-key { font-family:var(--mono); font-size:8.5px; letter-spacing:.11em; text-transform:uppercase; color:var(--muted); width:76px; flex-shrink:0; }
+.id-val { font-family:var(--mono); font-size:10px; color:var(--text); word-break:break-all; flex:1; min-width:0; }
+.id-val.secret { color:var(--amber); }
+.id-val.masked { color:var(--muted); letter-spacing:.08em; }
+.mini-btn { font-family:var(--mono); font-size:8px; background:none; border:1px solid var(--bd2); color:var(--muted); border-radius:3px; padding:1px 5px; cursor:pointer; flex-shrink:0; transition:border-color .2s,color .2s; }
+.mini-btn:hover { border-color:var(--blue); color:var(--blue); }
+.mini-btn.on { border-color:var(--amber); color:var(--amber); }
+.mini-btn.copied { border-color:var(--green); color:var(--green); }
+.warn-note { margin-top:9px; padding:7px 9px; border-radius:5px; background:var(--amber-dim); border:1px solid rgba(141,97,0,.25); color:var(--amber); font-size:10px; line-height:1.5; }
 
-/* key rows */
-.svz-keyrows { display: flex; flex-direction: column; gap: 4px; width: 100%; }
-.svz-keyrow  { display: flex; align-items: center; gap: 5px; padding: 4px 6px; border-radius: 4px; background: var(--s1); border: 1px solid var(--bd); }
-.svz-keyrow-algo  { font-family: var(--mono); font-size: 8px; color: var(--muted); flex-shrink: 0; min-width: 80px; }
-.svz-keyrow-val   { font-family: var(--mono); font-size: 8.5px; color: var(--label); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; transition: color .4s; }
-.svz-keyrow-val.set { color: var(--text); }
-.svz-keyrow-size  { font-family: var(--mono); font-size: 7.5px; color: var(--amber); padding: 1px 4px; border-radius: 3px; border: 1px solid rgba(255,204,64,.2); background: rgba(255,204,64,.05); flex-shrink: 0; }
-.svz-keyrow-purpose { font-family: var(--mono); font-size: 7px; color: var(--muted); flex-shrink: 0; }
+/* ── Privacy modes ──────────────────────────────────────────────────────── */
+.modes { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+.mode-btn { padding:7px 9px; border:1px solid var(--bd); border-radius:6px; background:var(--s2); cursor:pointer; text-align:left; transition:all .2s; }
+.mode-btn .mn { font-family:var(--mono); font-size:10px; font-weight:700; letter-spacing:.06em; color:var(--text2); display:block; }
+.mode-btn .md { font-size:9.5px; color:var(--muted); line-height:1.4; }
+.mode-btn:hover { border-color:var(--bd2); }
+.mode-btn.active { border-color:var(--purple); background:var(--purple-dim); }
+.mode-btn.active .mn { color:var(--purple); }
+.exclusions { margin-top:9px; padding:9px 10px; border:1px dashed var(--bd2); border-radius:6px; background:var(--s3); }
+.excl-grid { display:grid; grid-template-columns:1fr 1fr; gap:4px 10px; margin-top:6px; }
+.excl-item { display:flex; align-items:center; gap:6px; font-family:var(--mono); font-size:10px; color:var(--text2); cursor:pointer; }
+.excl-item input { width:auto; }
+.excl-item.fixed { color:var(--muted); cursor:not-allowed; }
 
-/* sub-step lists */
-.svz-substeps { display: flex; flex-direction: column; gap: 3px; }
-.svz-substep  { display: flex; align-items: center; gap: 7px; font-family: var(--mono); font-size: 9.5px; color: var(--muted); transition: color .3s; }
-.svz-substep.done   { color: var(--teal); }
-.svz-substep.active { color: var(--blue); }
-.svz-substep-icon   { width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--bd); display: flex; align-items: center; justify-content: center; font-size: 8px; flex-shrink: 0; transition: all .3s; }
-.svz-substep.done   .svz-substep-icon { border-color: var(--teal); color: var(--teal); background: var(--teal-dim); }
-.svz-substep.active .svz-substep-icon { border-color: var(--blue); color: var(--blue); background: var(--blue-dim); animation: pulse-dot 1.2s infinite; }
+.preview-box { margin-top:10px; padding:9px 10px; border-radius:6px; border:1px solid var(--bd2); background:var(--s2); }
+.preview-box.live { border-color:var(--purple); background:var(--purple-dim); }
+.pv-line { display:flex; justify-content:space-between; gap:10px; font-family:var(--mono); font-size:10px; padding:1.5px 0; }
+.pv-k { color:var(--muted); }
+.pv-v { color:var(--text); text-align:right; word-break:break-all; }
+.pv-v.prose { word-break:normal; overflow-wrap:anywhere; }
 
-/* Poseidon commitment diagram */
-.svz-poseidon { display: flex; align-items: center; gap: 6px; }
-.svz-inputs   { display: flex; flex-direction: column; gap: 3px; }
-.svz-input-tag { font-family: var(--mono); font-size: 8.5px; padding: 3px 7px; border-radius: 3px; border: 1px solid var(--bd); background: var(--s1); color: var(--label); }
-.svz-input-tag.secret { border-style: dashed; color: var(--muted); }
-.svz-hash-fn  { padding: 8px 10px; border-radius: 5px; border: 1px solid rgba(195,160,255,.3); background: var(--purple-dim); font-family: var(--mono); font-size: 9px; color: var(--purple); white-space: nowrap; text-align: center; }
-.svz-output-tag { font-family: var(--mono); font-size: 8.5px; padding: 3px 7px; border-radius: 3px; border: 1px solid var(--teal-glow); background: var(--teal-dim); color: var(--teal); }
-.svz-chevron  { color: var(--muted); font-size: 13px; flex-shrink: 0; }
+/* ── Established channels ───────────────────────────────────────────────── */
+.chan-list { display:flex; flex-direction:column; gap:6px; margin-top:9px; }
+.chan-item { padding:7px 9px; border:1px solid var(--bd); border-left:2px solid var(--teal); border-radius:5px; background:var(--s2); font-family:var(--mono); font-size:10px; }
+.chan-item .cl { color:var(--text); }
+.chan-item .cs { color:var(--muted); font-size:9.5px; }
+.chan-empty { font-size:10.5px; color:var(--muted); font-style:italic; margin-top:8px; }
 
-/* Merkle tree */
-.svz-tree     { display: flex; flex-direction: column; align-items: center; gap: 3px; }
-.svz-tree-row { display: flex; gap: 3px; justify-content: center; }
-.svz-node     { width: 30px; height: 18px; border-radius: 3px; border: 1px solid var(--bd); background: var(--s3); font-family: var(--mono); font-size: 7px; display: flex; align-items: center; justify-content: center; color: var(--muted); transition: all .5s; }
-.svz-node.leaf    { color: var(--label); border-color: var(--bd2); }
-.svz-node.target  { color: var(--teal); border-color: var(--teal-glow); background: var(--teal-dim); box-shadow: 0 0 6px rgba(61,212,176,.2); }
-.svz-node.path    { color: var(--blue); border-color: var(--blue-glow); background: var(--blue-dim); }
-.svz-node.root    { color: var(--green); border-color: var(--green-glow); background: var(--green-dim); }
-.svz-tree-connectors { display: flex; gap: 3px; justify-content: center; font-family: var(--mono); font-size: 8px; color: var(--bd2); }
+/* ── Paired tables ──────────────────────────────────────────────────────── */
+.col-center { padding:14px 16px 26px; }
+.tables-head { display:flex; align-items:flex-end; justify-content:space-between; gap:16px; margin-bottom:10px; flex-wrap:wrap; }
+.tables-title { font-size:14px; font-weight:700; }
+.tables-sub { font-size:10.5px; color:var(--muted); margin-top:2px; }
+.legend { display:flex; gap:12px; flex-wrap:wrap; }
+.legend-item { display:flex; align-items:center; gap:5px; font-family:var(--mono); font-size:9px; color:var(--muted); }
+.swatch { width:9px; height:9px; border-radius:2px; border:1px solid var(--bd2); }
+.sw-recipient { background:var(--teal); border-color:var(--teal); }
+.sw-candidate { background:var(--purple); border-color:var(--purple); }
+.sw-excluded  { background:var(--orange-dim); border-color:var(--orange); }
+.sw-clear     { background:var(--s3); }
 
-/* ZK circuit */
-.svz-circuit { display: grid; grid-template-columns: 1fr 60px 1fr; gap: 6px; align-items: stretch; }
-.svz-circuit-col { display: flex; flex-direction: column; gap: 3px; }
-.svz-circuit-title { font-family: var(--mono); font-size: 7.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin-bottom: 2px; text-align: center; }
-.svz-circuit-io { font-family: var(--mono); font-size: 8px; padding: 3px 6px; border-radius: 3px; display: flex; justify-content: space-between; align-items: center; gap: 4px; }
-.svz-circuit-io.priv { color: var(--muted); background: var(--s1); border: 1px solid var(--bd); }
-.svz-circuit-io.pub  { color: var(--teal);  background: var(--teal-dim); border: 1px solid var(--teal-glow); }
-.svz-circuit-io.warn { color: var(--amber); background: rgba(255,204,64,.05); border: 1px solid rgba(255,204,64,.2); }
-.svz-circuit-box { border: 2px solid rgba(195,160,255,.3); border-radius: var(--r); background: var(--purple-dim); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; padding: 6px 4px; }
-.svz-circuit-box-label { font-family: var(--mono); font-size: 9px; color: var(--purple); text-transform: uppercase; letter-spacing: .08em; font-weight: 700; text-align: center; }
-.svz-circuit-box-sub   { font-family: var(--mono); font-size: 7px; color: rgba(195,160,255,.5); text-align: center; }
-.svz-io-badge { font-size: 7px; padding: 1px 4px; border-radius: 3px; flex-shrink: 0; }
-.svz-io-badge.priv { color: var(--muted); border: 1px solid var(--bd); }
-.svz-io-badge.pub  { color: var(--green); border: 1px solid var(--green-glow); background: var(--green-dim); }
+.pair { border:1px solid var(--bd); border-radius:var(--r2); background:var(--s1); overflow:hidden; }
+/* Every row shares this template, so the two halves stay aligned by construction. */
+.pair-row { display:grid; grid-template-columns:26px 132px minmax(72px,1fr) 106px 108px 11px 38px minmax(96px,1.15fr); align-items:center; gap:0 9px; padding:0 11px; border-bottom:1px solid var(--bd); min-height:44px; transition:background .3s; }
+.pair-row:last-child { border-bottom:none; }
+.pair-head { min-height:34px; background:var(--s2); border-bottom:1px solid var(--bd); }
+.pair-head .th { font-family:var(--mono); font-size:8px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); }
+.pair-head .th.right-first { color:var(--purple); }
+.divider { grid-column:6; justify-self:center; width:1px; height:100%; background:var(--bd); }
+.pair-head .divider { background:var(--bd2); }
 
-/* relay diagram */
-.svz-relay-note { font-family: var(--mono); font-size: 8.5px; padding: 5px 10px; border-radius: 4px; background: rgba(255,85,102,.07); border: 1px dashed rgba(255,85,102,.3); color: var(--red); text-align: center; margin-top: 4px; }
+.cell-idx { font-family:var(--mono); font-size:10px; color:var(--muted); }
+.cell-name { display:flex; align-items:center; gap:8px; min-width:0; }
+.avatar { width:23px; height:23px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; flex-shrink:0; border:1px solid var(--bd2); background:var(--s3); color:var(--text2); }
+.avatar.c0 { background:var(--teal-dim); color:var(--teal); border-color:var(--teal-glow); }
+.avatar.c1 { background:var(--blue-dim); color:var(--blue); border-color:var(--blue-glow); }
+.avatar.c2 { background:var(--purple-dim); color:var(--purple); border-color:#b8a2e4; }
+.nm { font-size:12px; font-weight:600; line-height:1.2; }
+.rl { font-family:var(--mono); font-size:8px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); }
+.you-badge { font-family:var(--mono); font-size:7.5px; letter-spacing:.1em; padding:1px 4px; border-radius:3px; background:var(--teal-dim); color:var(--teal); border:1px solid var(--teal-glow); }
+.hex { font-family:var(--mono); font-size:10px; color:var(--text2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; cursor:pointer; border-bottom:1px dashed transparent; }
+.hex:hover { color:var(--blue); border-bottom-color:var(--blue); }
+.hex.dim { color:var(--muted); }
+.fp { font-family:var(--mono); font-size:9.5px; color:var(--text2); }
+.fp small { color:var(--muted); font-size:8px; display:block; }
+.state-chip { font-family:var(--mono); font-size:8px; letter-spacing:.04em; padding:2px 6px; border-radius:10px; border:1px solid var(--bd2); color:var(--muted); background:var(--s3); display:inline-block; white-space:nowrap; }
+.state-chip.pending { border-color:var(--blue); color:var(--blue); background:var(--blue-dim); animation:pulse 1.2s infinite; }
+.state-chip.registered { border-color:var(--teal); color:var(--teal); background:var(--teal-dim); }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
 
-/* Privacy badges */
-.privacy-section { margin: 10px 14px 0; }
-.privacy-title   { font-family: var(--mono); font-size: 8px; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
-.privacy-badges  { display: flex; flex-direction: column; gap: 5px; }
-.priv-badge      { display: flex; align-items: center; gap: 8px; padding: 5px 10px; border-radius: 5px; border: 1px solid var(--bd); background: var(--s2); transition: all .4s; }
-.priv-badge.verified { border-color: var(--green-glow); background: var(--green-dim); }
-.priv-dot        { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); flex-shrink: 0; transition: background .4s, box-shadow .4s; }
-.priv-badge.verified .priv-dot { background: var(--green); box-shadow: 0 0 6px var(--green); }
-.priv-badge-label { font-family: var(--mono); font-size: 9.5px; color: var(--muted); flex: 1; transition: color .4s; }
-.priv-badge.verified .priv-badge-label { color: var(--green); }
-.priv-badge-sub  { font-family: var(--mono); font-size: 8px; color: var(--muted); }
-.priv-badge.verified .priv-badge-sub { color: rgba(61,204,117,.6); }
+.bit { grid-column:7; justify-self:center; width:30px; height:30px; border-radius:6px; border:1px solid var(--bd2); background:var(--s3); color:var(--muted); font-family:var(--mono); font-size:13px; font-weight:700; display:flex; align-items:center; justify-content:center; transition:all .35s; }
+.bit.set        { border-color:var(--purple); background:var(--purple-dim); color:var(--purple); }
+.bit.recipient  { border-color:var(--teal); background:var(--teal-dim); color:var(--teal); box-shadow:0 0 10px rgba(14,138,113,.28); }
+.bit.excluded   { border-color:var(--orange); background:var(--orange-dim); color:var(--orange); }
+.bit.confirmed  { animation:bitpulse .9s ease-out; }
+@keyframes bitpulse { 0%{transform:scale(1);box-shadow:0 0 0 rgba(14,138,113,.6)} 40%{transform:scale(1.18);box-shadow:0 0 16px rgba(14,138,113,.5)} 100%{transform:scale(1);box-shadow:0 0 0 rgba(14,138,113,0)} }
+.bit-desc { font-family:var(--mono); font-size:9px; color:var(--muted); line-height:1.4; }
+.bit-desc strong { color:var(--text2); font-weight:600; }
+.bit-desc.recipient strong { color:var(--teal); }
+.bit-desc.excluded strong { color:var(--orange); }
+.bit-label { display:none; }
 
-/* Token flow */
-.token-flow  { margin: 10px 14px 0; }
-.flow-title  { font-family: var(--mono); font-size: 8px; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
-.flow-viz    { display: grid; grid-template-columns: 1fr auto 1fr; gap: 6px; align-items: center; }
-.flow-party  { text-align: center; }
-.flow-name   { font-family: var(--mono); font-size: 8.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .1em; margin-bottom: 3px; }
-.flow-box    { padding: 6px 8px; border-radius: 5px; border: 1px solid var(--bd); background: var(--s2); text-align: center; }
-.flow-before { font-family: var(--mono); font-size: 9px; color: var(--muted); margin-bottom: 2px; }
-.flow-after  { font-family: var(--mono); font-size: 13px; font-weight: 700; color: var(--label); transition: color .5s; }
-.flow-after.alice-final { color: var(--blue); }
-.flow-after.bob-final   { color: var(--green); }
-.flow-arrow-col  { text-align: center; }
-.flow-arrow-icon { font-size: 18px; color: var(--muted); transition: color .4s; }
-.flow-arrow-icon.active { color: var(--teal); }
-.flow-amt    { font-family: var(--mono); font-size: 9px; color: var(--muted); margin-top: 2px; transition: color .4s; }
-.flow-amt.active { color: var(--teal); }
+.pair-row.is-actor { background:rgba(14,138,113,.06); }
+.pair-row.row-new { animation:rowin .6s ease-out; }
+@keyframes rowin { from{background:rgba(20,103,182,.14)} to{background:transparent} }
 
-/* Metrics */
-.metrics-section { margin: 10px 14px 0; }
-.metrics-title   { font-family: var(--mono); font-size: 8px; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
-.metrics-grid    { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
-.metric-item     { padding: 8px 10px; border-radius: var(--r); background: var(--s2); border: 1px solid var(--bd); transition: border-color .5s; }
-.metric-item.set { border-color: var(--bd2); }
-.metric-key      { font-family: var(--mono); font-size: 7.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .1em; margin-bottom: 4px; }
-.metric-val      { font-family: var(--mono); font-size: 17px; font-weight: 700; color: var(--label); transition: color .5s; font-variant-numeric: tabular-nums; line-height: 1.1; }
-.metric-val.lit  { color: var(--text); }
-.metric-val.hl   { color: var(--teal); }
-.metric-sub      { font-family: var(--mono); font-size: 8px; color: var(--muted); margin-top: 3px; }
-.metric-bar      { height: 2px; background: var(--bd); border-radius: 1px; margin-top: 6px; overflow: hidden; }
-.metric-bar-fill { height: 100%; width: 0%; border-radius: 1px; background: linear-gradient(90deg, var(--teal), var(--blue)); transition: width 1.4s cubic-bezier(.16,1,.3,1); }
+.bitmap-summary { margin-top:10px; display:flex; gap:14px; flex-wrap:wrap; align-items:center; padding:10px 13px; border:1px solid var(--bd); border-radius:var(--r); background:var(--s1); }
+.bs-item { display:flex; flex-direction:column; gap:1px; }
+.bs-k { font-family:var(--mono); font-size:8px; letter-spacing:.13em; text-transform:uppercase; color:var(--muted); }
+.bs-v { font-family:var(--mono); font-size:11.5px; color:var(--text); }
+.bs-v.hl { color:var(--purple); letter-spacing:.14em; }
+.bs-v.ok { color:var(--teal); }
+.bs-note { flex:1; min-width:200px; font-size:10.5px; color:var(--muted); line-height:1.45; }
 
-/* Protocol addresses */
-.proto-section { margin: 10px 14px 0; }
-.proto-title   { font-family: var(--mono); font-size: 8px; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
-.proto-rows    { display: flex; flex-direction: column; gap: 4px; }
-.proto-row     { display: flex; gap: 8px; align-items: baseline; }
-.proto-key     { font-family: var(--mono); font-size: 8.5px; color: var(--muted); flex-shrink: 0; min-width: 100px; }
-.proto-val     { font-family: var(--mono); font-size: 9.5px; color: var(--label); word-break: break-all; }
+/* ── Progress ───────────────────────────────────────────────────────────── */
+.progress { margin-top:10px; display:flex; flex-direction:column; gap:5px; }
+.pstep { display:flex; align-items:flex-start; gap:8px; font-family:var(--mono); font-size:9.5px; }
+.pstep-ic { width:13px; height:13px; border-radius:50%; border:1px solid var(--bd2); flex-shrink:0; margin-top:2px; display:flex; align-items:center; justify-content:center; font-size:8px; color:var(--muted); }
+.pstep.running .pstep-ic { border-color:var(--blue); color:var(--blue); animation:pulse 1.1s infinite; }
+.pstep.success .pstep-ic { border-color:var(--teal); background:var(--teal-dim); color:var(--teal); }
+.pstep.error   .pstep-ic { border-color:var(--red); background:var(--red-dim); color:var(--red); }
+.pstep-txt { flex:1; min-width:0; }
+.pstep-lb { color:var(--text2); }
+.pstep.success .pstep-lb { color:var(--teal); }
+.pstep.error   .pstep-lb { color:var(--red); }
+.pstep-ms { color:var(--muted); line-height:1.45; word-break:break-word; }
 
-/* Tx cards */
-.tx-section    { margin: 10px 14px 12px; }
-.tx-title      { font-family: var(--mono); font-size: 8px; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
-.tx-cards      { display: flex; flex-direction: column; gap: 6px; }
-.tx-card       { padding: 8px 10px; border-radius: var(--r); background: var(--s2); border: 1px solid var(--bd); }
-.tx-card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 5px; }
-.tx-card-label  { font-family: var(--mono); font-size: 8.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .1em; }
-.tx-card-status { font-family: var(--mono); font-size: 8px; padding: 2px 6px; border-radius: 10px; }
-.tx-card-status.pending { color: var(--muted); border: 1px solid var(--bd); }
-.tx-card-status.done    { color: var(--teal); border: 1px solid var(--teal-glow); background: var(--teal-dim); }
-.tx-meta       { display: flex; gap: 12px; flex-wrap: wrap; }
-.tx-meta-item  { display: flex; flex-direction: column; gap: 1px; }
-.tx-meta-key   { font-family: var(--mono); font-size: 7.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .1em; }
-.tx-meta-val   { font-family: var(--mono); font-size: 9.5px; color: var(--label); }
+.alert { margin-top:10px; padding:8px 10px; border-radius:6px; font-size:10.5px; line-height:1.5; border:1px solid rgba(194,42,60,.28); background:var(--red-dim); color:var(--red); }
+.alert.ok { border-color:var(--teal-glow); background:var(--teal-dim); color:var(--teal); }
 
-/* Summary card */
-.summary-card  { display: none; margin: 12px 14px; padding: 14px; border-radius: var(--r2); background: var(--s2); border: 1px solid var(--green-glow); }
-.summary-card.show { display: block; }
-.summary-title { font-family: var(--mono); font-size: 9px; letter-spacing: .16em; text-transform: uppercase; color: var(--green); margin-bottom: 10px; font-weight: 700; }
-.summary-grid  { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.summary-item  { display: flex; flex-direction: column; gap: 2px; }
-.summary-key   { font-family: var(--mono); font-size: 7.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .1em; }
-.summary-val   { font-family: var(--mono); font-size: 11px; color: var(--text); font-weight: 600; }
-.summary-highlight { color: var(--teal); }
-.summary-privacy { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--bd); font-size: 11px; color: var(--text2); line-height: 1.6; }
-.summary-privacy strong { color: var(--teal); }
+/* ── Chain column ───────────────────────────────────────────────────────── */
+.chain-card { border:1px solid var(--bd); border-radius:var(--r); background:var(--s2); margin-bottom:10px; overflow:hidden; }
+.cc-head { padding:7px 11px; background:var(--s3); border-bottom:1px solid var(--bd); display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.cc-title { font-family:var(--mono); font-size:9px; letter-spacing:.12em; text-transform:uppercase; color:var(--label); }
+.cc-badge { font-family:var(--mono); font-size:8.5px; padding:1px 6px; border-radius:9px; border:1px solid var(--teal-glow); background:var(--teal-dim); color:var(--teal); }
+.cc-badge.gray { border-color:var(--bd2); background:var(--s3); color:var(--muted); }
+.cc-body { padding:8px 11px; }
+.kv { display:grid; grid-template-columns:104px minmax(0,1fr); gap:3px 9px; align-items:baseline; }
+.kv dt { font-family:var(--mono); font-size:8.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); }
+.kv dd { font-family:var(--mono); font-size:10px; color:var(--text); word-break:break-all; }
+.kv dd.teal { color:var(--teal); } .kv dd.blue { color:var(--blue); } .kv dd.purple { color:var(--purple); } .kv dd.amber { color:var(--amber); }
+.leaf-list { display:flex; flex-direction:column; gap:3px; margin-top:6px; max-height:168px; overflow-y:auto; }
+.leaf { display:flex; gap:8px; align-items:center; font-family:var(--mono); font-size:9.5px; padding:3px 6px; border-radius:4px; background:var(--s3); border-left:2px solid var(--bd2); }
+.leaf .li { color:var(--muted); width:22px; flex-shrink:0; }
+.leaf .lv { color:var(--text2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.leaf.new { border-left-color:var(--teal); animation:rowin .9s ease-out; }
+.sep { height:1px; background:var(--bd); margin:8px 0; }
 
-/* Log */
-.log-wrap    { grid-column: 1 / -1; border-top: 1px solid var(--bd); background: var(--bg); display: flex; flex-direction: column; height: 160px; flex-shrink: 0; }
-.log-header  { padding: 5px 14px; border-bottom: 1px solid var(--bd); background: var(--s1); font-family: var(--mono); font-size: 8.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
-.log-clear   { cursor: pointer; font-size: 8.5px; color: var(--muted); background: none; border: none; padding: 2px 6px; }
-.log-clear:hover { color: var(--label); }
-.log-filter-select { margin-left: auto; font-family: var(--mono); font-size: 8.5px; text-transform: none; letter-spacing: normal; background: var(--bg); border: 1px solid var(--bd); color: var(--muted); border-radius: 3px; padding: 2px 6px; cursor: pointer; }
-.log-filter-select:hover { border-color: var(--bd2); color: var(--label); }
-.log-body    { flex: 1; overflow-y: auto; padding: 4px 0; }
-.log-line    { display: flex; gap: 8px; align-items: baseline; font-family: var(--mono); font-size: 10px; line-height: 1.7; padding: 1px 14px; }
-.log-line:hover { background: var(--s1); }
-.log-ts      { color: var(--muted); flex-shrink: 0; font-size: 8.5px; }
-.cat-badge   { font-size: 7.5px; font-weight: 700; letter-spacing: .08em; padding: 1px 5px; border-radius: 3px; flex-shrink: 0; font-family: var(--mono); text-transform: uppercase; }
-.cat-key     { background: rgba(195,160,255,.1); color: var(--purple); border: 1px solid rgba(195,160,255,.2); }
-.cat-chain   { background: rgba(82,184,255,.1);  color: var(--blue);   border: 1px solid rgba(82,184,255,.2); }
-.cat-zk      { background: rgba(61,212,176,.1);  color: var(--teal);   border: 1px solid rgba(61,212,176,.2); }
-.cat-tag     { background: rgba(255,144,64,.1);  color: var(--orange); border: 1px solid rgba(255,144,64,.2); }
-.log-msg     { color: var(--text); flex: 1; }
-.log-msg.ok  { color: var(--teal); }
-.log-msg.err { color: var(--red); }
+/* ── Log ────────────────────────────────────────────────────────────────── */
+.log-head { display:flex; align-items:center; gap:8px; padding:7px 11px; background:var(--s3); border-bottom:1px solid var(--bd); }
+.log-head span { font-family:var(--mono); font-size:9px; letter-spacing:.12em; text-transform:uppercase; color:var(--label); flex:1; }
+.log-head select { width:auto; padding:2px 6px; font-size:9.5px; }
+.log-body { max-height:280px; overflow-y:auto; padding:6px 10px; font-family:var(--mono); font-size:9.5px; line-height:1.65; }
+.log-line { display:flex; gap:7px; padding:1px 0; color:var(--text2); }
+.log-ts { color:var(--muted); flex-shrink:0; }
+.log-cat { flex-shrink:0; width:38px; text-transform:uppercase; font-size:8px; padding-top:2px; }
+.log-cat.key { color:var(--purple); } .log-cat.chain { color:var(--blue); }
+.log-cat.zk { color:var(--amber); } .log-cat.tag { color:var(--teal); }
+.log-cat.scan { color:var(--orange); } .log-cat.err { color:var(--red); }
+.log-msg { word-break:break-word; flex:1; }
+.log-line.err .log-msg { color:var(--red); }
 
-/* ── Responsive (kept last so it wins the cascade over same-specificity base rules) ── */
-@media (max-width: 480px) {
-  .metrics-grid, .summary-grid { grid-template-columns: 1fr; }
-  .svz-circuit { grid-template-columns: 1fr; }
-  .header { padding: 8px 12px; gap: 8px; }
-  .mode-label { display: none; }
+/* ── Scan results ───────────────────────────────────────────────────────── */
+.scan-item { border:1px solid var(--bd); border-left-width:2px; border-radius:5px; background:var(--s2); padding:7px 9px; margin-top:6px; }
+.scan-item.skipped { border-left-color:var(--muted); }
+.scan-item.decoy   { border-left-color:var(--orange); }
+.scan-item.matched { border-left-color:var(--teal); }
+.scan-hd { display:flex; align-items:center; gap:7px; }
+.scan-tag { font-family:var(--mono); font-size:8.5px; letter-spacing:.08em; padding:1px 6px; border-radius:9px; border:1px solid var(--bd2); color:var(--muted); }
+.scan-item.decoy .scan-tag { border-color:var(--orange); color:var(--orange); }
+.scan-item.matched .scan-tag { border-color:var(--teal); color:var(--teal); }
+.scan-bits { font-family:var(--mono); font-size:9.5px; color:var(--muted); letter-spacing:.16em; margin-left:auto; }
+.scan-detail { font-size:10px; color:var(--text2); line-height:1.45; margin-top:4px; }
+.scan-note { margin-top:6px; padding:6px 8px; border-radius:4px; background:var(--s3); }
+.scan-note .sn-hd { font-family:var(--mono); font-size:10px; color:var(--teal); }
+.scan-note .sn-d { font-size:9.5px; color:var(--muted); line-height:1.45; margin-top:2px; }
+
+/* ── Narrow: stack each pair, repeat the row identity ───────────────────── */
+@media (max-width:900px) {
+  .pair-row { grid-template-columns:30px minmax(0,1fr) 116px 104px; grid-auto-rows:min-content; padding:9px 12px; gap:6px 10px; }
+  .pair-head { display:none; }
+  .divider { display:none; }
+  .bit { grid-column:1; justify-self:start; }
+  .bit-desc { grid-column:2 / -1; }
+  .bit-label { display:block; grid-column:1 / -1; font-family:var(--mono); font-size:8px; letter-spacing:.13em; text-transform:uppercase; color:var(--purple); padding-top:6px; border-top:1px dashed var(--bd); margin-top:4px; }
 }
 </style>
 </head>
-<body class="mode-plain">
+<body>
 
 <div class="header">
   <span class="brand">Enygma</span>
-  <div><div class="title">Retail Payments <small>· Live Demo</small></div></div>
-  <div class="mode-wrap">
-    <span class="mode-label">Mode</span>
-    <div class="mode-toggle">
-      <button class="mode-btn active" id="btnPlain" onclick="setMode('plain')">Plain</button>
-      <button class="mode-btn" id="btnTag" onclick="setMode('tag')">With Tag</button>
-    </div>
-    <span class="mode-tip">+ ML-KEM channel &amp; TagRegistry notification</span>
+  <div class="title">Retail Payments <small>· live protocol demo</small></div>
+  <div class="header-spacer"></div>
+  <div class="health">
+    <div class="health-item"><span class="dot" id="h-chain"></span>chain</div>
+    <div class="health-item"><span class="dot" id="h-gnark"></span>prover</div>
+    <div class="health-item"><span class="dot" id="h-relayer"></span>relayer</div>
   </div>
-  <div class="controls">
-    <button class="present-toggle" id="presentToggle" title="Scale up the whole UI for presenting on a projector or screen share">
-      <span class="present-toggle-label">Presentation</span>
-    </button>
-    <div class="status-dot" id="statusDot"></div>
-    <span id="statusText">idle</span>
-    <button id="runBtn" onclick="run()">Run Flow</button>
+  <button class="present-toggle" id="presentToggle" title="Scale the whole UI up for a projector or screen share">Presentation</button>
+</div>
+
+<div class="rail" id="rail"></div>
+
+<div class="layout">
+
+  <!-- ══ Controls ══════════════════════════════════════════════════════ -->
+  <div class="col col-controls">
+
+    <!-- 1 · Register -->
+    <div class="panel" id="panel-register">
+      <div class="panel-head"><div class="panel-step" id="ps-register">1</div><div class="panel-title">Register parties</div></div>
+      <div class="panel-sub">Generates a BabyJubJub spend keypair and an ML-KEM-768 view keypair for eight users, publishes all eight to <span class="mono">UserRegistry</span>, then funds Alice, Bob and Charlie with one private note each.</div>
+      <button class="btn btn-primary" id="btnRegister" onclick="doRegister()">Register 8 parties</button>
+      <div class="progress" id="prog-register"></div>
+      <div id="err-register"></div>
+    </div>
+
+    <!-- 2 · Act as -->
+    <div class="panel locked" id="panel-actor">
+      <div class="panel-head"><div class="panel-step" id="ps-actor">2</div><div class="panel-title">Act as</div></div>
+      <div class="panel-sub">Choose whose wallet you are driving. Only that party's secrets are ever sent to this page.</div>
+      <div class="actor-row" id="actorRow"></div>
+      <div id="identityBox"></div>
+      <div id="err-actor"></div>
+    </div>
+
+    <!-- 3 · Channel -->
+    <div class="panel locked" id="panel-channel">
+      <div class="panel-head"><div class="panel-step" id="ps-channel">3</div><div class="panel-title">Establish a channel</div></div>
+      <div class="panel-sub">One ML-KEM-768 encapsulation plus a privacy bitmap over the registry. Channels are directional — a channel from Alice to Bob does not let Bob pay Alice.</div>
+      <div class="field">
+        <label class="field-label" for="chanRecipient">Recipient</label>
+        <select id="chanRecipient" onchange="refreshPreview()"></select>
+      </div>
+      <label class="field-label">Privacy mode</label>
+      <div class="modes" id="modeButtons"></div>
+      <div class="exclusions" id="exclusionsBox" style="display:none">
+        <div class="field-label" style="margin:0">Rift exclusions — rows to leave out</div>
+        <div class="excl-grid" id="exclGrid"></div>
+      </div>
+      <div id="previewBox"></div>
+      <button class="btn btn-blue" id="btnOpenChannel" style="margin-top:10px" onclick="doOpenChannel()" disabled>Establish channel</button>
+      <div class="progress" id="prog-channel"></div>
+      <div id="err-channel"></div>
+      <div class="chan-list" id="chanList"></div>
+    </div>
+
+    <!-- 4 · Pay -->
+    <div class="panel locked" id="panel-payment">
+      <div class="panel-head"><div class="panel-step" id="ps-payment">4</div><div class="panel-title">Send a private payment</div></div>
+      <div class="panel-sub">Spends one note, proves the transfer in zero knowledge, relays it, then publishes the encrypted note under a private tag.</div>
+      <div class="btn-row">
+        <div class="field" style="flex:1.4">
+          <label class="field-label" for="payRecipient">To</label>
+          <select id="payRecipient" onchange="syncPayForm()"></select>
+        </div>
+        <div class="field" style="flex:1">
+          <label class="field-label" for="payAmount">Amount</label>
+          <input type="number" id="payAmount" min="1" step="1" value="30" oninput="syncPayForm()">
+        </div>
+      </div>
+      <button class="btn btn-primary" id="btnPay" onclick="doPay()" disabled>Send payment</button>
+      <div id="payHint" class="panel-sub" style="margin:8px 0 0 0"></div>
+      <div class="progress" id="prog-payment"></div>
+      <div id="err-payment"></div>
+    </div>
+
+    <!-- 5 · Scan -->
+    <div class="panel locked" id="panel-scan">
+      <div class="panel-head"><div class="panel-step" id="ps-scan">5</div><div class="panel-title">Scan &amp; decrypt</div></div>
+      <div class="panel-sub">Switch to the party you paid, then scan. Rows outside the bitmap skip the channel entirely; decoys decapsulate and fail authentication; the true recipient recovers the note.</div>
+          <button class="btn btn-blue" id="btnScan" onclick="doScan()" disabled>Scan as —</button>
+      <div class="progress" id="prog-scan"></div>
+      <div id="err-scan"></div>
+      <div id="scanResults"></div>
+    </div>
+  </div>
+
+  <!-- ══ Centre: the paired tables ═════════════════════════════════════ -->
+  <div class="col col-center">
+    <div class="tables-head">
+      <div>
+        <div class="tables-title">Registry &amp; channel visibility</div>
+        <div class="tables-sub" id="tablesSub">Each row is one registered user. The left half is what <span class="mono">UserRegistry</span> stores; the right half is the bit that user occupies in the channel bitmap.</div>
+      </div>
+      <div class="legend">
+        <div class="legend-item"><span class="swatch sw-recipient"></span>recipient</div>
+        <div class="legend-item"><span class="swatch sw-candidate"></span>candidate</div>
+        <div class="legend-item"><span class="swatch sw-excluded"></span>excluded</div>
+        <div class="legend-item"><span class="swatch sw-clear"></span>bit clear</div>
+      </div>
+    </div>
+
+    <div class="pair" id="pairTable"></div>
+    <div class="bitmap-summary" id="bitmapSummary"></div>
+  </div>
+
+  <!-- ══ Chain ═════════════════════════════════════════════════════════ -->
+  <div class="col col-chain">
+    <div class="panel">
+      <div class="panel-head"><div class="panel-title">Blockchain</div></div>
+      <div id="chainPanel"></div>
+    </div>
+    <div class="panel" style="padding:0">
+      <div class="log-head">
+        <span>Event log</span>
+        <select id="logFilter" onchange="renderLog()">
+          <option value="all">All</option><option value="key">Key</option><option value="chain">Chain</option>
+          <option value="zk">ZK</option><option value="tag">Tag</option><option value="scan">Scan</option>
+        </select>
+        <button class="mini-btn" onclick="logLines=[];renderLog()">clear</button>
+      </div>
+      <div class="log-body" id="logBody"></div>
+    </div>
   </div>
 </div>
 
-<div class="progress-wrap"><div class="progress-bar" id="progressBar"></div></div>
-
-<div class="steps-wrap"><div class="steps" id="stepsRow"></div></div>
-
-<div class="body-wrap">
-
-  <!-- ── Alice ── -->
-  <div class="participant" id="p0">
-    <div class="participant-header">
-      <div class="p-avatar alice">A</div>
-      <div><div class="p-name">Alice</div><div class="p-role">Sender</div></div>
-    </div>
-    <div class="p-fields">
-      <div class="p-row"><div class="p-key">ETH Address</div><div class="p-val dim" id="p0-ethAddr">—</div></div>
-      <div class="p-row"><div class="p-key" title="BabyJubJub public key used inside the ZK circuit to prove note ownership, without revealing the matching private key.">pk_spend (BJJ)</div><div class="p-val" id="p0-pkSpend">—</div></div>
-      <div class="p-row"><div class="p-key" title="Post-quantum public key (NIST FIPS 203) used to encrypt/decrypt payment notes so only the intended recipient can read them.">pk_view (ML-KEM-768)</div><div class="p-val" id="p0-pkView">—</div></div>
-      <div class="p-row"><div class="p-key" title="On-chain registration status in UserRegistry — the only transaction where this party's real Ethereum address appears as msg.sender.">Registry</div><div class="p-val" id="p0-status">—</div></div>
-      <div class="section-sep" style="margin:8px 0 0"></div>
-      <div class="p-row"><div class="p-key" title="A hash of (pk_spend, salt, amount, tokenId) recorded on-chain instead of the plaintext values — hides the amount and owner.">Poseidon Commitment</div><div class="p-val" id="p0-commitment">—</div></div>
-      <div class="p-row"><div class="p-key" title="Root of the tree containing every deposit commitment. Alice proves her note is included without revealing which leaf it is.">Merkle Root</div><div class="p-val" id="p0-merkleRoot">—</div></div>
-      <div class="p-row"><div class="p-key" title="A one-time value derived from Alice's note that the contract marks as spent on-chain, preventing the same note from being spent twice.">Nullifier (spent)</div><div class="p-val" id="p0-nullifier">—</div></div>
-      <div class="section-sep" style="margin:8px 0 0"></div>
-      <div class="p-row"><div class="p-key">Token Balance</div><div class="p-val" id="p0-balance">—</div></div>
-    </div>
-  </div>
-
-  <!-- ── Center ── -->
-  <div class="center-panel">
-
-    <!-- Orientation card -->
-    <div class="intro-card" id="introCard">
-      <div class="intro-hdr" id="introToggle">
-        <span class="intro-title">What you're about to see</span>
-        <span class="intro-toggle-ic" id="introToggleIc">▾</span>
-      </div>
-      <div class="intro-body" id="introBody">
-        <p>
-          Alice deposits ERC-20 tokens into a private vault behind a <strong>Poseidon commitment</strong>, then
-          pays Bob <strong>30 of 40 tokens</strong> using a <strong>Groth16 zero-knowledge proof</strong> —
-          submitted by a relayer so Alice's Ethereum address never touches the payment transaction.
-          Bob discovers and decrypts his note using an <strong>ML-KEM-768</strong> (post-quantum) view key.
-        </p>
-        <div class="intro-modes">
-          <div class="intro-mode-row"><span class="intro-mode-tag plain">PLAIN</span> Bob finds his note by trial-decrypting every on-chain Payment event with his view key.</div>
-          <div class="intro-mode-row"><span class="intro-mode-tag tag">WITH TAG</span> Alice also opens an ML-KEM channel and publishes an encrypted "tag" pointer, so Bob can find his note directly without scanning every event.</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Summary card -->
-    <div class="summary-card" id="summaryCard">
-      <div class="summary-title">Payment Complete</div>
-      <div class="summary-grid">
-        <div class="summary-item"><div class="summary-key">Transferred</div><div class="summary-val summary-highlight" id="sum-amount">30 tokens</div></div>
-        <div class="summary-item"><div class="summary-key">Mode</div><div class="summary-val" id="sum-mode">Plain</div></div>
-        <div class="summary-item"><div class="summary-key">On-chain Txs</div><div class="summary-val" id="sum-txcount">—</div></div>
-        <div class="summary-item"><div class="summary-key">Total Protocol Gas</div><div class="summary-val" id="sum-gas">—</div></div>
-        <div class="summary-item" style="grid-column:1/-1"><div class="summary-key">Timing</div><div class="summary-val" id="sum-extra" style="font-size:10px;color:var(--text2)">—</div></div>
-      </div>
-      <div class="summary-privacy"><strong>Privacy guaranteed:</strong> Alice's Ethereum address never appeared on the payment or tag transactions — the relayer submitted them as <strong>msg.sender</strong>. Amount and owner are hidden behind a <strong>Poseidon commitment</strong>. Bob's note is sealed with <strong>ML-KEM-768</strong>.</div>
-    </div>
-
-    <!-- Step Visualizer Card -->
-    <div class="step-viz-card" id="stepVizCard">
-      <div class="svz-header">
-        <span class="svz-step-label" id="svzLabel">Waiting</span>
-        <span class="svz-badge idle" id="svzBadge">idle</span>
-      </div>
-      <div class="svz-diagram" id="svzDiagram">
-        <div class="svz-idle">Click <strong>Run Flow</strong> to start the confidential ERC-20 payment demo.</div>
-      </div>
-      <div class="svz-desc" id="svzDesc" style="display:none"></div>
-    </div>
-
-    <!-- Privacy guarantees -->
-    <div class="privacy-section">
-      <div class="privacy-title">Privacy Guarantees</div>
-      <div class="privacy-badges">
-        <div class="priv-badge" id="priv-sender">
-          <div class="priv-dot"></div>
-          <div style="flex:1"><div class="priv-badge-label">msg.sender = relayer</div><div class="priv-badge-sub">Alice's address never on payment tx</div></div>
-        </div>
-        <div class="priv-badge" id="priv-nullifier">
-          <div class="priv-dot"></div>
-          <div style="flex:1"><div class="priv-badge-label">Nullifier spent on-chain</div><div class="priv-badge-sub">Alice's note cannot be double-spent</div></div>
-        </div>
-        <div class="priv-badge" id="priv-commitment">
-          <div class="priv-dot"></div>
-          <div style="flex:1"><div class="priv-badge-label">Commitment hiding</div><div class="priv-badge-sub">Amount &amp; owner hidden by Poseidon hash</div></div>
-        </div>
-        <div class="priv-badge" id="priv-note">
-          <div class="priv-dot"></div>
-          <div style="flex:1"><div class="priv-badge-label">Note encrypted (ML-KEM-768)</div><div class="priv-badge-sub">Only Bob can decrypt the payment note</div></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Token flow -->
-    <div class="token-flow">
-      <div class="flow-title">Token Flow</div>
-      <div class="flow-viz">
-        <div class="flow-party"><div class="flow-name">Alice</div>
-          <div class="flow-box"><div class="flow-before">deposited 40</div><div class="flow-after alice-final" id="flowAlice">10 change</div></div>
-        </div>
-        <div class="flow-arrow-col"><div class="flow-arrow-icon" id="flowArrow">→</div><div class="flow-amt" id="flowAmt">30 tokens</div></div>
-        <div class="flow-party"><div class="flow-name">Bob</div>
-          <div class="flow-box"><div class="flow-before">started: 0</div><div class="flow-after bob-final" id="flowBob">30 received</div></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Metrics -->
-    <div class="metrics-section">
-      <div class="metrics-title">Performance Metrics</div>
-      <div class="metrics-grid">
-        <div class="metric-item" id="metric-proofTime"><div class="metric-key">Proof Generation</div><div class="metric-val" id="mv-proofTime">—</div><div class="metric-sub" id="ms-proofTime">Groth16 witness + prove</div><div class="metric-bar"><div class="metric-bar-fill" id="mb-proofTime"></div></div></div>
-        <div class="metric-item" id="metric-proofSize"><div class="metric-key">Proof Size</div><div class="metric-val" id="mv-proofSize">—</div><div class="metric-sub">8 × 32-byte field elements</div></div>
-        <div class="metric-item" id="metric-verifyTime"><div class="metric-key">Verify Round-Trip</div><div class="metric-val" id="mv-verifyTime">—</div><div class="metric-sub">Submit → tx confirmed</div><div class="metric-bar"><div class="metric-bar-fill" id="mb-verifyTime"></div></div></div>
-        <div class="metric-item" id="metric-verifyGas"><div class="metric-key">Verification Gas</div><div class="metric-val" id="mv-verifyGas">—</div><div class="metric-sub">EnygmaDvp.payment() gas</div></div>
-        <div class="metric-item" id="metric-totalGas"><div class="metric-key">Total Protocol Gas</div><div class="metric-val hl" id="mv-totalGas">—</div><div class="metric-sub">Deposit + payment + tags</div></div>
-        <div class="metric-item" id="metric-flowTime"><div class="metric-key">Total Flow Time</div><div class="metric-val hl" id="mv-flowTime">—</div><div class="metric-sub">End-to-end wall-clock</div></div>
-      </div>
-    </div>
-
-    <div style="height:1px;background:var(--bd);margin:10px 14px 0"></div>
-
-    <!-- Protocol addresses -->
-    <div class="proto-section">
-      <div class="proto-title">Contracts &amp; Relayer</div>
-      <div class="proto-rows">
-        <div class="proto-row"><div class="proto-key" title="Holds deposited ERC-20 tokens behind Poseidon commitments and verifies Groth16 payment proofs.">Erc20CoinVault</div><div class="proto-val" id="proto-vaultAddr">—</div></div>
-        <div class="proto-row"><div class="proto-key" title="On-chain directory of each party's public spend and view keys.">UserRegistry</div><div class="proto-val" id="proto-registryAddr">—</div></div>
-        <div class="proto-row"><div class="proto-key" title="Submits payment transactions as msg.sender so Alice's own address never appears on-chain.">Relayer</div><div class="proto-val" id="proto-relayerAddr">—</div></div>
-        <div class="proto-row tag-only-row" style="display:none"><div class="proto-key" title="Stores ML-KEM-768 ciphertexts so two parties can derive a shared secret without a direct off-chain channel.">TagChannelRegistry</div><div class="proto-val" id="proto-tagChannelAddr">—</div></div>
-        <div class="proto-row tag-only-row" style="display:none"><div class="proto-key" title="Public ledger of encrypted, HMAC-indexed payment notes — lets Bob find his payment without scanning every vault event.">TagRegistry</div><div class="proto-val" id="proto-tagRegistryAddr">—</div></div>
-      </div>
-    </div>
-
-    <div style="height:1px;background:var(--bd);margin:10px 14px 0"></div>
-
-    <!-- Transaction record -->
-    <div class="tx-section">
-      <div class="tx-title">Transaction Record</div>
-      <div class="tx-cards">
-        <div class="tx-card"><div class="tx-card-header"><span class="tx-card-label">Payment (EnygmaDvp.payment)</span><span class="tx-card-status pending" id="txstatus-payment">pending</span></div><div class="tx-meta"><div class="tx-meta-item"><div class="tx-meta-key">Tx Hash</div><div class="tx-meta-val" id="txhash-payment">—</div></div><div class="tx-meta-item"><div class="tx-meta-key">Block</div><div class="tx-meta-val" id="txblock-payment">—</div></div><div class="tx-meta-item"><div class="tx-meta-key">Gas Used</div><div class="tx-meta-val" id="txgas-payment">—</div></div></div></div>
-        <div class="tx-card tag-only-card" style="display:none"><div class="tx-card-header"><span class="tx-card-label">Channel Setup (TagChannelRegistry)</span><span class="tx-card-status pending" id="txstatus-channel">pending</span></div><div class="tx-meta"><div class="tx-meta-item"><div class="tx-meta-key">Tx Hash</div><div class="tx-meta-val" id="txhash-channel">—</div></div><div class="tx-meta-item"><div class="tx-meta-key">Block</div><div class="tx-meta-val" id="txblock-channel">—</div></div><div class="tx-meta-item"><div class="tx-meta-key">Gas Used</div><div class="tx-meta-val" id="txgas-channel">—</div></div></div></div>
-        <div class="tx-card tag-only-card" style="display:none"><div class="tx-card-header"><span class="tx-card-label">Tag Publish (TagRegistry)</span><span class="tx-card-status pending" id="txstatus-tag">pending</span></div><div class="tx-meta"><div class="tx-meta-item"><div class="tx-meta-key">Tx Hash</div><div class="tx-meta-val" id="txhash-tag">—</div></div><div class="tx-meta-item"><div class="tx-meta-key">Block</div><div class="tx-meta-val" id="txblock-tag">—</div></div><div class="tx-meta-item"><div class="tx-meta-key">Gas Used</div><div class="tx-meta-val" id="txgas-tag">—</div></div></div></div>
-      </div>
-    </div>
-
-  </div><!-- /center -->
-
-  <!-- ── Bob ── -->
-  <div class="participant" id="p1">
-    <div class="participant-header">
-      <div class="p-avatar bob">B</div>
-      <div><div class="p-name">Bob</div><div class="p-role">Receiver</div></div>
-    </div>
-    <div class="p-fields">
-      <div class="p-row"><div class="p-key">ETH Address</div><div class="p-val dim" id="p1-ethAddr">—</div></div>
-      <div class="p-row"><div class="p-key" title="BabyJubJub public key used inside the ZK circuit to prove note ownership, without revealing the matching private key.">pk_spend (BJJ)</div><div class="p-val" id="p1-pkSpend">—</div></div>
-      <div class="p-row"><div class="p-key" title="Post-quantum public key (NIST FIPS 203) used to encrypt/decrypt payment notes so only the intended recipient can read them.">pk_view (ML-KEM-768)</div><div class="p-val" id="p1-pkView">—</div></div>
-      <div class="p-row"><div class="p-key" title="On-chain registration status in UserRegistry — the only transaction where this party's real Ethereum address appears as msg.sender.">Registry</div><div class="p-val" id="p1-status">—</div></div>
-      <div class="section-sep" style="margin:8px 0 0"></div>
-      <div class="p-row"><div class="p-key" title="Poseidon commitment to Bob's new note — hides the amount he received until he decrypts it himself.">Output Commitment</div><div class="p-val" id="p1-commitment">—</div></div>
-      <div class="p-row tag-only-field" style="display:none"><div class="p-key" title="Pairwise secret Alice and Bob share after an ML-KEM-768 key exchange, used to seal the private payment tag.">ML-KEM Channel</div><div class="p-val" id="p1-channel">—</div></div>
-      <div class="p-row"><div class="p-key" title="Random blinding value recovered from the decrypted note — needed alongside the amount to recompute and verify the Poseidon commitment.">Note Salt (decrypted)</div><div class="p-val" id="p1-salt">—</div></div>
-      <div class="section-sep" style="margin:8px 0 0"></div>
-      <div class="p-row"><div class="p-key">Token Balance</div><div class="p-val" id="p1-balance">—</div></div>
-    </div>
-  </div>
-
-  <!-- Log -->
-  <div class="log-wrap">
-    <div class="log-header"><span>Event Log</span><select id="logFilter" class="log-filter-select" title="Show only log lines from one category"><option value="all">All</option><option value="key">Key</option><option value="chain">Chain</option><option value="zk">ZK</option><option value="tag">Tag</option></select><button class="log-clear" onclick="clearLog()">clear</button></div>
-    <div class="log-body" id="logBody"></div>
-  </div>
-
-</div><!-- /body-wrap -->
-
 <script>
-// ── State ─────────────────────────────────────────────────────────────────────
-let mode = 'plain', es = null, txCount = 0;
+// ── Client state ────────────────────────────────────────────────────────────
+let S = null;                 // last /api/state snapshot; carries the active
+                              // party's secrets and nobody else's
+let revealed = {};            // which secret fields the user un-masked
+let logLines = [];
+let progress = { register:[], channel:[], payment:[], scan:[] };
+let chanMode = 'full';
+let exclusions = new Set();
+let previewTimer = null;
+// Identifies the channel parameters the current preview was built from, so the
+// render pass can top up a missing preview without ever looping on one.
+let previewKey = '';
+let previewFailedAt = 0;      // backs off after a failed attempt, then retries
+let newLeaves = new Set();
+// Bumped by every mutating call. A /api/state poll that started before a
+// mutation finished is stale by the time it lands, and must not overwrite the
+// fresher snapshot the mutation returned.
+let stateSeq = 0;
 
-// Live data cache — updated as participant/proto events arrive so diagrams can reference it
-const liveData = {};
-
-// ── Step definitions ──────────────────────────────────────────────────────────
-const STEPS_PLAIN = [
-  { id:'prereqs',  label:'Prerequisites' },
-  { id:'keygen',   label:'Key Gen' },
-  { id:'register', label:'Register' },
-  { id:'deposit',  label:'Deposit' },
-  { id:'merkle',   label:'Merkle Proof' },
-  { id:'zkproof',  label:'ZK Proof' },
-  { id:'relay',    label:'Relay Payment' },
-  { id:'scan',     label:'Bob Scans' },
+const MODES = [
+  { id:'none',   name:'None',   desc:'recipient only · 1 of 8' },
+  { id:'subset', name:'Subset', desc:'recipient + ⌊√N⌋ decoys · 3 of 8' },
+  { id:'rift',   name:'Rift',   desc:'everyone but your exclusions' },
+  { id:'full',   name:'Full',   desc:'all 8 registered users' },
 ];
-const STEPS_TAG = [
-  { id:'prereqs',  label:'Prerequisites' },
-  { id:'keygen',   label:'Key Gen' },
-  { id:'register', label:'Register' },
-  { id:'channel',  label:'Channel Setup', tagOnly:true },
-  { id:'deposit',  label:'Deposit' },
-  { id:'merkle',   label:'Merkle Proof' },
-  { id:'zkproof',  label:'ZK Proof' },
-  { id:'relay',    label:'Relay Payment' },
-  { id:'tag',      label:'Publish Tag', tagOnly:true },
-  { id:'scan_tag', label:'Bob Scans Tag', tagOnly:true },
-  { id:'verify',   label:'Verify', tagOnly:true },
-];
-function currentSteps() { return mode === 'tag' ? STEPS_TAG : STEPS_PLAIN; }
 
-// ── Step Visualizer Templates ─────────────────────────────────────────────────
-function actor(cls, label, sub) {
-  return `<div class="svz-actor"><div class="svz-actor-box ${cls}">${label}</div><div class="svz-actor-name">${sub||''}</div></div>`;
-}
-function arrowRight(label) {
-  return `<div class="svz-arrow-wrap"><div class="svz-arrow-line"></div><div class="svz-arrow-head">›</div>${label?`<div class="svz-arrow-label">${label}</div>`:''}</div>`;
-}
-function arrowLeft(label) {
-  return `<div class="svz-arrow-wrap"><div class="svz-arrow-label">${label||''}</div><div class="svz-arrow-head">‹</div><div class="svz-arrow-line" style="transform:scaleX(-1)"></div></div>`;
-}
-function substep(id, text) {
-  return `<div class="svz-substep" id="ss-${id}"><div class="svz-substep-icon">·</div>${text}</div>`;
-}
-function keyrow(algo, valId, size, purpose) {
-  return `<div class="svz-keyrow"><span class="svz-keyrow-algo">${algo}</span><span class="svz-keyrow-val" id="${valId}">generating…</span><span class="svz-keyrow-size">${size}</span><span class="svz-keyrow-purpose">${purpose}</span></div>`;
-}
+// ── Helpers ─────────────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const cut = (s, n) => !s ? '—' : (s.length <= n ? s : s.slice(0, n) + '…');
+const num = n => (n ?? 0).toLocaleString('en-US');
 
-const VIZ = {
+function party(i) { return S && S.parties ? S.parties.find(p => p.index === i) : null; }
+function pname(i) { const p = party(i); return p ? p.name : '#' + i; }
 
-  prereqs: () => `
-    <div class="svz-substeps">
-      ${substep('chain', 'Hardhat node · :8545 (EVM chain)')}
-      ${substep('gnark', 'gnark server · :8082 (Groth16 prover)')}
-      ${substep('relay', 'Relayer       · :8090 (tx submitter)')}
-    </div>
-    <div class="svz-actors" style="margin-top:10px">
-      ${actor('chain','Chain',':8545')}
-      ${arrowRight('TCP')}
-      ${actor('gnark','gnark',':8082')}
-      ${arrowRight('TCP')}
-      ${actor('relay','Relayer',':8090')}
-    </div>`,
-
-  keygen: () => `
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-      <div>
-        <div style="font-family:var(--mono);font-size:8px;color:var(--teal);text-transform:uppercase;letter-spacing:.1em;margin-bottom:5px">Alice</div>
-        <div class="svz-keyrows">
-          ${keyrow('BabyJubJub pk','viz-a-spend','32 B','ZK ownership')}
-          ${keyrow('ML-KEM-768 ek','viz-a-ek','1184 B','note encrypt')}
-          ${keyrow('ML-KEM-768 dk','viz-a-dk','2400 B','note decrypt')}
-        </div>
-      </div>
-      <div>
-        <div style="font-family:var(--mono);font-size:8px;color:var(--blue);text-transform:uppercase;letter-spacing:.1em;margin-bottom:5px">Bob</div>
-        <div class="svz-keyrows">
-          ${keyrow('BabyJubJub pk','viz-b-spend','32 B','ZK ownership')}
-          ${keyrow('ML-KEM-768 ek','viz-b-ek','1184 B','note encrypt')}
-          ${keyrow('ML-KEM-768 dk','viz-b-dk','2400 B','note decrypt')}
-        </div>
-      </div>
-    </div>`,
-
-  register: () => `
-    <div class="svz-actors">
-      ${actor('alice','Alice','sender')}
-      ${arrowRight('register(pk_spend, pk_view)')}
-      ${actor('contract','UserRegistry','on-chain')}
-      ${arrowLeft('register(pk_spend, pk_view)')}
-      ${actor('bob','Bob','receiver')}
-    </div>
-    <div class="svz-substeps" style="margin-top:8px">
-      ${substep('reg-alice', 'Alice.register() → UserRegistry tx mined')}
-      ${substep('reg-bob',   'Bob.register()   → UserRegistry tx mined')}
-    </div>
-    <div class="svz-relay-note" style="margin-top:6px">⚠ Only step where Alice &amp; Bob ETH addresses appear as msg.sender</div>`,
-
-  channel: () => `
-    <div class="svz-actors">
-      ${actor('alice','Alice','sender')}
-      ${arrowRight('KEM.Encaps(bob.ek)')}
-      ${actor('contract','TagChannel<br>Registry','on-chain')}
-      ${arrowLeft('KEM.Decaps(c1, dk)')}
-      ${actor('bob','Bob','receiver')}
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-top:8px">
-      <div class="svz-keyrows">
-        <div class="svz-keyrow"><span class="svz-keyrow-algo">c1 (ciphertext)</span><span class="svz-keyrow-val" id="viz-c1">encapsulating…</span><span class="svz-keyrow-size">1088 B</span></div>
-        <div class="svz-keyrow"><span class="svz-keyrow-algo">shared secret</span><span class="svz-keyrow-val" id="viz-ss">hidden</span><span class="svz-keyrow-size">32 B</span></div>
-      </div>
-      <div class="svz-keyrows">
-        <div class="svz-keyrow"><span class="svz-keyrow-algo">Bob recovers SS</span><span class="svz-keyrow-val" id="viz-ss-bob">decapsulating…</span><span class="svz-keyrow-size">32 B</span></div>
-        <div class="svz-keyrow"><span class="svz-keyrow-algo">bitmap</span><span class="svz-keyrow-val" id="viz-bitmap">PrivacyFull</span><span class="svz-keyrow-size">var</span></div>
-      </div>
-    </div>`,
-
-  deposit: () => `
-    <div class="svz-poseidon">
-      <div class="svz-inputs">
-        <div class="svz-input-tag">pk_spend</div>
-        <div class="svz-input-tag secret">saltB (random)</div>
-        <div class="svz-input-tag">amount = 40</div>
-        <div class="svz-input-tag">tokenId = 0</div>
-      </div>
-      <div class="svz-chevron">›</div>
-      <div class="svz-hash-fn">Poseidon<br>hash</div>
-      <div class="svz-chevron">›</div>
-      <div>
-        <div class="svz-output-tag">commitment</div>
-        <div style="font-family:var(--mono);font-size:7.5px;color:var(--muted);margin-top:3px;text-align:center">hiding on-chain</div>
-      </div>
-    </div>
-    <div class="svz-actors" style="margin-top:10px">
-      ${actor('alice','Alice','40 tokens')}
-      ${arrowRight('depositV2()')}
-      ${actor('contract','Erc20Coin<br>Vault','stores cmt')}
-    </div>`,
-
-  merkle: () => `
-    <div style="display:flex;align-items:flex-start;gap:12px">
-      <div class="svz-tree">
-        <div style="font-family:var(--mono);font-size:7.5px;color:var(--green);margin-bottom:4px;text-transform:uppercase;letter-spacing:.1em">Root</div>
-        <div class="svz-tree-row"><div class="svz-node root" id="viz-root">H01</div></div>
-        <div class="svz-tree-connectors" style="gap:28px">╱ ╲</div>
-        <div class="svz-tree-row"><div class="svz-node path" id="viz-n1">H0</div><div style="width:6px"></div><div class="svz-node leaf">H1</div></div>
-        <div class="svz-tree-connectors" style="gap:6px">╱ ╲  ╱ ╲</div>
-        <div class="svz-tree-row"><div class="svz-node target" id="viz-leaf">C₀</div><div style="width:2px"></div><div class="svz-node path" id="viz-sib">C₁</div><div style="width:2px"></div><div class="svz-node leaf">C₂</div><div style="width:2px"></div><div class="svz-node leaf">C₃</div></div>
-        <div style="font-family:var(--mono);font-size:7px;color:var(--muted);margin-top:3px;text-align:center">depth = 8 (4 leaves shown)</div>
-      </div>
-      <div style="flex:1">
-        <div class="svz-keyrows">
-          <div class="svz-keyrow"><span class="svz-keyrow-algo" style="color:var(--teal)">C₀ (Alice)</span><span class="svz-keyrow-val set" id="viz-leaf-val">commitment</span></div>
-          <div class="svz-keyrow"><span class="svz-keyrow-algo">sibling</span><span class="svz-keyrow-val" id="viz-sib-val">—</span></div>
-          <div class="svz-keyrow"><span class="svz-keyrow-algo" style="color:var(--green)">root</span><span class="svz-keyrow-val" id="viz-root-val">computing…</span></div>
-        </div>
-        <div class="svz-substeps" style="margin-top:8px">
-          ${substep('mk-scan','Scan Commitment events from vault')}
-          ${substep('mk-build','Rebuild Merkle tree locally')}
-          ${substep('mk-prove','Generate inclusion proof')}
-        </div>
-      </div>
-    </div>`,
-
-  zkproof: () => `
-    <div class="svz-circuit">
-      <div class="svz-circuit-col">
-        <div class="svz-circuit-title">Private Inputs</div>
-        <div class="svz-circuit-io priv"><span>pk_spend (Alice)</span><span class="svz-io-badge priv">secret</span></div>
-        <div class="svz-circuit-io priv"><span>saltB</span><span class="svz-io-badge priv">secret</span></div>
-        <div class="svz-circuit-io priv"><span>amount = 40</span><span class="svz-io-badge priv">secret</span></div>
-        <div class="svz-circuit-io priv"><span>Merkle path</span><span class="svz-io-badge priv">secret</span></div>
-        <div class="svz-circuit-io priv"><span>outputs = [30, 10]</span><span class="svz-io-badge priv">secret</span></div>
-      </div>
-      <div class="svz-circuit-box">
-        <div class="svz-circuit-box-label">Groth16</div>
-        <div class="svz-circuit-box-sub">gnark</div>
-        <div class="svz-circuit-box-sub" id="viz-proof-ms" style="margin-top:4px;color:var(--amber)">proving…</div>
-      </div>
-      <div class="svz-circuit-col">
-        <div class="svz-circuit-title">Public Outputs</div>
-        <div class="svz-circuit-io pub"><span>Merkle root</span><span class="svz-io-badge pub">public</span></div>
-        <div class="svz-circuit-io warn"><span>nullifier</span><span class="svz-io-badge pub">revealed</span></div>
-        <div class="svz-circuit-io pub"><span>cmt_bob</span><span class="svz-io-badge pub">public</span></div>
-        <div class="svz-circuit-io pub"><span>cmt_alice</span><span class="svz-io-badge pub">public</span></div>
-        <div class="svz-circuit-io pub"><span>π = [A, B, C]</span><span class="svz-io-badge pub">256 B</span></div>
-      </div>
-    </div>`,
-
-  relay: () => `
-    <div class="svz-actors">
-      ${actor('alice','Alice','proof sender')}
-      ${arrowRight('POST /relay/payment')}
-      ${actor('relay','Relayer','msg.sender')}
-      ${arrowRight('payment(π, stmt)')}
-      ${actor('contract','EnygmaDvp','verifies ZK')}
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;margin-top:8px;font-family:var(--mono);font-size:8px;text-align:center">
-      <div style="padding:5px;border-radius:4px;background:var(--teal-dim);border:1px solid var(--teal-glow);color:var(--teal)">Alice signs<br><span style="font-size:7px;color:rgba(61,212,176,.5)">proof payload</span></div>
-      <div style="padding:5px;border-radius:4px;background:var(--orange-dim);border:1px solid rgba(255,144,64,.3);color:var(--orange)">Relayer pays<br><span style="font-size:7px;color:rgba(255,144,64,.5)">gas fees</span></div>
-      <div style="padding:5px;border-radius:4px;background:var(--purple-dim);border:1px solid rgba(195,160,255,.3);color:var(--purple)">On-chain verify<br><span style="font-size:7px;color:rgba(195,160,255,.5)">Groth16 pairing</span></div>
-    </div>
-    <div class="svz-relay-note">Alice's ETH address NEVER appears on the payment transaction</div>`,
-
-  tag: () => `
-    <div class="svz-actors">
-      ${actor('alice','Alice','seals note')}
-      ${arrowRight('HMAC tag + AES-GCM note')}
-      ${actor('contract','TagRegistry','public ledger')}
-      ${arrowLeft('ScanBlocksFromCursor')}
-      ${actor('bob','Bob','discovers tag')}
-    </div>
-    <div class="svz-keyrows" style="margin-top:8px">
-      <div class="svz-keyrow"><span class="svz-keyrow-algo">note plaintext</span><span class="svz-keyrow-val">{amount=30, tokenId, saltB}</span><span class="svz-keyrow-purpose">before seal</span></div>
-      <div class="svz-keyrow"><span class="svz-keyrow-algo">AES-GCM key</span><span class="svz-keyrow-val" style="color:var(--muted)">derived from shared secret</span><span class="svz-keyrow-size">32 B</span></div>
-      <div class="svz-keyrow"><span class="svz-keyrow-algo">ciphertext</span><span class="svz-keyrow-val" id="viz-tag-ct">sealing…</span><span class="svz-keyrow-purpose">on-chain</span></div>
-    </div>`,
-
-  scan_tag: () => `
-    <div class="svz-actors">
-      ${actor('bob','Bob','scans')}
-      ${arrowRight('HMAC match')}
-      ${actor('contract','TagRegistry','')}
-    </div>
-    <div class="svz-substeps" style="margin-top:8px">
-      ${substep('st-scan',  'Scan TagRegistry blocks')}
-      ${substep('st-hmac',  'HMAC-match tags with shared secret')}
-      ${substep('st-dec',   'AES-GCM decrypt → {amount, tokenId, saltB}')}
-      ${substep('st-verify','Recompute Poseidon commitment → verify ✓')}
-    </div>`,
-
-  scan: () => `
-    <div class="svz-actors">
-      ${actor('bob','Bob','view key')}
-      ${arrowRight('KEM.Decaps(ct, dk)')}
-      ${actor('contract','Erc20Coin<br>Vault','Payment event')}
-    </div>
-    <div class="svz-substeps" style="margin-top:8px">
-      ${substep('sc-decap',  'ML-KEM decapsulate → derive note key')}
-      ${substep('sc-decrypt','AES-GCM decrypt ciphertext → {amount, tokenId, saltB}')}
-      ${substep('sc-verify', 'Poseidon(pk_spend, saltB, amount, tokenId) == cmt ✓')}
-    </div>`,
-
-  verify: () => `
-    <div class="svz-poseidon">
-      <div class="svz-inputs">
-        <div class="svz-input-tag">bob.pk_spend</div>
-        <div class="svz-input-tag" id="viz-salt-inp">saltB (decrypted)</div>
-        <div class="svz-input-tag">amount = 30</div>
-        <div class="svz-input-tag">tokenId = 0</div>
-      </div>
-      <div class="svz-chevron">›</div>
-      <div class="svz-hash-fn">Poseidon<br>hash</div>
-      <div class="svz-chevron">›</div>
-      <div>
-        <div class="svz-output-tag" id="viz-cmt-match">cmt_bob</div>
-        <div style="font-family:var(--mono);font-size:7.5px;color:var(--muted);margin-top:3px;text-align:center">must match</div>
-        <div style="font-family:var(--mono);font-size:7.5px;color:var(--label);margin-top:2px;text-align:center">on-chain stmt[4]</div>
-      </div>
-    </div>`,
-};
-
-const VIZ_DESC = {
-  prereqs:  'Checking that the Hardhat node (port 8545), gnark prover (port 8082), and relayer (port 8090) are all reachable. Also loading contract addresses from <code>build/receipts.json</code> and relayer info.',
-  keygen:   'Each party generates two keypairs locally. The <strong>BabyJubJub</strong> keypair is used inside Groth16 circuits to prove note ownership. The <strong>ML-KEM-768</strong> keypair (NIST PQC standard) encrypts/decrypts payment notes. Private keys never leave the party.',
-  register: 'Alice and Bob publish their public keys to the <strong>UserRegistry</strong> on-chain contract. This is the only transaction where their Ethereum addresses appear as <code>msg.sender</code>. All subsequent transactions go through the relayer.',
-  channel:  'Alice performs <strong>ML-KEM-768 encapsulation</strong> against Bob\'s public encapsulation key, deriving a 32-byte shared secret and a 1088-byte ciphertext. The relayer stores it in <strong>TagChannelRegistry</strong>. Only Bob can recover the shared secret via decapsulation.',
-  deposit:  'Alice deposits 40 ERC-20 tokens into the private vault. A <strong>Poseidon commitment</strong> <code>H(pk_spend, saltB, amount, tokenId)</code> is recorded on-chain instead of the plaintext values — the amount and owner remain hidden.',
-  merkle:   'Alice scans all on-chain <code>Commitment</code> events, rebuilds the full <strong>Merkle tree</strong> (depth=8) locally, and generates a sibling-path inclusion proof for her deposit note. The proof shows membership without revealing which leaf.',
-  zkproof:  'The <strong>gnark server</strong> generates a Groth16 proof that: (1) Alice knows a note in the Merkle tree, (2) outputs sum to the input, (3) the nullifier is correctly derived. Private inputs are never revealed — only the proof and public signals leave the prover.',
-  relay:    'Alice sends the unsigned Groth16 proof to the relayer via <code>POST /relay/payment</code>. The relayer submits <code>EnygmaDvp.payment()</code> on-chain as <code>msg.sender</code>. The on-chain verifier runs the Groth16 pairing check. Alice\'s address is never exposed.',
-  tag:      'Alice seals the payment note <code>{amount, tokenId, saltB}</code> with the ML-KEM shared secret using AES-GCM and publishes it to <strong>TagRegistry</strong>. The tag is indexed by a one-time HMAC so Bob can scan without Alice being identified.',
-  scan_tag: 'Bob scans <strong>TagRegistry</strong> using his ML-KEM shared secret, matches his tag by HMAC, decrypts the note, and recomputes the Poseidon commitment to verify it matches the on-chain output.',
-  scan:     'Bob iterates vault Payment events and attempts <strong>ML-KEM decapsulation</strong> on each ciphertext using his view decapsulation key. When successful, he recovers <code>{amount, tokenId, saltB}</code> and verifies the Poseidon commitment.',
-  verify:   'Bob recomputes <code>H(pk_spend, saltB, amount, tokenId)</code> from the decrypted note and confirms it equals the on-chain commitment from the payment transaction. Alice\'s change commitment is also verified.',
-};
-
-// ── Render the step visualizer ────────────────────────────────────────────────
-function renderStepViz(stepId, status) {
-  const labelEl = document.getElementById('svzLabel');
-  const badgeEl = document.getElementById('svzBadge');
-  const diagEl  = document.getElementById('svzDiagram');
-  const descEl  = document.getElementById('svzDesc');
-
-  const stepNames = {
-    prereqs:'Prerequisites', keygen:'Key Generation', register:'On-Chain Registration',
-    channel:'ML-KEM Channel Setup', deposit:'Private Deposit', merkle:'Merkle Proof',
-    zkproof:'Groth16 ZK Proof', relay:'Relay Payment', tag:'Publish Tag',
-    scan_tag:'Bob Scans TagRegistry', scan:'Bob Scans Payment Event', verify:'Verify Commitments',
-  };
-
-  labelEl.textContent = stepNames[stepId] || stepId;
-  badgeEl.className = 'svz-badge ' + status;
-  badgeEl.textContent = status;
-
-  if (VIZ[stepId]) {
-    diagEl.innerHTML = VIZ[stepId]();
-    // populate with any already-arrived live data
-    populateVizData(stepId);
-  }
-  if (VIZ_DESC[stepId]) {
-    descEl.innerHTML = VIZ_DESC[stepId];
-    descEl.style.display = '';
-  }
-}
-
-// Populate viz diagram elements with cached live data
-function populateVizData(stepId) {
-  const d = liveData;
-  function set(id, val) {
-    const el = document.getElementById(id);
-    if (el && val) { el.textContent = trunc(val, 18); el.classList.add('set'); }
-  }
-  if (stepId === 'keygen') {
-    set('viz-a-spend', d['p0-pkSpend']);
-    set('viz-b-spend', d['p1-pkSpend']);
-    set('viz-a-ek', d['p0-pkView']);
-    set('viz-b-ek', d['p1-pkView']);
-    if (d['p0-pkView']) { set('viz-a-dk', '(private — not transmitted)'); }
-    if (d['p1-pkView']) { set('viz-b-dk', '(private — not transmitted)'); }
-  }
-  if (stepId === 'merkle') {
-    set('viz-root-val', d['p0-merkleRoot']);
-    if (d['p0-commitment']) { set('viz-leaf-val', d['p0-commitment']); }
-  }
-  if (stepId === 'zkproof' && d['proofTimeMs']) {
-    const el = document.getElementById('viz-proof-ms');
-    if (el) el.textContent = d['proofTimeMs'] + ' ms';
-  }
-}
-
-function trunc(s, n) {
-  if (!s || s.length <= n) return s;
-  return s.slice(0, n) + '…';
-}
-
-// Mark substeps as done
-function markSubstep(id, state) {
-  const el = document.getElementById('ss-' + id);
-  if (el) { el.className = 'svz-substep ' + state; el.querySelector('.svz-substep-icon').textContent = state === 'done' ? '✓' : '·'; }
-}
-
-// ── Mode ──────────────────────────────────────────────────────────────────────
-function setMode(m) {
-  mode = m;
-  document.body.className = 'mode-' + m;
-  document.getElementById('btnPlain').classList.toggle('active', m === 'plain');
-  document.getElementById('btnTag').classList.toggle('active', m === 'tag');
-  document.querySelectorAll('.tag-only-row, .tag-only-card, .tag-only-field').forEach(el => {
-    el.style.display = m === 'tag' ? '' : 'none';
+async function api(path, body) {
+  if (body !== undefined) stateSeq++;
+  const res = await fetch(path, {
+    method: body === undefined ? 'GET' : 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body || {}),
   });
-  renderSteps();
-  resetUI();
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || ('request failed (' + res.status + ')'));
+  return data;
 }
 
-// ── Step track ────────────────────────────────────────────────────────────────
-function renderSteps() {
-  const steps = currentSteps();
-  const row = document.getElementById('stepsRow');
-  row.innerHTML = '';
-  steps.forEach((s, i) => {
-    const item = document.createElement('div');
-    item.className = 'step-item' + (s.tagOnly ? ' tag-only' : '');
-    item.id = 'step-' + s.id;
-    item.innerHTML = `<div class="step-pill${s.tagOnly?' tag-only':''}">${s.label}</div>`;
-    row.appendChild(item);
-    if (i < steps.length - 1) {
-      const arrow = document.createElement('div');
-      const nextTagOnly = steps[i+1] && steps[i+1].tagOnly;
-      arrow.className = 'step-item' + (s.tagOnly && nextTagOnly ? ' tag-only' : '');
-      arrow.innerHTML = '<span class="step-arrow">›</span>';
-      row.appendChild(arrow);
-    }
-  });
+function showErr(where, msg) {
+  $('err-' + where).innerHTML = msg ? `<div class="alert">${esc(msg)}</div>` : '';
 }
 
-function setStep(id, status) {
-  const el = document.getElementById('step-' + id);
-  if (!el) return;
-  el.className = el.className.replace(/\b(running|success|error)\b/g,'').trim() + ' ' + status;
-  updateProgress();
-  if (status === 'running' || status === 'success' || status === 'error') {
-    renderStepViz(id, status);
-  }
-  // mark prereq sub-steps done on success
-  if (id === 'prereqs' && status === 'success') {
-    ['chain','gnark','relay'].forEach(s => markSubstep(s,'done'));
-  }
-  if (id === 'register' && status === 'success') {
-    ['reg-alice','reg-bob'].forEach(s => markSubstep(s,'done'));
-  }
-  if (id === 'merkle' && status === 'success') {
-    ['mk-scan','mk-build','mk-prove'].forEach(s => markSubstep(s,'done'));
-  }
-  if (id === 'scan_tag' && status === 'success') {
-    ['st-scan','st-hmac','st-dec','st-verify'].forEach(s => markSubstep(s,'done'));
-  }
-  if (id === 'scan' && status === 'success') {
-    ['sc-decap','sc-decrypt','sc-verify'].forEach(s => markSubstep(s,'done'));
-  }
-}
-
-function updateProgress() {
-  const steps = currentSteps();
-  let done = 0;
-  steps.forEach(s => { const el = document.getElementById('step-'+s.id); if (el && (el.classList.contains('success')||el.classList.contains('error'))) done++; });
-  document.getElementById('progressBar').style.width = (done/steps.length*100) + '%';
-}
-
-// ── Participant panel ──────────────────────────────────────────────────────────
-function setField(pid, field, value) {
-  const el = document.getElementById('p'+pid+'-'+field);
-  if (!el) return;
-  liveData['p'+pid+'-'+field] = value;
-  const hexFields = ['pkSpend','pkView','commitment','merkleRoot','nullifier','salt','ethAddr'];
-  if (hexFields.includes(field) && value && value.startsWith('0x') && value.length > 20) {
-    el.innerHTML = makeHex(value);
-  } else if (field === 'balance') {
-    el.innerHTML = makeBalanceChip(value);
-  } else {
-    el.textContent = value;
-  }
-  el.classList.add('set');
-  el.classList.remove('dim');
-  // Feed into active viz
-  const activeStep = currentActiveStep();
-  if (activeStep) populateVizData(activeStep);
-}
-
-function currentActiveStep() {
-  const steps = currentSteps();
-  for (const s of steps) {
-    const el = document.getElementById('step-' + s.id);
-    if (el && el.classList.contains('running')) return s.id;
-  }
-  return null;
-}
-
-function makeHex(full) {
-  const short = full.slice(0,14)+'…';
-  return `<span class="hex-wrap"><span class="hex-val" data-full="${escHtml(full)}" data-short="${escHtml(short)}" onclick="toggleHex(this)">${escHtml(short)}</span><button class="hex-copy-btn" onclick="copyHexVal(event,this)" title="Copy full value">copy</button></span>`;
-}
-function makeHexInline(full) {
-  if (!full || full==='—') return '—';
-  const short = full.slice(0,18)+'…';
-  return `<span class="hex-wrap"><span class="hex-val" data-full="${escHtml(full)}" data-short="${escHtml(short)}" onclick="toggleHex(this)">${escHtml(short)}</span><button class="hex-copy-btn" onclick="copyHexVal(event,this)" title="Copy full value">copy</button></span>`;
-}
-function copyHexVal(e, btn) {
-  e.stopPropagation();
-  const valEl = btn.previousElementSibling;
-  const text = valEl && valEl.dataset.full;
-  if (!text) return;
+function copyText(text, btn) {
   navigator.clipboard.writeText(text).then(() => {
-    const orig = btn.textContent;
-    btn.textContent = 'copied!'; btn.classList.add('copied');
-    setTimeout(() => { btn.textContent = orig; btn.classList.remove('copied'); }, 1500);
+    const old = btn.textContent;
+    btn.textContent = 'copied'; btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = old; btn.classList.remove('copied'); }, 1200);
   });
 }
-function toggleHex(el) {
-  const expanded = el.classList.toggle('expanded');
-  el.textContent = expanded ? el.dataset.full : el.dataset.short;
-  el.classList.toggle('expanded', expanded);
-}
-function makeBalanceChip(value) {
-  let cls = '';
-  if (value.includes('deposited')) cls = 'deposited';
-  else if (value.includes('spent') || value.includes('0 tokens')) cls = 'spent';
-  else if (value.includes('received') || value.includes('discovered')) cls = 'received';
-  else if (value.includes('change')) cls = 'change';
-  return cls ? `<span class="balance-chip ${cls}">${escHtml(value)}</span>` : escHtml(value);
+
+// ── State fetch + render ────────────────────────────────────────────────────
+async function refresh() {
+  const seq = stateSeq;
+  let next;
+  try { next = await api('/api/state'); } catch (e) { return; }
+  if (seq !== stateSeq) return; // a mutation landed while this poll was in flight
+  S = next;
+  render();
 }
 
-// ── Proto (center panel) ──────────────────────────────────────────────────────
-function setProto(field, value) {
-  liveData[field] = value;
-  const el = document.getElementById('proto-' + field);
-  if (el) {
-    el.innerHTML = (value && value.startsWith('0x') && value.length > 20) ? makeHexInline(value) : escHtml(value);
+function render() {
+  if (!S) return;
+  if (!S.ready) {
+    $('pairTable').innerHTML = `<div style="padding:26px 18px"><div class="alert">${esc(S.initError || 'The demo could not reach the deployed contracts.')}</div></div>`;
     return;
   }
-  switch (field) {
-    case 'payTxHash':
-      document.getElementById('txhash-payment').innerHTML = makeHexInline(value);
-      document.getElementById('txstatus-payment').textContent = 'confirmed';
-      document.getElementById('txstatus-payment').className = 'tx-card-status done';
-      txCount++;
-      privVerify('priv-sender');
-      privVerify('priv-nullifier');
-      break;
-    case 'payBlock': document.getElementById('txblock-payment').textContent = value; break;
-    case 'payGas':
-      document.getElementById('txgas-payment').textContent = commaNum(value);
-      setMetricVal('verifyGas', commaNum(value));
-      break;
-    case 'chTxHash':
-      document.getElementById('txhash-channel').innerHTML = makeHexInline(value);
-      document.getElementById('txstatus-channel').textContent = 'confirmed';
-      document.getElementById('txstatus-channel').className = 'tx-card-status done';
-      txCount++;
-      break;
-    case 'chBlock': document.getElementById('txblock-channel').textContent = value; break;
-    case 'chGas':   document.getElementById('txgas-channel').textContent = commaNum(value); break;
-    case 'tagTxHash':
-      document.getElementById('txhash-tag').innerHTML = makeHexInline(value);
-      document.getElementById('txstatus-tag').textContent = 'confirmed';
-      document.getElementById('txstatus-tag').className = 'tx-card-status done';
-      txCount++;
-      break;
-    case 'tagBlock': document.getElementById('txblock-tag').textContent = value; break;
-    case 'tagGas':   document.getElementById('txgas-tag').textContent = commaNum(value); break;
-    case 'proofTimeMs': {
-      const ms = parseInt(value);
-      setMetric('proofTime', ms + ' ms', ms, 15000, 'mb-proofTime');
-      document.getElementById('ms-proofTime').textContent = 'Groth16 witness + prove (' + (ms/1000).toFixed(2) + 's)';
-      // update viz if zkproof diagram is showing
-      const el2 = document.getElementById('viz-proof-ms');
-      if (el2) el2.textContent = ms + ' ms';
-      break;
-    }
-    case 'proofSizeBytes':
-      setMetric('proofSize', value + ' B', 0, 0, null);
-      break;
-    case 'verifyTimeMs': {
-      const ms = parseInt(value);
-      setMetric('verifyTime', ms + ' ms', ms, 30000, 'mb-verifyTime');
-      break;
-    }
-    case 'totalGas': setMetricVal('totalGas', commaNum(value)); break;
-    case 'flowTimeMs': {
-      const sec = (parseInt(value)/1000).toFixed(1);
-      setMetric('flowTime', sec + ' s', parseInt(value), 120000, null);
-      break;
-    }
+  renderHealth(); renderRail(); renderActors(); renderIdentity();
+  renderChannelForm(); renderChannels(); renderPayForm(); renderScanButton();
+  renderPairTable(); renderBitmapSummary(); renderChain(); renderScanResults();
+  renderLocks();
+  // Keep a preview in step with the form — including straight after a reload,
+  // where nothing has been clicked yet.
+  if (!S.busy && !S.preview) requestPreview();
+}
+
+function renderHealth() {
+  const h = S.health || {};
+  $('h-chain').className   = 'dot ' + (h.chain ? 'ok' : 'bad');
+  $('h-gnark').className   = 'dot ' + (h.gnark ? 'ok' : 'bad');
+  $('h-relayer').className = 'dot ' + (h.relayer ? 'ok' : 'bad');
+}
+
+function renderRail() {
+  const hasChannel = (S.channels || []).length > 0;
+  const hasPayment = (S.payments || []).length > 0;
+  const scanned = !!(S.lastScan && S.lastScan.channels && S.lastScan.channels.length);
+  const steps = [
+    { n:1, label:'Register',  done:S.registered,          active:!S.registered },
+    { n:2, label:'Act as',    done:S.actor >= 0,          active:S.registered && S.actor < 0 },
+    { n:3, label:'Channel',   done:hasChannel,            active:S.actor >= 0 && !hasChannel },
+    { n:4, label:'Pay',       done:hasPayment,            active:hasChannel && !hasPayment },
+    { n:5, label:'Scan',      done:scanned,               active:hasPayment && !scanned },
+  ];
+  $('rail').innerHTML = steps.map((s, i) =>
+    (i ? '<span class="rail-arrow">→</span>' : '') +
+    `<div class="rail-step ${s.done ? 'done' : (s.active ? 'active' : '')}">
+       <span class="rail-num">${s.done ? '✓' : s.n}</span>${s.label}</div>`
+  ).join('');
+}
+
+function renderLocks() {
+  const busy = !!S.busy;
+  const hasPayment = (S.payments || []).length > 0;
+  const scanned = !!(S.lastScan && S.lastScan.channels && S.lastScan.channels.length);
+  const set = (panel, locked) => $(panel).classList.toggle('locked', locked);
+  set('panel-actor',   !S.registered);
+  set('panel-channel', S.actor < 0);
+  set('panel-payment', S.actor < 0);
+  set('panel-scan',    S.actor < 0);
+
+  $('btnRegister').disabled = busy || S.registered;
+  $('btnRegister').textContent = S.registered ? 'Parties registered' : (S.busy === 'registration' ? 'Registering…' : 'Register 8 parties');
+
+  const stepState = (id, done, active) => {
+    const el = $(id); el.className = 'panel-step' + (done ? ' done' : (active ? ' active' : ''));
+    el.textContent = done ? '✓' : el.dataset.n;
+  };
+  ['register','actor','channel','payment','scan'].forEach((k, i) => { $('ps-' + k).dataset.n = i + 1; });
+  stepState('ps-register', S.registered, !S.registered);
+  stepState('ps-actor', S.actor >= 0, S.registered && S.actor < 0);
+  stepState('ps-channel', (S.channels || []).length > 0, S.actor >= 0);
+  stepState('ps-payment', hasPayment, (S.channels || []).length > 0);
+  stepState('ps-scan', scanned, hasPayment);
+}
+
+// ── Actor ───────────────────────────────────────────────────────────────────
+function renderActors() {
+  const row = $('actorRow');
+  const html = (S.parties || []).filter(p => p.controllable).map(p => `
+    <button class="actor-btn ${S.actor === p.index ? 'active' : ''}" ${p.registered && !S.busy ? '' : 'disabled'}
+            onclick="doSetActor(${p.index})">
+      <span class="an">${esc(p.name)}</span>
+      <span class="ai">#${p.index}</span>
+    </button>`).join('');
+  row.innerHTML = html || '<div class="chan-empty">Register the parties first.</div>';
+}
+
+function renderIdentity() {
+  const box = $('identityBox');
+  if (S.actor < 0) { box.innerHTML = ''; return; }
+  const p = party(S.actor);
+  if (!p) { box.innerHTML = ''; return; }
+
+  const secretRow = (key, label, value) => {
+    const on = !!revealed[key];
+    const shown = on ? value : '•'.repeat(30);
+    return `<div class="id-row">
+      <div class="id-key">${esc(label)}</div>
+      <div class="id-val secret ${on ? '' : 'masked'}">${esc(on ? cut(shown, 46) : shown)}</div>
+      <button class="mini-btn ${on ? 'on' : ''}" onclick="toggleReveal('${key}')">${on ? 'hide' : 'reveal'}</button>
+      <button class="mini-btn" onclick="copyText(${JSON.stringify(value)}, this)">copy</button>
+    </div>`;
+  };
+
+  const secrets = S.actorSecrets;
+  const notes = (S.notes || []).filter(n => !n.spent);
+  const known = notes.filter(n => n.discovered);
+  const pending = notes.filter(n => !n.discovered);
+
+  box.innerHTML = `
+    <div class="identity">
+      <div class="id-row"><div class="id-key">Address</div><div class="id-val">${esc(p.address)}</div>
+        <button class="mini-btn" onclick="copyText(${JSON.stringify(p.address)}, this)">copy</button></div>
+      <div class="id-row"><div class="id-key">Registry</div><div class="id-val">index ${p.index} · block ${p.regBlock || '—'}</div></div>
+      <div class="id-row"><div class="id-key">pk_spend</div><div class="id-val">${esc(cut(p.pkSpend, 34))}</div>
+        <button class="mini-btn" onclick="copyText(${JSON.stringify(p.pkSpend || '')}, this)">copy</button></div>
+      ${secrets && secrets.index === p.index ? secretRow('skSpend', 'sk_spend', secrets.skSpend) : ''}
+      ${secrets && secrets.index === p.index ? secretRow('skView', 'sk_view', secrets.skView) : ''}
+      <div class="id-row"><div class="id-key">Spendable</div>
+        <div class="id-val" style="color:var(--teal)">${p.balance} tokens · ${known.length} note${known.length === 1 ? '' : 's'}</div></div>
+      ${pending.length ? `<div class="id-row"><div class="id-key">Unscanned</div>
+        <div class="id-val" style="color:var(--amber)">${p.pending} tokens waiting in ${pending.length} note${pending.length === 1 ? '' : 's'} — scan to claim</div></div>` : ''}
+    </div>
+    <div class="warn-note"><strong>Local demo identity switch.</strong> Every wallet lives in this one process, so switching parties needs no authentication. The keys come from the repo's public Hardhat mnemonic — never reuse them.</div>`;
+}
+
+function toggleReveal(k) { revealed[k] = !revealed[k]; renderIdentity(); }
+
+async function doSetActor(i) {
+  showErr('actor', '');
+  try {
+    const res = await api('/api/actor', { index: i });
+    S = res.state; revealed = {};
+    // A new actor means the previous channel form no longer applies; render()
+    // prepares the preview for whatever the reset form now selects.
+    syncChannelDefaults();
+    previewKey = '';
+    render();
+  } catch (e) { showErr('actor', e.message); }
+}
+
+// ── Channel form ────────────────────────────────────────────────────────────
+function otherParties() {
+  if (!S) return [];
+  return (S.parties || []).filter(p => p.index !== S.actor && p.controllable);
+}
+
+function syncChannelDefaults() {
+  const opts = otherParties();
+  if (!opts.length) return;
+  const sel = $('chanRecipient');
+  if (!opts.some(p => String(p.index) === sel.value)) sel.value = String(opts[0].index);
+  const paySel = $('payRecipient');
+  if (!opts.some(p => String(p.index) === paySel.value)) paySel.value = String(opts[0].index);
+  exclusions = new Set();
+}
+
+function renderChannelForm() {
+  const opts = otherParties();
+  const fill = (sel) => {
+    const prev = sel.value;
+    sel.innerHTML = opts.map(p => `<option value="${p.index}">${esc(p.name)} · #${p.index}</option>`).join('');
+    if (opts.some(p => String(p.index) === prev)) sel.value = prev;
+  };
+  fill($('chanRecipient')); fill($('payRecipient'));
+
+  $('modeButtons').innerHTML = MODES.map(m => `
+    <button class="mode-btn ${chanMode === m.id ? 'active' : ''}" onclick="setMode('${m.id}')">
+      <span class="mn">${m.name}</span><span class="md">${m.desc}</span>
+    </button>`).join('');
+
+  const showExcl = chanMode === 'rift';
+  $('exclusionsBox').style.display = showExcl ? 'block' : 'none';
+  if (showExcl) {
+    const recipient = Number($('chanRecipient').value);
+    $('exclGrid').innerHTML = (S.parties || []).map(p => {
+      if (p.index === recipient) return `<label class="excl-item fixed"><input type="checkbox" disabled>${esc(p.name)} <span style="font-size:8.5px">recipient</span></label>`;
+      const checked = exclusions.has(p.index) ? 'checked' : '';
+      return `<label class="excl-item"><input type="checkbox" ${checked} onchange="toggleExclusion(${p.index}, this.checked)">${esc(p.name)}</label>`;
+    }).join('');
+  }
+
+  const pv = S.preview;
+  $('previewBox').innerHTML = pv ? `
+    <div class="preview-box live">
+      <div class="pv-line"><span class="pv-k">preview</span><span class="pv-v">${esc(pname(pv.sender))} → ${esc(pname(pv.recipient))}</span></div>
+      <div class="pv-line"><span class="pv-k">candidates</span><span class="pv-v">${pv.candidates.length} of ${S.config.partyCount}</span></div>
+      <div class="pv-line"><span class="pv-k">bitmap</span><span class="pv-v" style="letter-spacing:.14em;color:var(--purple)">${esc(pv.bits)}</span></div>
+      <div class="pv-line"><span class="pv-k">c1 · c2</span><span class="pv-v">${pv.c1Len} B · ${pv.c2Len} B</span></div>
+      <div class="pv-line" style="margin-top:5px"><span class="pv-v prose" style="text-align:left;color:var(--muted);font-size:9.5px">${esc(pv.description)}</span></div>
+    </div>` : `<div class="preview-box"><div class="pv-line"><span class="pv-k">preview</span><span class="pv-v">preparing…</span></div></div>`;
+
+  $('btnOpenChannel').disabled = !pv || !!S.busy;
+  $('btnOpenChannel').textContent = S.busy === 'channel setup' ? 'Publishing…' : 'Establish channel';
+}
+
+function setMode(m) { chanMode = m; exclusions = new Set(); renderChannelForm(); refreshPreview(); }
+function toggleExclusion(i, on) { on ? exclusions.add(i) : exclusions.delete(i); refreshPreview(); }
+
+// channelParams reads the current form selection, or null when it cannot yet
+// describe a channel.
+function channelParams() {
+  if (!S || S.actor < 0 || !S.registered) return null;
+  const recipient = Number($('chanRecipient').value);
+  if (!Number.isInteger(recipient) || recipient === S.actor) return null;
+  // Rift never excludes the recipient — mirror the server's own rule locally.
+  const excluded = chanMode === 'rift' ? [...exclusions].filter(i => i !== recipient).sort((a, b) => a - b) : [];
+  return { recipient, mode: chanMode, excluded };
+}
+
+function refreshPreview() {
+  if (!S || S.actor < 0 || !S.registered) return;
+  previewKey = '';        // the operator changed something: always re-prepare
+  renderChannelForm();
+  clearTimeout(previewTimer);
+  previewTimer = setTimeout(requestPreview, 120);
+}
+
+// requestPreview asks the server to prepare (but not publish) the channel for
+// the current form parameters. It is a no-op when a preview for exactly those
+// parameters has already been requested, which is what lets render() call it
+// freely without risking a loop.
+async function requestPreview() {
+  const p = channelParams();
+  if (!p) return;
+  const key = S.actor + '>' + p.recipient + ':' + p.mode + ':' + p.excluded.join(',');
+  if (key === previewKey) return;
+  if (Date.now() - previewFailedAt < 3000) return;
+  previewKey = key;
+  try {
+    showErr('channel', '');
+    S = await api('/api/channels/preview', p);
+    previewFailedAt = 0;
+    render();
+  } catch (e) {
+    // A transient failure must not wedge the demo: forget the key so the next
+    // render or poll tries again, after a short backoff.
+    previewKey = '';
+    previewFailedAt = Date.now();
+    showErr('channel', e.message);
   }
 }
 
-function privVerify(id) { const el = document.getElementById(id); if (el) el.classList.add('verified'); }
-
-function commaNum(s) { return String(s).replace(/\B(?=(\d{3})+(?!\d))/g,','); }
-
-function setMetric(id, display, value, maxVal, barId) {
-  const el = document.getElementById('mv-' + id);
-  if (el) { el.textContent = display; el.classList.add('lit'); }
-  const card = document.getElementById('metric-' + id);
-  if (card) card.classList.add('set');
-  if (barId && maxVal > 0) { const bar = document.getElementById(barId); if (bar) bar.style.width = Math.min(100, value/maxVal*100) + '%'; }
-}
-function setMetricVal(id, display) {
-  const el = document.getElementById('mv-' + id);
-  if (el) { el.textContent = display; el.classList.add('lit'); }
-  const card = document.getElementById('metric-' + id);
-  if (card) card.classList.add('set');
+function renderChannels() {
+  const list = S.channels || [];
+  $('chanList').innerHTML = list.length ? list.map(c => `
+    <div class="chan-item">
+      <div class="cl">${esc(pname(c.sender))} → ${esc(pname(c.recipient))} · #${c.channelIdx}</div>
+      <div class="cs">${esc(c.modeLabel)} · ${c.candidates.length}/${S.config.partyCount} candidates · block ${c.block}</div>
+    </div>`).join('') : '<div class="chan-empty">No channels published yet.</div>';
 }
 
-// ── Log ──────────────────────────────────────────────────────────────────────
-let currentLogFilter = 'all';
-function appendLog(ts, msg, cat) {
-  const body = document.getElementById('logBody');
-  const line = document.createElement('div');
-  line.className = 'log-line';
-  line.dataset.cat = cat || '';
-  if (currentLogFilter !== 'all' && line.dataset.cat !== currentLogFilter) line.style.display = 'none';
-  const isOk = msg.startsWith('✓'), isErr = msg.startsWith('✗');
-  const msgCls = isOk ? ' ok' : isErr ? ' err' : '';
-  const cats = { key:'KEY', chain:'CHAIN', zk:'ZK', tag:'TAG' };
-  const catHtml = (cat && cats[cat]) ? `<span class="cat-badge cat-${cat}">${cats[cat]}</span>` : '';
-  line.innerHTML = `<span class="log-ts">${ts||''}</span>${catHtml}<span class="log-msg${msgCls}">${escHtml(msg)}</span>`;
-  body.appendChild(line);
+// ── Payment form ────────────────────────────────────────────────────────────
+function renderPayForm() {
+  if (S.config && !$('payAmount').dataset.init) {
+    $('payAmount').value = S.config.defaultPayment;
+    $('payAmount').dataset.init = '1';
+  }
+  syncPayForm();
+}
+
+function syncPayForm() {
+  if (!S) return;
+  const btn = $('btnPay'), hint = $('payHint');
+  if (S.actor < 0) { btn.disabled = true; hint.textContent = ''; return; }
+  const recipient = Number($('payRecipient').value);
+  const amount = Number($('payAmount').value);
+  const me = party(S.actor);
+  const chan = (S.channels || []).find(c => c.sender === S.actor && c.recipient === recipient);
+  const usable = (S.notes || []).filter(n => !n.spent && n.discovered && Number(n.amount) >= amount);
+
+  let reason = '';
+  if (!chan) reason = `No channel from ${me.name} to ${pname(recipient)} yet — establish one above (channels are directional).`;
+  else if (!(amount > 0)) reason = 'Enter a positive whole number of tokens.';
+  else if (!usable.length) reason = `${me.name} has no single unspent note worth ${amount} or more. Spendable balance is ${me.balance} tokens across ${(S.notes || []).filter(n => !n.spent && n.discovered).length} note(s); this demo spends one note per payment.`;
+  else reason = `Will spend the smallest sufficient note (${Math.min(...usable.map(n => Number(n.amount)))} tokens) on channel #${chan.channelIdx}.`;
+
+  btn.disabled = !!S.busy || !chan || !(amount > 0) || !usable.length;
+  btn.textContent = S.busy === 'payment' ? 'Proving…' : 'Send payment';
+  hint.textContent = reason;
+}
+
+function renderScanButton() {
+  const btn = $('btnScan');
+  btn.innerHTML = S.busy === 'scan'
+    ? 'Scanning…'
+    : 'Scan as ' + esc(S.actor >= 0 ? pname(S.actor) : '—');
+  btn.disabled = S.actor < 0 || !!S.busy;
+}
+
+// ── Paired tables ───────────────────────────────────────────────────────────
+// Bitmap context: the live preview if one exists, otherwise the established
+// channel for the pair currently selected in the form.
+function activeBitmapContext() {
+  if (!S) return null;
+  if (S.preview) return { kind:'preview', recipient:S.preview.recipient, candidates:new Set(S.preview.candidates), excluded:new Set(S.preview.excluded), bits:S.preview.bits, mode:S.preview.mode, sender:S.preview.sender, description:S.preview.description };
+  const recipient = Number($('chanRecipient').value);
+  const c = (S.channels || []).find(ch => ch.sender === S.actor && ch.recipient === recipient);
+  if (!c) return null;
+  return { kind:'open', recipient:c.recipient, candidates:new Set(c.candidates), excluded:new Set(c.excluded), bits:c.onChainBits || c.bits, mode:c.mode, sender:c.sender, description:c.description, channelIdx:c.channelIdx, matches:c.bitmapMatches };
+}
+
+function renderPairTable() {
+  const ctx = activeBitmapContext();
+  const head = `
+    <div class="pair-row pair-head">
+      <div class="th">#</div><div class="th">User</div><div class="th">pk_spend</div>
+      <div class="th">pk_view</div><div class="th">Registry</div>
+      <div class="divider"></div>
+      <div class="th right-first">Bit</div><div class="th right-first">Channel visibility</div>
+    </div>`;
+
+  const rows = (S.parties || []).map(p => {
+    let bitClass = '', bitVal = '0', descClass = '', desc = '<strong>—</strong> no channel selected';
+    if (ctx) {
+      const isSet = ctx.candidates.has(p.index);
+      bitVal = isSet ? '1' : '0';
+      if (p.index === ctx.recipient) {
+        bitClass = 'set recipient'; descClass = 'recipient';
+        desc = `<strong>recipient</strong> · decapsulates, opens c2`;
+      } else if (isSet) {
+        bitClass = 'set';
+        desc = `<strong>candidate</strong> · tries, AEAD rejects`;
+      } else if (ctx.excluded.has(p.index)) {
+        bitClass = 'excluded'; descClass = 'excluded';
+        desc = `<strong>excluded</strong> · left out of the set`;
+      } else {
+        desc = `<strong>outside</strong> · never scans this channel`;
+      }
+    }
+    const stateChip = p.registered
+      ? `<span class="state-chip registered">registered · blk ${p.regBlock}</span>`
+      : `<span class="state-chip" id="chip-${p.index}">not registered</span>`;
+    const roleLabel = p.controllable ? 'controllable' : 'anonymity set';
+    const colour = p.controllable ? 'c' + (S.parties.filter(x => x.controllable).findIndex(x => x.index === p.index)) : '';
+
+    return `
+    <div class="pair-row ${S.actor === p.index ? 'is-actor' : ''}" id="row-${p.index}">
+      <div class="cell-idx">${p.index}</div>
+      <div class="cell-name">
+        <div class="avatar ${colour}">${esc(p.initial)}</div>
+        <div style="min-width:0">
+          <div class="nm">${esc(p.name)} ${S.actor === p.index ? '<span class="you-badge">you</span>' : ''}</div>
+          <div class="rl">${roleLabel}</div>
+        </div>
+      </div>
+      <div class="hex ${p.pkSpend ? '' : 'dim'}" title="${esc(p.pkSpend || 'not registered')}"
+           onclick="copyText(${JSON.stringify(p.pkSpend || '')}, this)">${esc(p.pkSpend ? cut(p.pkSpend, 22) : '—')}</div>
+      <div class="fp">${esc(p.pkViewFp || '—')}${p.pkViewLen ? `<small>ML-KEM-768 · ${p.pkViewLen} B</small>` : ''}</div>
+      <div>${stateChip}</div>
+      <div class="divider"></div>
+      <div class="bit-label">Channel visibility · #${p.index} ${esc(p.name)}</div>
+      <div class="bit ${bitClass}" id="bit-${p.index}">${bitVal}</div>
+      <div class="bit-desc ${descClass}">${desc}</div>
+    </div>`;
+  }).join('');
+
+  $('pairTable').innerHTML = head + rows;
+}
+
+function renderBitmapSummary() {
+  const ctx = activeBitmapContext();
+  const el = $('bitmapSummary');
+  if (!ctx) {
+    el.innerHTML = `<div class="bs-note">Pick a recipient and a privacy mode to see exactly which rows the channel bitmap will encode. Nothing is published until you press <strong>Establish channel</strong>.</div>`;
+    return;
+  }
+  const n = S.config.partyCount;
+  el.innerHTML = `
+    <div class="bs-item"><div class="bs-k">Direction</div><div class="bs-v">${esc(pname(ctx.sender))} → ${esc(pname(ctx.recipient))}</div></div>
+    <div class="bs-item"><div class="bs-k">Mode</div><div class="bs-v">${esc(ctx.mode)}</div></div>
+    <div class="bs-item"><div class="bs-k">Candidates</div><div class="bs-v">${ctx.candidates.size} / ${n}</div></div>
+    <div class="bs-item"><div class="bs-k">Raw bitmap</div><div class="bs-v hl">${esc(ctx.bits)}</div></div>
+    <div class="bs-item"><div class="bs-k">Status</div><div class="bs-v ${ctx.kind === 'open' ? 'ok' : ''}">${ctx.kind === 'open' ? 'on-chain · channel #' + ctx.channelIdx : 'preview only'}</div></div>
+    ${ctx.kind === 'open' && ctx.matches ? '<div class="bs-item"><div class="bs-k">Verified</div><div class="bs-v ok">matches TagChannelRegistry</div></div>' : ''}
+    <div class="bs-note">${esc(ctx.description || '')}</div>`;
+}
+
+// ── Chain panel ─────────────────────────────────────────────────────────────
+function renderChain() {
+  const pay = (S.payments || [])[(S.payments || []).length - 1];
+  const warning = (S.health || {}).warning;
+  const tree = S.tree || { leaves: [] };
+  const c = S.contracts || {};
+  let html = warning ? `<div class="alert" style="margin:0 0 10px">${esc(warning)}</div>` : '';
+
+  if (pay) {
+    html += `
+    <div class="chain-card">
+      <div class="cc-head"><span class="cc-title">Payment · EnygmaDvp.payment</span><span class="cc-badge">verified</span></div>
+      <div class="cc-body"><dl class="kv">
+        <dt>flow</dt><dd class="teal">${esc(pname(pay.sender))} → ${pay.amount} → ${esc(pname(pay.recipient))}${Number(pay.change) ? ` · ${pay.change} change` : ''}</dd>
+        <dt>tx</dt><dd>${esc(cut(pay.payTxHash, 30))}</dd>
+        <dt>block · gas</dt><dd>${pay.payBlock} · ${num(pay.payGas)}</dd>
+        <dt>nullifier</dt><dd class="amber">${esc(cut(pay.nullifier, 30))}</dd>
+        <dt>proof</dt><dd>Groth16 · 8 × 32 B · ${num(pay.proofMs)} ms</dd>
+        <dt>relay</dt><dd>${num(pay.relayMs)} ms submit → confirmed</dd>
+        <dt>ML-KEM ct</dt><dd>${pay.cipherTextLen} B capsule · ${pay.encTxDataLen} B AES-GCM note</dd>
+        <dt>root proved</dt><dd>${esc(cut(pay.rootUsed, 30))}</dd>
+        <dt>root after</dt><dd class="blue">${esc(cut(pay.rootAfter, 30))}</dd>
+      </dl>
+      <div class="sep"></div>
+      <dl class="kv">
+        <dt>leaf · recipient</dt><dd class="teal">${esc(cut(pay.destCommitment, 30))}</dd>
+        <dt>leaf · change</dt><dd class="blue">${esc(cut(pay.changeCommitment, 30))}</dd>
+      </dl></div>
+    </div>
+
+    <div class="chain-card">
+      <div class="cc-head"><span class="cc-title">Tag · TagRegistry.publishTag</span><span class="cc-badge">separate tx</span></div>
+      <div class="cc-body"><dl class="kv">
+        <dt>tx</dt><dd>${esc(cut(pay.tagTxHash, 30))}</dd>
+        <dt>block · gas</dt><dd>${pay.tagBlock} · ${num(pay.tagGas)}</dd>
+        <dt>tag</dt><dd class="purple">${esc(cut(pay.publishedTag, 30))}</dd>
+        <dt>payload</dt><dd>${pay.tagCtxtLen} B AES-256-GCM (amount ‖ tokenId ‖ salt)</dd>
+      </dl></div>
+    </div>`;
+  }
+
+  const chans = S.channels || [];
+  if (chans.length) {
+    const last = chans[chans.length - 1];
+    html += `
+    <div class="chain-card">
+      <div class="cc-head"><span class="cc-title">Channel · TagChannelRegistry</span><span class="cc-badge">#${last.channelIdx}</span></div>
+      <div class="cc-body"><dl class="kv">
+        <dt>tx</dt><dd>${esc(cut(last.txHash, 30))}</dd>
+        <dt>block · gas</dt><dd>${last.block} · ${num(last.gas)}</dd>
+        <dt>bitmap</dt><dd class="purple">${esc(last.bitmapHex)} · ${esc(last.onChainBits)}</dd>
+      </dl></div>
+    </div>`;
+  }
+
+  html += `
+    <div class="chain-card">
+      <div class="cc-head"><span class="cc-title">Commitment tree</span><span class="cc-badge gray">depth ${tree.depth}</span></div>
+      <div class="cc-body">
+        <dl class="kv">
+          <dt>leaves</dt><dd>${tree.leafCount}</dd>
+          <dt>root</dt><dd class="blue">${esc(cut(tree.root, 32) || '—')}</dd>
+        </dl>
+        <div class="leaf-list">${(tree.leaves || []).map((l, i) =>
+          `<div class="leaf ${newLeaves.has(l) ? 'new' : ''}"><span class="li">${i}</span><span class="lv">${esc(cut(l, 34))}</span></div>`).join('')
+          || '<div class="chan-empty">No commitments yet.</div>'}</div>
+      </div>
+    </div>
+
+    <div class="chain-card">
+      <div class="cc-head"><span class="cc-title">Contracts</span><span class="cc-badge gray">chain ${c.chainId}</span></div>
+      <div class="cc-body"><dl class="kv">
+        <dt>Vault</dt><dd>${esc(cut(c.vault, 24))}</dd>
+        <dt>UserRegistry</dt><dd>${esc(cut(c.userRegistry, 24))}</dd>
+        <dt>TagRegistry</dt><dd>${esc(cut(c.tagRegistry, 24))}</dd>
+        <dt>TagChannel</dt><dd>${esc(cut(c.tagChannelRegistry, 24))}</dd>
+        <dt>Relayer</dt><dd>${esc(cut(c.relayer, 24) || 'not reported')}</dd>
+      </dl></div>
+    </div>`;
+
+  $('chainPanel').innerHTML = html;
+}
+
+// ── Scan results ────────────────────────────────────────────────────────────
+function renderScanResults() {
+  const box = $('scanResults');
+  const sc = S.lastScan;
+  if (!sc || !sc.channels) { box.innerHTML = ''; return; }
+  box.innerHTML = `<div class="panel-sub" style="margin:10px 0 0 0">${esc(sc.summary)}</div>` +
+    sc.channels.map(ch => `
+      <div class="scan-item ${esc(ch.outcome)}">
+        <div class="scan-hd">
+          <span class="scan-tag">${esc(ch.outcome)}</span>
+          <span style="font-family:var(--mono);font-size:10px;color:var(--text2)">channel #${ch.channelIdx}</span>
+          <span class="scan-bits">${esc(ch.bits)}</span>
+        </div>
+        <div class="scan-detail">${esc(ch.detail)}</div>
+        ${(ch.notes || []).map(n => `
+          <div class="scan-note">
+            <div class="sn-hd">${n.verified ? '✓' : '·'} ${esc(n.amount || '?')} tokens · block ${n.block}</div>
+            <div class="sn-d">tag ${esc(cut(n.tag, 26))}<br>commitment ${esc(cut(n.commitment, 30))}<br>${esc(n.detail)}</div>
+          </div>`).join('')}
+      </div>`).join('');
+}
+
+// ── Progress rendering ──────────────────────────────────────────────────────
+function renderProgress(action) {
+  const steps = progress[action] || [];
+  const icon = s => s === 'success' ? '✓' : (s === 'error' ? '!' : '•');
+  $('prog-' + action).innerHTML = steps.map(s => `
+    <div class="pstep ${esc(s.status)}">
+      <div class="pstep-ic">${icon(s.status)}</div>
+      <div class="pstep-txt"><div class="pstep-lb">${esc(s.label)}</div><div class="pstep-ms">${esc(s.msg)}</div></div>
+    </div>`).join('');
+}
+
+function pushProgress(e) {
+  const list = progress[e.action] || (progress[e.action] = []);
+  const existing = list.find(s => s.step === e.step);
+  if (existing) { existing.status = e.status; existing.label = e.label; existing.msg = e.msg; }
+  else list.push({ step:e.step, status:e.status, label:e.label, msg:e.msg });
+  renderProgress(e.action);
+}
+
+// ── Log ─────────────────────────────────────────────────────────────────────
+function renderLog() {
+  const f = $('logFilter').value;
+  const body = $('logBody');
+  body.innerHTML = logLines.filter(l => f === 'all' || l.cat === f).map(l => `
+    <div class="log-line ${l.cat === 'err' ? 'err' : ''}">
+      <span class="log-ts">${esc(l.ts)}</span>
+      <span class="log-cat ${esc(l.cat)}">${esc(l.cat === 'err' ? 'err' : l.cat)}</span>
+      <span class="log-msg">${esc(l.msg)}</span>
+    </div>`).join('');
   body.scrollTop = body.scrollHeight;
 }
-function clearLog() { document.getElementById('logBody').innerHTML = ''; }
-document.getElementById('logFilter').addEventListener('change', (e) => {
-  currentLogFilter = e.target.value;
-  document.querySelectorAll('#logBody .log-line').forEach(line => {
-    line.style.display = (currentLogFilter === 'all' || line.dataset.cat === currentLogFilter) ? '' : 'none';
-  });
-});
-function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
-// ── Reset ──────────────────────────────────────────────────────────────────────
-function resetUI() {
-  renderSteps();
-  txCount = 0;
-  Object.keys(liveData).forEach(k => delete liveData[k]);
-
-  const pFields = ['ethAddr','pkSpend','pkView','status','balance','commitment','merkleRoot','nullifier','salt','channel','proof'];
-  [0,1].forEach(pid => {
-    pFields.forEach(f => {
-      const el = document.getElementById('p'+pid+'-'+f);
-      if (!el) return;
-      el.innerHTML = '—';
-      el.className = 'p-val' + (f==='ethAddr' ? ' dim' : '');
-    });
-  });
-
-  ['vaultAddr','registryAddr','relayerAddr','tagChannelAddr','tagRegistryAddr'].forEach(f => {
-    const el = document.getElementById('proto-'+f);
-    if (el) el.textContent = '—';
-  });
-
-  ['payment','channel','tag'].forEach(t => {
-    ['txhash-','txblock-','txgas-'].forEach(p => { const el = document.getElementById(p+t); if (el) el.textContent = '—'; });
-    const s = document.getElementById('txstatus-'+t);
-    if (s) { s.textContent = 'pending'; s.className = 'tx-card-status pending'; }
-  });
-
-  document.querySelectorAll('.priv-badge').forEach(el => el.classList.remove('verified'));
-  document.getElementById('summaryCard').classList.remove('show');
-  document.getElementById('flowArrow').classList.remove('active');
-  document.getElementById('flowAmt').classList.remove('active');
-
-  // Reset metrics
-  ['proofTime','proofSize','verifyTime','verifyGas','totalGas','flowTime'].forEach(id => {
-    const el = document.getElementById('mv-'+id); if (el) { el.textContent = '—'; el.classList.remove('lit'); }
-    const card = document.getElementById('metric-'+id); if (card) card.classList.remove('set');
-  });
-  ['mb-proofTime','mb-verifyTime'].forEach(id => { const el = document.getElementById(id); if (el) el.style.width='0%'; });
-  const msSub = document.getElementById('ms-proofTime');
-  if (msSub) msSub.textContent = 'Groth16 witness + prove';
-
-  // Reset viz card
-  document.getElementById('svzLabel').textContent = 'Waiting';
-  document.getElementById('svzBadge').className = 'svz-badge idle';
-  document.getElementById('svzBadge').textContent = 'idle';
-  document.getElementById('svzDiagram').innerHTML = '<div class="svz-idle">Click <strong>Run Flow</strong> to start the confidential ERC-20 payment demo.</div>';
-  document.getElementById('svzDesc').style.display = 'none';
-
-  document.getElementById('progressBar').style.width = '0%';
-  setStatus('idle');
+// ── Actions ─────────────────────────────────────────────────────────────────
+async function doRegister() {
+  showErr('register', ''); progress.register = []; renderProgress('register');
+  $('btnRegister').disabled = true;
+  try { S = await api('/api/register', {}); render(); }
+  catch (e) { showErr('register', e.message); }
+  finally { await refresh(); }
 }
 
-// ── Status ──────────────────────────────────────────────────────────────────────
-function setStatus(st, text) {
-  document.getElementById('statusDot').className = 'status-dot ' + (st||'');
-  document.getElementById('statusText').textContent = text || st || 'idle';
-  document.getElementById('runBtn').disabled = st === 'running';
+async function doOpenChannel() {
+  showErr('channel', ''); progress.channel = []; renderProgress('channel');
+  try { S = await api('/api/channels/open', { previewId: S.preview ? S.preview.id : '' }); render(); pulseConfirmedBits(); }
+  catch (e) { showErr('channel', e.message); await refresh(); }
 }
 
-// ── SSE / run ─────────────────────────────────────────────────────────────────
-function run() {
-  if (es) { es.close(); es = null; }
-  resetUI();
-  clearLog();
-  setStatus('running', 'running');
-  es = new EventSource('/events');
-  es.onmessage = e => handleEvent(JSON.parse(e.data));
-  es.onerror = () => setStatus('error', 'disconnected');
-  fetch('/run?mode='+mode, { method:'POST' })
-    .then(r => { if (!r.ok) r.text().then(t => { appendLog('','✗ '+t,''); setStatus('error','error'); }); })
-    .catch(err => { appendLog('','✗ fetch: '+err,''); setStatus('error','error'); });
+function pulseConfirmedBits() {
+  const ctx = activeBitmapContext();
+  if (!ctx) return;
+  ctx.candidates.forEach(i => {
+    const el = $('bit-' + i);
+    if (el) { el.classList.remove('confirmed'); void el.offsetWidth; el.classList.add('confirmed'); }
+  });
 }
 
-function handleEvent(ev) {
-  switch (ev.type) {
-    case 'reset':
-      resetUI(); setStatus('running','running');
-      break;
-    case 'step':
-      setStep(ev.step, ev.status);
-      if (ev.status === 'running') appendLog(null,'▶ '+(ev.label||ev.step)+(ev.msg?' — '+ev.msg:''),'');
-      if (ev.status === 'error')   appendLog(null,'✗ '+(ev.label||ev.step)+': '+ev.msg,'');
-      if (ev.step==='prereqs' && ev.status==='running') {
-        setTimeout(() => ['chain','gnark','relay'].forEach((s,i) => setTimeout(() => markSubstep(s,'done'), i*400)), 400);
-      }
-      if (ev.step==='register' && ev.status==='running') {
-        setTimeout(() => markSubstep('reg-alice','done'), 1200);
-        setTimeout(() => markSubstep('reg-bob','done'), 2400);
-      }
-      if (ev.step==='merkle' && ev.status==='running') {
-        setTimeout(() => markSubstep('mk-scan','done'), 600);
-        setTimeout(() => markSubstep('mk-build','done'), 1200);
-      }
-      if (ev.step==='merkle' && ev.status==='success') markSubstep('mk-prove','done');
-      if (ev.step==='relay' && ev.status==='success') {
-        document.getElementById('flowArrow').classList.add('active');
-        document.getElementById('flowAmt').classList.add('active');
-        privVerify('priv-commitment');
-      }
-      if ((ev.step==='scan'||ev.step==='scan_tag'||ev.step==='verify') && ev.status==='success') privVerify('priv-note');
-      break;
-    case 'log':
-      appendLog(ev.ts, ev.msg, ev.cat);
-      break;
-    case 'participant':
-      setField(ev.pid, ev.field, ev.value);
-      break;
-    case 'proto':
-      setProto(ev.field, ev.value);
-      break;
-    case 'done':
-      if (ev.status==='success') {
-        setStatus('success','done');
-        appendLog(null,'✓ '+ev.msg,'');
-        showSummary();
-      } else {
-        setStatus('error','error');
-        appendLog(null,'✗ '+ev.msg,'');
-      }
-      if (es) { es.close(); es = null; }
-      break;
-  }
+async function doPay() {
+  showErr('payment', ''); progress.payment = []; renderProgress('payment');
+  const recipient = Number($('payRecipient').value);
+  const amount = Number($('payAmount').value);
+  try { S = await api('/api/payments', { recipient, amount }); render(); }
+  catch (e) { showErr('payment', e.message); await refresh(); }
 }
 
-function showSummary() {
-  document.getElementById('sum-amount').textContent = '30 tokens';
-  document.getElementById('sum-mode').textContent = mode==='tag' ? 'With Tag (private notification)' : 'Plain (direct note scan)';
-  document.getElementById('sum-txcount').textContent = txCount + ' on-chain';
-  const tg = document.getElementById('mv-totalGas');
-  document.getElementById('sum-gas').textContent = (tg && tg.textContent!=='—') ? tg.textContent+' gas' : '—';
-  const ft = document.getElementById('mv-flowTime');
-  const pt = document.getElementById('mv-proofTime');
-  const sumExtra = document.getElementById('sum-extra');
-  if (ft && ft.textContent!=='—') sumExtra.textContent = 'Flow: '+(ft.textContent)+' · Proof: '+(pt?pt.textContent:'—');
-  document.getElementById('summaryCard').classList.add('show');
+async function doScan() {
+  showErr('scan', ''); progress.scan = []; renderProgress('scan');
+  try { S = await api('/api/scan', {}); render(); }
+  catch (e) { showErr('scan', e.message); await refresh(); }
 }
 
-// ── Intro card ────────────────────────────────────────────────────────────
-(function initIntro() {
-  const body = document.getElementById('introBody');
-  const ic = document.getElementById('introToggleIc');
-  const toggle = document.getElementById('introToggle');
-  if (!body || !ic || !toggle) return;
-  function setCollapsed(collapsed) {
-    body.style.display = collapsed ? 'none' : 'block';
-    ic.textContent = collapsed ? '▸' : '▾';
-    localStorage.setItem('enygmaRetailIntroCollapsed', collapsed ? '1' : '0');
-  }
-  toggle.addEventListener('click', () => setCollapsed(body.style.display !== 'none'));
-  setCollapsed(localStorage.getItem('enygmaRetailIntroCollapsed') === '1');
-})();
+// ── SSE ─────────────────────────────────────────────────────────────────────
+function connect() {
+  const es = new EventSource('/events');
+  // Release the stream's socket immediately on reload; leaving it to the
+  // browser can exhaust the per-origin connection limit across quick reloads.
+  addEventListener('pagehide', () => es.close());
+  es.onmessage = ev => {
+    let e; try { e = JSON.parse(ev.data); } catch { return; }
+    switch (e.type) {
+      case 'log':
+        logLines.push({ ts:e.ts, cat:e.cat || '', msg:e.msg });
+        if (logLines.length > 400) logLines.shift();
+        renderLog();
+        break;
+      case 'progress': pushProgress(e); break;
+      case 'error':
+        logLines.push({ ts:new Date().toTimeString().slice(0, 8), cat:'err', msg:e.msg });
+        renderLog();
+        break;
+      case 'row': {
+        const chip = $('chip-' + e.index);
+        if (chip && e.phase === 'pending') { chip.className = 'state-chip pending'; chip.textContent = 'registering…'; }
+        const row = $('row-' + e.index);
+        if (row && e.phase === 'mined') { row.classList.remove('row-new'); void row.offsetWidth; row.classList.add('row-new'); }
+        break;
+      }
+      case 'leaf': newLeaves.add(e.value); setTimeout(() => newLeaves.delete(e.value), 4000); break;
+      case 'state': refresh(); break;
+      case 'busy': if (S) { S.busy = e.action; renderLocks(); syncPayForm(); renderScanButton(); } break;
+    }
+  };
+  es.onerror = () => {};
+}
 
-// ── Presentation mode (applied to <html> — setMode() overwrites body.className) ──
-(function initPresentationMode() {
-  const btn = document.getElementById('presentToggle');
-  if (!btn) return;
-  function apply(on) {
-    document.documentElement.classList.toggle('presentation-mode', on);
-    btn.classList.toggle('active', on);
-    localStorage.setItem('enygmaRetailPresentationMode', on ? '1' : '0');
-  }
-  btn.addEventListener('click', () => apply(!document.documentElement.classList.contains('presentation-mode')));
-  apply(localStorage.getItem('enygmaRetailPresentationMode') === '1');
-})();
-
-// ── Init ─────────────────────────────────────────────────────────────────────
-renderSteps();
-setStatus('idle');
+// ── Boot ────────────────────────────────────────────────────────────────────
+$('presentToggle').onclick = () => {
+  const on = document.documentElement.classList.toggle('presentation-mode');
+  $('presentToggle').classList.toggle('active', on);
+};
+connect();
+refresh();
+setInterval(() => { if (S && !S.busy) refresh(); }, 8000);
+// Retry a preview that failed on a transient error, without spinning on it.
+setInterval(() => { if (S && S.ready && !S.busy && !S.preview) requestPreview(); }, 4000);
 </script>
 </body>
 </html>

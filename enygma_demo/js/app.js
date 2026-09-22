@@ -1,4 +1,4 @@
-import { PROTOCOLS, PROTOCOL_IDS, SETUP_STEPS, PARTY_NAMES } from "./config.js";
+import { PROTOCOLS, PROTOCOL_IDS, SETUP_STEPS, PARTY_NAMES, PROTOCOL_PRIMITIVES, spendPublicKeyFor, initializationSteps } from "./config.js";
 import { engineAdapter } from "./demo-engine.js";
 
 const $ = selector => document.querySelector(selector);
@@ -11,6 +11,14 @@ const els = {
 
 let route = "choose";
 let busy = false;
+let auctionSettlementPerspective = "public";
+const RETAIL_TAG_MODES = [
+  { id: "none", name: "No privacy", detail: "Recipient only", explanation: "The single set bit identifies the recipient." },
+  { id: "subset", name: "Subset", detail: "Recipient + √N decoys", explanation: "The recipient is hidden among a smaller candidate set." },
+  { id: "rift", name: "Rift", detail: "All except exclusions", explanation: "The payer dissociates the channel from selected participants." },
+  { id: "full", name: "Full privacy", detail: "Every participant", explanation: "Every registry row is a candidate." }
+];
+const retailTagDraft = { recipientIndex: 1, mode: "full", excludedIndices: new Set([8, 9]) };
 
 function short(value, lead = 15, tail = 8) {
   if (!value) return "—";
@@ -42,7 +50,7 @@ function renderNav() {
   els.nav.innerHTML = PROTOCOL_IDS.map(id => `<a href="#/${id}" class="${route === id ? "active" : ""}">${PROTOCOLS[id].short}</a>`).join("");
   const identity = engineAdapter.state.identities[0];
   els.identity.classList.toggle("ready", Boolean(identity));
-  els.identity.innerHTML = `<span class="status-dot"></span>${identity ? short(identity.spendPublicKey, 12, 6) : "No identity yet"}`;
+  els.identity.innerHTML = `<span class="status-dot"></span>${identity ? short(spendPublicKeyFor(identity, route), 12, 6) : "No identity yet"}`;
 }
 
 function renderChooser() {
@@ -80,15 +88,34 @@ function stageHero(number, actor, title, copy) {
   return `<div class="stage-hero"><div class="stage-copy"><p class="eyebrow">${stepLabel}</p><h2>${title}</h2><p class="panel-copy">${copy}</p></div><div class="stage-context"><div class="actor-box actor-${actor}" data-executing-entity="${name}"><span class="actor-symbol" aria-hidden="true">${symbol}</span><span><small>${label}</small><strong>${name}</strong></span></div><span class="stage-number">${number}</span></div></div>`;
 }
 
+function deploymentInitialization(p) {
+  const steps = initializationSteps(p.id);
+  const completed = p.deploymentActions?.length || 0;
+  return `<details class="deployment-initialization" ${busy && p.contracts.length === PROTOCOLS[p.id].contracts.length ? "open" : ""}><summary>Initialize and connect contracts · ${completed} / ${steps.length}</summary><ol>${steps.map((step, index) => `<li class="${index < completed ? "complete" : ""}"><code>${step.target}.${step.method}(${step.args.join(", ")})</code>${index < completed ? '<span aria-label="Confirmed">✓</span>' : ""}</li>`).join("")}</ol></details>`;
+}
+
+function deploymentReceipts(p) {
+  return `<details class="deployment-receipts"><summary>${p.contracts.length} deployed contracts</summary><div class="table-wrap"><table><thead><tr><th>#</th><th>Contract / instance</th><th>Address</th></tr></thead><tbody>${p.contracts.map((item, index) => `<tr><td>${index + 1}</td><td>${item.instance || item.name}${item.instance ? `<small>${item.name}</small>` : ""}</td><td><code>${item.address}</code></td></tr>`).join("")}</tbody></table></div>${deploymentInitialization(p)}</details>`;
+}
+
 function renderDeploy(p) {
-  const contracts = PROTOCOLS[p.id].contracts.map(name => `<div class="detail-card"><label>Protocol contract</label><strong>${name}</strong></div>`).join("");
-  return `${stageHero(1, "operator", "Deploy the protocol suite", "Bring this protocol’s independent environment online and establish its core system contracts.")}
-    <div class="stage-body"><div class="detail-grid">${contracts}</div><button class="button button-primary" data-command="deploy">Deploy contract suite</button></div>`;
+  const suite = PROTOCOLS[p.id];
+  const cards = suite.contracts.map(({ name, description, instance, support, asset, constructorArgs = [], libraries = [] }, index) => {
+    const deployed = p.contracts.find(item => (item.instance || item.name) === (instance || name));
+    const category = asset ? "Asset contract" : support ? "Cryptographic support" : "Protocol contract";
+    const wiring = [...(libraries.length ? [`Links: ${libraries.join(" + ")}`] : []), ...(constructorArgs.length ? [`Constructor: (${constructorArgs.join(", ")})`] : [])];
+    return `<div class="detail-card contract-card ${deployed ? "deployed" : ""}" data-deployment-contract="${instance || name}">
+      <button type="button" class="contract-help" aria-describedby="contract-help-${p.id}-${index}"><span><small>${String(index + 1).padStart(2, "0")} · ${category}${deployed ? " · Deployed" : ""}</small><strong>${instance || name}</strong>${instance ? `<small class="contract-type">${name}</small>` : ""}</span><span class="contract-info" aria-hidden="true">${deployed ? "✓" : "i"}</span></button>
+      <span class="contract-tooltip" role="tooltip" id="contract-help-${p.id}-${index}">${description}${wiring.length ? `<br><code>${wiring.join("<br>")}</code>` : ""}</span>
+    </div>`;
+  }).join("");
+  return `${stageHero(1, "operator", "Deploy the protocol suite", "Deploy each contract in order, then initialize the verifiers and connect the protocol contracts.")}
+    <div class="stage-body"><div class="deployment-summary"><strong>Deployment sequence · ${suite.contracts.length} contracts</strong><p>${suite.deploymentNote}</p><small>Hover, focus or tap a contract to see its role and dependencies.</small></div><div class="deployment-progress" role="status">${p.contracts.length} / ${suite.contracts.length} deployed · ${p.deploymentActions?.length || 0} / ${initializationSteps(p.id).length} initialization calls</div><div class="detail-grid deployment-contracts">${cards}</div>${deploymentInitialization(p)}<button class="button button-primary" data-command="deploy" ${busy ? "disabled" : ""}>${busy ? "Deploying and initializing…" : p.contracts.length ? "Resume deployment" : "Deploy contract suite"}</button></div>`;
 }
 
 function renderAuditor(p) {
-  return `${stageHero(2, "auditor", "Generate the auditor key", "Create a protocol-specific ML-KEM keypair. This key can reveal only the audit scope participants grant; it never grants spending, freezing, or operator authority.")}
-    <div class="stage-body"><div class="callout">The auditor generates and retains this keypair. The system operator receives only the public key for configuration.</div><div class="button-row" style="margin-top:18px"><button class="button button-auditor" data-command="auditor">Generate ML-KEM keypair</button></div></div>`;
+  return `${stageHero(2, "auditor", "Generate the auditor key", "Create a protocol-specific ML-KEM-768 keypair. This key can reveal only the audit scope participants grant; it never grants spending, freezing, or operator authority.")}
+    <div class="stage-body">${deploymentReceipts(p)}<div class="callout">The auditor generates and retains this keypair. The system operator receives only the public key for configuration.</div><div class="button-row" style="margin-top:18px"><button class="button button-auditor" data-command="auditor">Generate ML-KEM-768 keypair</button></div></div>`;
 }
 
 function renderConfigure(p) {
@@ -103,8 +130,9 @@ function renderIdentity(p) {
   const rank = { empty: 0, spend_secret: 1, spend_public: 2, view_secret: 3, complete: 4 }[phase];
   const spendSecret = ceremony.spendPrivateKey || "Waiting for participant key generation";
   const viewSecret = ceremony.viewPrivateKey || "Waiting for participant key generation";
-  const spendPublic = ceremony.spendPublicKey || "Waiting for H(sk_spend)";
-  const viewPublic = ceremony.viewPublicKey || "Waiting for ML-KEM key generation";
+  const primitives = PROTOCOL_PRIMITIVES[p.id];
+  const spendPublic = spendPublicKeyFor(ceremony, p.id) || `Waiting for ${primitives.spend}`;
+  const viewPublic = ceremony.viewPublicKey || "Waiting for ML-KEM-768 key generation";
   const button = phase === "empty"
     ? `<button class="button button-primary" data-command="identity-spend-secret">Generate spend secret key</button>`
     : phase === "spend_secret"
@@ -117,24 +145,24 @@ function renderIdentity(p) {
   const footerCopy = phase === "empty" ? "Begin with the private spend key that authorizes transactions."
     : phase === "spend_secret" ? "Spend secret ready. Hash it to obtain the corresponding public key."
       : phase === "spend_public" ? "Spend keypair complete. Now create the private viewing key."
-        : phase === "view_secret" ? "View secret ready. Complete the ML-KEM keypair with its public key."
+        : phase === "view_secret" ? "View secret ready. Complete the ML-KEM-768 keypair with its public key."
           : "Both keypairs are complete. Private keys never enter the public registry.";
   const progress = ["Spend secret", "Spend public", "View secret", "View public"].map((label, index) => `<span class="${rank > index ? "done" : rank === index ? "active" : ""}">${index + 1} · ${label}</span>${index < 3 ? "<i></i>" : ""}`).join("");
-  return `${stageHero(4, "participant", identity ? "Confirm your existing Enygma identity" : "Generate your Enygma identity", identity ? "Review the same participant-generated keys before registering them unchanged in this protocol." : "Build the identity one key at a time. Each secret appears before the operation that produces its corresponding public key.")}
+  return `${stageHero(4, "participant", identity ? "Confirm your existing Enygma identity" : "Generate your Enygma identity", identity ? "Reuse your spend secret and view keypair. The spend public key follows this protocol’s Poseidon derivation." : "Build the identity one key at a time. Each secret appears before the operation that produces its corresponding public key.")}
     <div class="stage-body key-ceremony" data-ceremony-phase="${phase}">
       <div class="ceremony-progress" aria-label="Identity generation progress">${progress}</div>
       <div class="ceremony-grid">
         <article class="ceremony-card spend-card">
-          <header><span class="ceremony-icon">S</span><div><p class="eyebrow">Spend authorization</p><h3>Hash-based spend keypair</h3></div></header>
+          <header><span class="ceremony-icon">S</span><div><p class="eyebrow">Spend authorization</p><h3>Poseidon spend keypair</h3></div></header>
           <div class="key-output secret-output ${rank >= 1 ? "is-ready" : ""}"><label>Private · sk_spend</label><span class="key-value">${spendSecret}</span><small>Generated and retained by the participant.</small></div>
-          <div class="operation-lane ${rank >= 2 ? "is-complete" : ""}" aria-label="Hash the spend secret key to obtain the public key"><code>sk_spend</code><span class="operation-arrow"><b>H(·)</b>→</span><code>pk_spend</code></div>
-          <div class="key-output public-output ${rank >= 2 ? "is-ready" : ""}"><label>Public · pk_spend</label><span class="key-value">${spendPublic}</span><small>The spend public key is obtained by hashing the spend secret key.</small></div>
+          <div class="operation-lane ${rank >= 2 ? "is-complete" : ""}" aria-label="Poseidon hashes the spend secret key to obtain the public key"><code>sk_spend</code><span class="operation-arrow"><b>Poseidon</b>→</span><code>pk_spend</code></div>
+          <div class="key-output public-output ${rank >= 2 ? "is-ready" : ""}"><label>Public · pk_spend</label><span class="key-value">${spendPublic}</span><small>pk_spend = ${primitives.spend}${p.id === "institutional" ? "; ℓ is the BabyJubJub subgroup order" : ""}.</small></div>
         </article>
         <article class="ceremony-card view-card">
-          <header><span class="ceremony-icon">V</span><div><p class="eyebrow">Transaction viewing</p><h3>ML-KEM view keypair</h3></div></header>
+          <header><span class="ceremony-icon">V</span><div><p class="eyebrow">Transaction viewing</p><h3>ML-KEM-768 view keypair</h3></div></header>
           <div class="key-output secret-output ${rank >= 3 ? "is-ready" : ""}"><label>Private · sk_view</label><span class="key-value">${viewSecret}</span><small>Kept private unless the selected audit policy grants access.</small></div>
-          <div class="operation-lane ${rank >= 4 ? "is-complete" : ""}" aria-label="ML-KEM key generation binds the view keypair"><code>sk_view</code><span class="operation-arrow"><b>ML-KEM</b>→</span><code>pk_view</code></div>
-          <div class="key-output public-output ${rank >= 4 ? "is-ready" : ""}"><label>Public · pk_view</label><span class="key-value">${viewPublic}</span><small>ML-KEM key generation binds the private decapsulation key to its public encapsulation key.</small></div>
+          <div class="operation-lane ${rank >= 4 ? "is-complete" : ""}" aria-label="ML-KEM-768 key generation binds the view keypair"><code>sk_view</code><span class="operation-arrow"><b>ML-KEM-768</b>→</span><code>pk_view</code></div>
+          <div class="key-output public-output ${rank >= 4 ? "is-ready" : ""}"><label>Public · pk_view</label><span class="key-value">${viewPublic}</span><small>ML-KEM-768 key generation binds the private decapsulation key to its public encapsulation key.</small></div>
         </article>
       </div>
       <div class="ceremony-footer"><p>${footerCopy}</p>${button}</div>
@@ -152,13 +180,60 @@ function registryTable(p, indices) {
     const name = PARTY_NAMES[index];
     return `<tr data-party-row="${index}">
       <td><div class="registry-party"><span class="avatar">${name.split(" ").map(v => v[0]).slice(0,2).join("")}</span><span><strong>${name}</strong>${index === 0 ? "<small>You</small>" : ""}</span></div></td>
-      <td data-key="spend">${registryKey("spend public key", identity.spendPublicKey)}</td>
+      <td data-key="spend">${registryKey("spend public key", spendPublicKeyFor(identity, p.id))}</td>
       <td data-key="view">${registryKey("view public key", identity.viewPublicKey)}</td>
       <td><span class="registry-status ${registration ? "registered" : "pending"}">${registration ? "✓ Keys registered" : index === p.registrations.length ? "Registering" : "Queued"}</span></td>
       <td><span class="registry-status ${registration?.auditEnvelope ? "registered" : "pending"}">${registration?.auditEnvelope ? "✓ Shared" : registration ? "Ready to share" : "Waiting"}</span></td>
     </tr>`;
   }).join("");
   return `<div class="registry-table-wrap"><table class="registry-table"><thead><tr><th>Participant</th><th>Spend public key</th><th>View public key</th><th>1 · Register keys</th><th>2 · Share with auditor</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
+function retailTagCandidateIndices(mode, recipientIndex, excludedIndices = []) {
+  if (mode === "none") return [recipientIndex];
+  if (mode === "subset") {
+    const candidates = [recipientIndex];
+    const decoys = Math.max(1, Math.floor(Math.sqrt(PARTY_NAMES.length)));
+    for (let offset = 1; candidates.length < decoys + 1; offset += 1) {
+      const index = (recipientIndex + offset * 2) % PARTY_NAMES.length;
+      if (!candidates.includes(index)) candidates.push(index);
+    }
+    return candidates.sort((a, b) => a - b);
+  }
+  if (mode === "rift") {
+    const excluded = new Set(excludedIndices.filter(index => index !== recipientIndex));
+    return PARTY_NAMES.map((_, index) => index).filter(index => !excluded.has(index));
+  }
+  return PARTY_NAMES.map((_, index) => index);
+}
+
+function publicNetworkRegistry(p) {
+  const channel = p.id === "retail" ? p.flow.retailTagChannel : null;
+  const rows = p.registrations.map((registration, index) => {
+    const bit = channel ? channel.candidateIndices.includes(index) : null;
+    return `<tr data-public-party-row="${index}"><td><span class="registry-index">${String(index).padStart(2, "0")}</span></td><td><strong>${registration.name}</strong>${index === 0 ? "<small>You</small>" : ""}</td><td>${registryKey("spend public key", registration.spendPublicKey)}</td><td>${registryKey("view public key", registration.viewPublicKey)}</td>${p.id === "retail" ? `<td><span class="compact-bitmap ${bit === null ? "unset" : bit ? "included" : "outside"}">${bit === null ? "—" : bit ? "1" : "0"}</span></td>` : ""}</tr>`;
+  }).join("");
+  return `<section class="network-registry" aria-label="Public participant registry"><header><div><p class="eyebrow">Public blockchain state</p><h3>Participant registry</h3></div><span>${p.registrations.length} entries</span></header><p>Names and both public keys remain available throughout the protocol.</p><div class="network-registry-scroll"><table><thead><tr><th>#</th><th>Participant</th><th>pk_spend</th><th>pk_view</th>${p.id === "retail" ? "<th>Tag bit</th>" : ""}</tr></thead><tbody>${rows}</tbody></table></div>${channel ? `<footer><span>${channel.mode} channel</span><code>${channel.bitmap}</code></footer>` : ""}</section>`;
+}
+
+function retailTagRegistry(p) {
+  const channel = p.flow.retailTagChannel;
+  const mode = channel?.mode || retailTagDraft.mode;
+  const recipientIndex = channel ? p.registrations.findIndex(item => item.partyId === channel.recipientPartyId) : retailTagDraft.recipientIndex;
+  const exclusions = channel?.excludedIndices || [...retailTagDraft.excludedIndices];
+  const candidates = channel?.candidateIndices || retailTagCandidateIndices(mode, recipientIndex, exclusions);
+  const locked = Boolean(channel);
+  const rows = p.registrations.map((registration, index) => {
+    const isPayer = index === 0;
+    const isRecipient = index === recipientIndex;
+    const included = candidates.includes(index);
+    const excluded = mode === "rift" && exclusions.includes(index) && !isRecipient;
+    const privateControl = isPayer
+      ? `<span class="tag-row-state payer">Payer</span>`
+      : `<button type="button" class="recipient-choice ${isRecipient ? "selected" : ""}" data-retail-recipient="${index}" aria-pressed="${isRecipient}" ${locked ? "disabled" : ""}>${isRecipient ? "Selected recipient" : "Select"}</button>${mode === "rift" && !isRecipient ? `<label class="rift-exclusion"><input type="checkbox" data-retail-exclusion="${index}" ${excluded ? "checked" : ""} ${locked ? "disabled" : ""}> Exclude</label>` : ""}`;
+    return `<tr class="${included ? "tag-included" : "tag-outside"}" data-tag-party-row="${index}"><td><span class="registry-index">${String(index).padStart(2, "0")}</span></td><td><div class="registry-party"><span class="avatar">${registration.name.split(" ").map(value => value[0]).slice(0, 2).join("")}</span><span><strong>${registration.name}</strong>${isPayer ? "<small>You</small>" : ""}</span></div></td><td data-key="spend">${registryKey("spend public key", registration.spendPublicKey)}</td><td data-key="view">${registryKey("view public key", registration.viewPublicKey)}</td><td class="private-selection-cell">${privateControl}</td><td><span class="bitmap-membership ${included ? "included" : "outside"}"><b>${included ? "1" : "0"}</b><span>${included ? "Candidate" : "Outside"}</span></span></td></tr>`;
+  }).join("");
+  return `<div class="tag-registry-boundary"><div class="tag-registry-labels"><span>PUBLIC PARTICIPANT REGISTRY</span><span>PRIVATE PAYER CONFIGURATION</span><span>PUBLIC BITMAP</span></div><div class="registry-table-wrap tag-registry-table"><table class="registry-table"><thead><tr><th>#</th><th>Participant</th><th>Spend public key</th><th>View public key</th><th>Recipient / Rift exclusion</th><th>Published bit</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
 }
 
 function registrationProcess(p) {
@@ -212,17 +287,21 @@ function auditCard(p) {
   const longTerm = p.registrations.filter(r => r.policy === "long_term").length;
   const transactions = p.transactions.filter(tx => tx.encryptedPayload && (p.id !== "dvp" || tx.encryptedPayload.scope === "dvp_leg")).slice(0, 6);
   return `<article class="panel flow-card wide"><div class="panel-heading"><div><p class="eyebrow">Audit access</p><h2>Auditor and regulator access</h2></div><span class="context-badge">AUDIT SCOPE</span></div>
-    <p>During registration, each participant encrypted its <code>sk_view</code> to the auditor. That long-term path lets the auditor recover the key for encrypted note data involving that participant. The additional regulator instead receives only a selected transaction’s symmetric note-data key.</p><div class="callout audit-model"><strong>One key per encrypted payload.</strong> Each row corresponds to note data <code>salt · token_id · amount</code> appended in encrypted form alongside a commitment <code>H(pk_spend, salt, token_id, amount)</code>. Proposal, acceptance, transfer identity, and settlement receipts do not create extra disclosure keys.</div>
+    <p>During registration, each participant encrypted its <code>sk_view</code> to the auditor. That long-term path lets the auditor recover the key for encrypted note data involving that participant. The additional regulator instead receives only a selected transaction’s symmetric note-data key.</p><div class="callout audit-model"><strong>One key per encrypted payload.</strong> Each row contains encrypted transfer data alongside its commitment: <code>${PROTOCOL_PRIMITIVES[p.id].commitment}</code>. ${p.id === "institutional" ? "The amount and blinding factor open the balance commitment." : "HKDF-SHA256 derives the note salt separately from the encryption key; the recipient recovers both from the ML-KEM-768 shared secret."} Proposal, acceptance, transfer identity, and settlement receipts do not create extra disclosure keys.</div>
     <div class="metric-row"><div class="metric"><span>Encrypted view keys</span><strong>${longTerm}</strong></div><div class="metric"><span>Encrypted ${p.id === "dvp" ? "trade legs" : "payloads"}</span><strong>${transactions.length}</strong></div><div class="metric"><span>Selective keys shared</span><strong>${p.disclosures.length}</strong></div></div>
     <div class="regulator-row"><div><span class="avatar">AR</span><div><strong>${p.selectiveRegulator.name}</strong><span class="mono">${short(p.selectiveRegulator.publicKey, 18, 8)}</span></div></div><span class="policy-badge selective">Selective only</span></div>
-    <div class="transaction-list">${transactions.length ? transactions.map(tx => `<div class="transaction auditable-transaction"><div><strong>${tx.encryptedPayload.leg === "cash" ? "Cash leg" : tx.encryptedPayload.leg === "security" ? "Security leg" : tx.label}</strong><small>${formatAmount(tx.encryptedPayload.amount)} ${tx.encryptedPayload.tokenId} · ${tx.id}</small></div><span><b>${short(tx.encryptedPayload.commitment, 18, 8)}</b><small>encrypted: salt · token_id · amount</small></span>${tx.selectiveShared ? `<span class="policy-badge selective">Symmetric key shared</span>` : `<button class="button button-auditor button-small" data-share="${tx.id}">Disclose symmetric key</button>`}</div>`).join("") : `<div class="empty-state">No transaction carrying encrypted note data is available for selective disclosure yet.</div>`}</div>
+    <div class="transaction-list">${transactions.length ? transactions.map(tx => `<div class="transaction auditable-transaction"><div><strong>${tx.encryptedPayload.leg === "cash" ? "Cash leg" : tx.encryptedPayload.leg === "security" ? "Security leg" : tx.label}</strong><small>${formatAmount(tx.encryptedPayload.amount)} ${tx.encryptedPayload.tokenId} · ${tx.id}</small></div><span><b>${short(tx.encryptedPayload.commitment, 18, 8)}</b><small>${tx.encryptedPayload.encryption} · encrypted: ${tx.encryptedPayload.encryptedFields.join(" · ")}</small></span>${tx.selectiveShared ? `<span class="policy-badge selective">Symmetric key shared</span>` : `<button class="button button-auditor button-small" data-share="${tx.id}">Disclose symmetric key</button>`}</div>`).join("") : `<div class="empty-state">No transaction carrying encrypted note data is available for selective disclosure yet.</div>`}</div>
   </article>`;
 }
 
 function publicChainCard(p) {
+  if (p.id === "institutional") {
+    const payments = p.transactions.filter(tx => tx.encryptedPayload);
+    return `<article class="panel flow-card full"><div class="panel-heading"><div><p class="eyebrow">Public chain view</p><h2>Confidential balance commitments</h2></div></div><p>Institutional balances use Pedersen commitments on BabyJubJub: <code>C = v·G + r·H</code>. The public network verifies a Groth16 proof over BN254 for each balance update; amounts and blinding factors remain private.</p><div class="transaction-list">${payments.map(tx => `<div class="transaction"><div><strong>${tx.label}</strong><small>${short(tx.hash, 18, 8)}</small></div><span><b>${short(tx.encryptedPayload.commitment, 18, 8)}</b><small>Pedersen commitment</small></span><span class="policy-badge">Groth16 proof</span></div>`).join("") || `<div class="empty-state">Balance updates will appear here after a private payment.</div>`}</div></article>`;
+  }
   const treeIds = Object.keys(p.trees || {});
   return `<article class="panel flow-card full"><div class="panel-heading"><div><p class="eyebrow">Public chain view</p><h2>Commitment leaves</h2></div><span>${p.leaves.length} leaves</span></div>
-    <p class="panel-copy">Each asset has its own commitment tree and root. Every leaf below was produced by a source transaction. The public view cannot attribute a leaf to a participant; scenario provenance remains available only as internal test state. Privacy comes from proving knowledge of an opening and membership of some leaf without revealing which leaf.</p>
+    <p class="panel-copy">Each asset has its own Poseidon commitment tree and root. Every leaf below was produced by a source transaction. Privacy comes from a Groth16 proof of knowledge of an opening and membership of some leaf without revealing which leaf.</p>
     <div class="asset-tree-stack">${treeIds.length ? treeIds.map(assetId => commitmentTree(p, assetId)).join("") : commitmentTree(p)}</div>
   </article>`;
 }
@@ -239,7 +318,7 @@ function commitmentTree(p, assetId = null, ownerPartyId = null) {
   const levels = tree?.levels || [];
   const leafIds = new Set(tree?.leafIds || []);
   const ownedLeafIds = new Set((p.notes || []).filter(note => note.ownerPartyId === ownerPartyId && note.assetId === resolvedAsset && note.status !== "spent").map(note => note.leafId));
-  const ownerName = p.registrations.find(item => item.partyId === ownerPartyId)?.name || "Participant";
+  const hasWalletPerspective = Boolean(ownerPartyId);
   const leaves = p.leaves.filter(leaf => leafIds.has(leaf.id));
   if (!leaves.length || !levels.length) return `<div class="commitment-tree empty" data-tree-asset="${resolvedAsset}"><div class="tree-heading"><div><p class="eyebrow">${resolvedAsset} Merkle tree</p><strong>Independent asset root</strong></div></div><div class="empty-state">This asset tree is empty. A shielding transaction creates its first leaf.</div></div>`;
   const topDown = [...levels].reverse();
@@ -253,11 +332,11 @@ function commitmentTree(p, assetId = null, ownerPartyId = null) {
       const onNewestPath = index === level.length - 1;
       const isOwned = Boolean(leaf && ownedLeafIds.has(leaf.id));
       const label = isRoot ? "Current root" : isLeaves ? `Leaf ${index}` : `Level ${topDown.length - levelIndex - 1}`;
-      return `<div class="tree-node ${isRoot ? "root" : isLeaves ? "leaf-node" : "branch"} ${onNewestPath ? "new-path" : ""} ${isOwned ? "owned-leaf" : ""}" ${leaf ? `data-source-tx="${leaf.sourceTxId}" data-owned="${isOwned}"` : ""}><small>${label}</small><strong>${short(value, isRoot ? 20 : 12, 7)}</strong>${leaf ? `<span>source ${short(leaf.sourceTxId, 10, 5)}</span>${isOwned ? `<em>${ownerName} controls this leaf</em>` : ""}` : ""}</div>`;
+      return `<div class="tree-node ${isRoot ? "root" : isLeaves ? "leaf-node" : "branch"} ${onNewestPath ? "new-path" : ""} ${isOwned ? "owned-leaf" : ""}" ${leaf ? `data-source-tx="${leaf.sourceTxId}" data-owned="${isOwned}"` : ""}><small>${label}</small><strong>${short(value, isRoot ? 20 : 12, 7)}</strong>${leaf ? `<span>source ${short(leaf.sourceTxId, 10, 5)}</span>${isOwned ? `<em>Recognized by this wallet</em>` : ""}` : ""}</div>`;
     }).join("");
     return `<div class="tree-level ${isLeaves ? "leaf-level" : ""}" style="--node-count:${level.length}">${nodes}</div>`;
   }).join("");
-  return `<div class="commitment-tree" data-tree-asset="${resolvedAsset}" data-merkle-root="${tree.root}"><div class="tree-heading"><div><p class="eyebrow">${resolvedAsset} Merkle tree</p><strong>${leaves.length} transaction-backed ${leaves.length === 1 ? "leaf" : "leaves"} · ${ownedLeafIds.size} controlled by ${ownerName}</strong></div><div class="tree-legend"><span class="tree-owner-key"><i></i>${ownerName}’s leaves</span><span class="tree-insertion-key"><i></i>Newest insertion path</span></div></div><div class="tree-scroll"><div class="tree-canvas" style="min-width:${minWidth}px">${renderedLevels}</div></div><div class="tree-insertion-receipt"><span>Latest insertion</span><strong>${short(newestSource, 18, 8)}</strong><small>Commitment appended → ${resolvedAsset} root updated</small></div></div>`;
+  return `<div class="commitment-tree" data-tree-asset="${resolvedAsset}" data-merkle-root="${tree.root}"><div class="tree-heading"><div><p class="eyebrow">${resolvedAsset} Merkle tree</p><strong>${leaves.length} transaction-backed ${leaves.length === 1 ? "leaf" : "leaves"}${hasWalletPerspective ? ` · ${ownedLeafIds.size} recognized by this wallet` : " · ownership hidden"}</strong></div><div class="tree-legend">${hasWalletPerspective ? `<span class="tree-owner-key"><i></i>Wallet-recognized leaves</span>` : ""}<span class="tree-insertion-key"><i></i>Newest insertion path</span></div></div><div class="tree-scroll"><div class="tree-canvas" style="min-width:${minWidth}px">${renderedLevels}</div></div><div class="tree-insertion-receipt"><span>Latest insertion</span><strong>${short(newestSource, 18, 8)}</strong><small>Commitment appended → ${resolvedAsset} root updated</small></div></div>`;
 }
 
 function shieldingNetwork(p, assetId, ownerPartyId) {
@@ -265,8 +344,8 @@ function shieldingNetwork(p, assetId, ownerPartyId) {
   return `<section class="shielding-network"><div class="shielding-network-head"><div><p class="eyebrow">Live ${assetId} network context</p><h3>Watch commitments enter this asset’s tree</h3></div><span class="context-badge">${leafCount} ${assetId} LEAVES</span></div><p>Every purple leaf is controlled by the participant executing this shielding step and remains highlighted after later insertions. Background commitments stay neutral; cash and bond commitments never share a root.</p>${trafficSwitch(p, assetId)}${commitmentTree(p, assetId, ownerPartyId)}</section>`;
 }
 
-function privateNoteConstruction(p, ownerPartyId, assetId) {
-  const notes = (p.notes || []).filter(note => note.ownerPartyId === ownerPartyId && note.assetId === assetId && note.origin === "shielding");
+function privateNoteConstruction(p, ownerPartyId, assetId, origins = ["shielding"]) {
+  const notes = (p.notes || []).filter(note => note.ownerPartyId === ownerPartyId && note.assetId === assetId && origins.includes(note.origin));
   const latest = notes.at(-1);
   const owner = p.registrations.find(item => item.partyId === ownerPartyId);
   const construction = latest ? `<div class="commitment-construction" data-note-id="${latest.id}">
@@ -277,8 +356,8 @@ function privateNoteConstruction(p, ownerPartyId, assetId) {
     </div>` : `<div class="commitment-construction pending"><div><span>1</span><small>Generate</small><strong>fresh salt</strong></div><div><span>2</span><small>Bind</small><strong>token_id + amount</strong></div><div><span>3</span><small>Hash</small><strong>create C</strong></div><div><span>4</span><small>Append</small><strong>new leaf</strong></div></div>`;
   const rows = notes.map(note => `<tr class="owned-note" data-note-id="${note.id}"><td>Leaf ${note.leafIndex}</td><td>${formatAmount(note.amount)} ${note.assetId}</td><td class="mono">${short(note.salt, 12, 6)}</td><td class="mono">${short(note.commitment, 16, 7)}</td><td><span class="policy-badge ${note.status === "unspent" ? "" : "selective"}">${note.status}</span></td></tr>`).join("");
   return `<section class="note-construction-card"><div class="panel-heading"><div><p class="eyebrow">Commitment construction</p><h3>One shielding operation → one private note → one leaf</h3></div><span class="context-badge">${notes.length} OWNED ${notes.length === 1 ? "NOTE" : "NOTES"}</span></div>
-    <p>The participant generates a fresh salt, then commits to the note as <code>C = H(pk_spend, salt, token_id, amount)</code>. Repeating shielding never overwrites an earlier note.</p>
-    <div class="commitment-formula"><span>pk_spend</span><b>${short(owner?.spendPublicKey || "pending", 16, 7)}</b><i>+</i><span>salt</span><b>${latest ? short(latest.salt, 16, 7) : "generated on shield"}</b><i>+</i><span>token_id</span><b>${assetId}</b><i>+</i><span>amount</span><b>${latest ? formatAmount(latest.amount) : "chosen above"}</b></div>
+    <p>The participant generates a fresh salt, then commits to the note as <code>C = Poseidon(pk_spend, salt, amount, token_id)</code>. Repeating shielding never overwrites an earlier note.</p>
+    <div class="commitment-formula"><span>pk_spend</span><b>${short(owner?.spendPublicKey || "pending", 16, 7)}</b><i>+</i><span>salt</span><b>${latest ? short(latest.salt, 16, 7) : "generated on shield"}</b><i>+</i><span>amount</span><b>${latest ? formatAmount(latest.amount) : "chosen above"}</b><i>+</i><span>token_id</span><b>${assetId}</b></div>
     ${construction}
     <div class="owned-notes"><div class="owned-notes-heading"><strong>Participant’s private notes</strong><span>Every shielding leaf remains independently tracked</span></div>${rows ? `<div class="table-wrap"><table><thead><tr><th>Tree position</th><th>Value</th><th>Salt</th><th>Commitment</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table></div>` : `<div class="empty-state">No private notes yet. The first shielding operation will create leaf 0.</div>`}</div>
   </section>`;
@@ -343,44 +422,78 @@ function pairwiseChannelMatrix(p) {
   </div>`;
 }
 
+function protocolPrimitiveDetails(p) {
+  const primitives = PROTOCOL_PRIMITIVES[p.id];
+  const entries = [
+    ["Spend public key", primitives.spend],
+    ["View key agreement", primitives.view],
+    ["Commitment", primitives.commitment],
+    ["Key derivation", primitives.derivation],
+    ["Note encryption", primitives.encryption],
+    ["Swap encryption", primitives.swapEncryption],
+    ["Zero-knowledge proof", primitives.proof],
+    ["Merkle tree", primitives.tree],
+    ["Private tag", primitives.tag]
+  ].filter(([, value]) => value);
+  return `<details class="protocol-primitives"><summary>Protocol primitives</summary><dl>${entries.map(([label, value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`).join("")}</dl></details>`;
+}
+
 function registrationReviewCard(p) {
-  return `<article class="panel flow-card registration-review-card"><div class="panel-heading"><div><p class="eyebrow">Registration complete</p><h2>Participant registry</h2></div><span class="context-badge complete">10 / 10 REGISTERED</span></div><p>Every participant has registered both public keys and separately shared its view key with the auditor.</p>${registrationProcess(p)}<div class="registration-review-table">${registryTable(p, PARTY_NAMES.map((_, index) => index))}</div></article>`;
+  return `<article class="panel flow-card registration-review-card"><div class="panel-heading"><div><p class="eyebrow">Registration complete</p><h2>The network is ready</h2></div><span class="context-badge complete">10 / 10 REGISTERED</span></div><p>Every participant has registered both public keys and separately shared its view key with the auditor. The public participant registry remains visible beside every subsequent protocol action.</p>${registrationProcess(p)}${deploymentReceipts(p)}${protocolPrimitiveDetails(p)}<div class="callout success-callout">The registry shown on this page is persistent public blockchain state. Protocol actions look up keys directly from those rows; there is no separate “retrieve keys” transaction.</div></article>`;
 }
 
 function institutionalChannelCard(p) {
   const channelCount = p.flow.channelPairs?.length || 0;
-  return `<article class="panel flow-card channel-network-card"><div class="panel-heading"><div><p class="eyebrow">Pairwise channels</p><h2>Institution network</h2></div><span class="context-badge ${p.flow.channels ? "complete" : ""}">${channelCount} / 45 ESTABLISHED</span></div><p>Each cell in the triangle is one bilateral private channel between the participant on its row and the participant at the top of its column.</p>${pairwiseChannelMatrix(p)}<div class="channel-matrix-footer"><div class="channel-legend"><span><i class="legend-cell pending"></i>Pending</span><span><i class="legend-cell established">✓</i>Established</span></div><div class="button-row"><button class="button button-primary" data-action="channels" ${p.flow.channels ? "disabled" : ""}>${p.flow.channels ? "All channels established" : "Establish 45 channels"}</button></div></div></article>`;
+  return `<article class="panel flow-card channel-network-card"><div class="panel-heading"><div><p class="eyebrow">Pairwise channels</p><h2>Institution network</h2></div><span class="context-badge ${p.flow.channels ? "complete" : ""}">${channelCount} / 45 ESTABLISHED</span></div><p>ML-KEM-768 establishes a shared secret for each pair. Each cell in the triangle is one bilateral private channel between the participant on its row and the participant at the top of its column.</p>${pairwiseChannelMatrix(p)}<div class="channel-matrix-footer"><div class="channel-legend"><span><i class="legend-cell pending"></i>Pending</span><span><i class="legend-cell established">✓</i>Established</span></div><div class="button-row"><button class="button button-primary" data-action="channels" ${p.flow.channels ? "disabled" : ""}>${p.flow.channels ? "All channels established" : "Establish 45 channels"}</button></div></div></article>`;
 }
 
 function institutionalSteps(p) {
   return [
     { id: "registration", label: "Registration", actor: "Registered participants", complete: true, content: registrationReviewCard(p) },
     { id: "channels", label: "Pairwise channels", actor: "Registered institutions", complete: p.flow.channels, content: institutionalChannelCard(p) },
-    { id: "payment", label: "Private payment", actor: "Paying institution", complete: p.transactions.some(tx => tx.type === "payment"), content: `<article class="panel flow-card"><p class="eyebrow">Private payment</p><h2>Post a payment envelope</h2><p>Send a private payment through the established bilateral channel without revealing its contents to the public network.</p><div class="button-row"><button class="button button-primary" data-action="payment" ${!p.flow.channels || p.flow.frozen ? "disabled" : ""}>Post payment</button></div></article>` },
+    { id: "payment", label: "Private payment", actor: "Paying institution", complete: p.transactions.some(tx => tx.type === "payment"), content: `<article class="panel flow-card"><p class="eyebrow">Private payment</p><h2>Post a payment envelope</h2><p>ML-KEM-768 establishes the pairwise secret. Poseidon derives the transaction tags and blinding factors; Pedersen commitments on BabyJubJub hide the balances. A Groth16 proof over BN254 verifies the transfer.</p><div class="button-row"><button class="button button-primary" data-action="payment" ${!p.flow.channels || p.flow.frozen ? "disabled" : ""}>Post payment</button></div></article>` },
     { id: "policy", label: "Policy control", actor: "System operator", complete: p.transactions.some(tx => tx.type === "freeze"), content: `<article class="panel flow-card"><p class="eyebrow">Operator control</p><h2>Freeze and resume a channel</h2><p>Exercise protocol policy without exposing any participant spend key.</p><div class="button-row"><button class="button button-auditor" data-action="${p.flow.frozen ? "resume" : "freeze"}" ${!p.flow.channels ? "disabled" : ""}>${p.flow.frozen ? "Resume channel" : "Freeze channel"}</button></div></article>` },
     { id: "bridge", label: "Private bridge", actor: "Originating institution", complete: p.flow.bridgeReady, content: `<article class="panel flow-card"><p class="eyebrow">Interoperability</p><h2>Bridge private assets</h2><p>Create linked source and destination commitments with a compact receipt.</p><div class="button-row"><button class="button button-primary" data-action="bridge">Bridge assets</button></div></article>` },
     { id: "perspectives", label: "Perspectives", actor: "Demo viewer", complete: false, content: `<article class="panel flow-card"><p class="eyebrow">Perspectives</p><h2>Inspect each protocol view</h2><p>Change perspective without changing the underlying transaction.</p><select aria-label="Institutional perspective"><option>Participant: own envelope details</option><option>Network: commitments only</option><option>Auditor: consented scope</option><option>Operator: policy controls</option></select></article>` },
     { id: "audit", label: "Audit access", actor: "Auditor and regulator", complete: p.disclosures.length > 0, content: auditCard(p) },
-    { id: "chain", label: "Public chain", actor: "Public network", complete: p.leaves.length > 0, content: publicChainCard(p) }
+    { id: "chain", label: "Public chain", actor: "Public network", complete: p.transactions.some(tx => tx.encryptedPayload), content: publicChainCard(p) }
   ];
 }
 
 function retailSteps(p) {
   const recipient = p.flow.retailRecipient;
+  const channel = p.flow.retailTagChannel;
   const paymentComplete = p.transactions.some(tx => tx.type === "payment");
-  const recipientKeys = recipient ? `<div class="recipient-key-grid">
-    <div class="detail-card"><label>Recipient · ${recipient.name}</label><strong>Registered public keys</strong></div>
-    <div class="detail-card"><label>Spend public key · pk_spend</label><span class="key-value">${recipient.spendPublicKey}</span></div>
-    <div class="detail-card"><label>View public key · pk_view</label><span class="key-value">${recipient.viewPublicKey}</span></div>
-  </div>` : `<div class="callout">The payer selects Atlas Bank and retrieves its two registered public keys. No recipient secret is exposed.</div>`;
+  const scanComplete = p.transactions.some(tx => tx.type === "scan");
+  const activeMode = channel?.mode || retailTagDraft.mode;
+  const activeRecipientIndex = channel ? p.registrations.findIndex(item => item.partyId === channel.recipientPartyId) : retailTagDraft.recipientIndex;
+  const activeExclusions = channel?.excludedIndices || [...retailTagDraft.excludedIndices];
+  const activeCandidates = channel?.candidateIndices || retailTagCandidateIndices(activeMode, activeRecipientIndex, activeExclusions);
+  const activeRecipient = p.registrations[activeRecipientIndex];
+  const bitmap = channel?.bitmap || PARTY_NAMES.map((_, index) => activeCandidates.includes(index) ? "1" : "0").join("");
+  const modeCards = RETAIL_TAG_MODES.map(mode => {
+    const count = retailTagCandidateIndices(mode.id, activeRecipientIndex, mode.id === "rift" ? activeExclusions : []).length;
+    return `<button type="button" class="tag-mode-card ${activeMode === mode.id ? "selected" : ""}" data-retail-tag-mode="${mode.id}" aria-pressed="${activeMode === mode.id}" ${channel ? "disabled" : ""}><span>${mode.name}</span><strong>${mode.detail}</strong><small>${mode.explanation}</small><b>${count} / ${PARTY_NAMES.length} bitmap rows</b></button>`;
+  }).join("");
+  const tagContent = `<article class="panel flow-card wide"><div class="panel-heading"><div><p class="eyebrow">Private-tag channel setup</p><h2>Choose who scans for this payer</h2></div><span class="context-badge ${channel ? "complete" : ""}">${channel ? "CHANNEL ESTABLISHED" : "CONFIGURATION PREVIEW"}</span></div><p>The public registry supplies each participant’s <code>pk_spend</code> and <code>pk_view</code>. The payer privately selects a recipient and publishes a bitmap that determines which registered rows attempt the private tag; only the payer configuration column below identifies the intended recipient.</p><div class="tag-mode-grid" aria-label="Private tag privacy modes">${modeCards}</div>${retailTagRegistry(p)}<div class="tag-construction"><section><small>1 · Registry lookup</small><strong>${activeRecipient.name}</strong><span><code>pk_spend</code> + <code>pk_view</code></span></section><i>→</i><section><small>2 · Private channel data</small><strong>ML-KEM-768 c1 + AES-256-GCM c2</strong><span>${channel ? short(channel.c1, 15, 7) : "HKDF-SHA256 derives the channel key"}</span></section><i>→</i><section><small>3 · On-chain visibility</small><strong class="mono">${bitmap}</strong><span>${activeCandidates.length} candidate rows · recipient undisclosed within the set</span></section></div>${channel ? `<div class="channel-record"><span><small>Channel</small><strong class="mono">${short(channel.id, 18, 8)}</strong></span><span><small>Mode</small><strong>${RETAIL_TAG_MODES.find(mode => mode.id === channel.mode)?.name}</strong></span><span><small>Published bitmap</small><strong class="mono">${channel.bitmap}</strong></span></div>` : `<div class="button-row"><button class="button button-primary" data-action="configure-tags">Establish private-tag channel</button></div>`}</article>`;
+  const registryBinding = recipient ? `<div class="registry-binding-visual"><div class="binding-recipient"><small>Selected registry row</small><strong>${recipient.name}</strong><span>index ${String(activeRecipientIndex).padStart(2, "0")}</span></div><div class="binding-path"><span><small>pk_spend</small><strong class="mono">${short(recipient.spendPublicKey, 16, 7)}</strong></span><i>→</i><b>Recipient commitment</b></div><div class="binding-path"><span><small>pk_view</small><strong class="mono">${short(recipient.viewPublicKey, 16, 7)}</strong></span><i>→</i><b>Encrypted note data</b></div></div>` : `<div class="empty-state">Establish a private-tag channel from the registry before creating a payment.</div>`;
+  const payment = p.transactions.find(tx => tx.type === "payment");
+  const paymentContent = `<article class="panel flow-card"><div class="panel-heading"><div><p class="eyebrow">Payment construction · payer view</p><h2>Build the payment from registered keys</h2></div><span class="context-badge ${paymentComplete ? "complete" : ""}">${paymentComplete ? "PAYMENT PUBLISHED" : channel ? "KEYS BOUND" : "CHANNEL REQUIRED"}</span></div><p>The payer reads the selected public registry row. ML-KEM-768 encapsulates to <code>pk_view</code>; HKDF-SHA256 derives the note salt and encryption key with the labels <code>note salt</code> and <code>encryption key</code>. AES-256-GCM protects <code>token_id · amount</code>, and <code>C = Poseidon(pk_spend, salt, amount, token_id)</code> binds the note.</p>${registryBinding}<div class="payment-construction" aria-label="Private payment construction"><span><b>1</b><strong>Registry binding</strong><small>Selected pk_spend and pk_view</small></span><span><b>2</b><strong>Commitments</strong><small>Recipient output and payer change</small></span><span><b>3</b><strong>Groth16 proof</strong><small>BN254 · ownership, membership, conservation</small></span><span><b>4</b><strong>Private tag</strong><small>Poseidon(block_number, pk_spend, ss_field)</small></span></div>${payment ? `<div class="payment-publication"><span><small>Private tag</small><strong class="mono">${short(payment.privateTag, 17, 7)}</strong></span><span><small>Recipient commitment</small><strong class="mono">${short(payment.encryptedPayload?.commitment, 17, 7)}</strong></span><span><small>Published bitmap</small><strong class="mono">${channel.bitmap}</strong></span></div>` : `<div class="amount-action"><label>Payment amount · USD<input id="retailPaymentAmount" type="number" min="1" value="30" ${!channel ? "disabled" : ""}></label><button class="button button-primary" data-action="payment" ${!channel ? "disabled" : ""}>Construct proof and publish payment</button></div>`}</article>`;
+  const scanRows = channel ? p.registrations.map((registration, index) => {
+    const included = channel.candidateIndices.includes(index);
+    const isRecipient = registration.partyId === channel.recipientPartyId;
+    const outcome = !included ? "Skipped · bitmap bit 0" : isRecipient ? (scanComplete ? "Note opened and commitment matched" : "Will recover with sk_view") : (scanComplete ? "Authentication rejected" : "Will attempt decapsulation");
+    return `<tr class="${isRecipient && scanComplete ? "scan-match" : ""}"><td>${String(index).padStart(2, "0")}</td><td>${registration.name}</td><td><span class="compact-bitmap ${included ? "included" : "outside"}">${included ? "1" : "0"}</span></td><td>${outcome}</td></tr>`;
+  }).join("") : "";
+  const scanContent = `<article class="panel flow-card"><div class="panel-heading"><div><p class="eyebrow">Recipient discovery · wallet view</p><h2>Process the private-tag candidate set</h2></div><span class="context-badge ${scanComplete ? "complete" : ""}">${scanComplete ? "NOTE RECOVERED" : channel ? `${channel.candidateIndices.length} CANDIDATES` : "CHANNEL REQUIRED"}</span></div><p>Rows outside the bitmap skip this channel. Included wallets attempt ML-KEM-768 decapsulation and derive the channel key with HKDF-SHA256. Decoys fail AES-256-GCM authentication. The recipient matches the Poseidon tag, opens the note payload, derives its salt, and recomputes its Poseidon commitment.</p>${channel ? `<div class="table-wrap scan-table"><table><thead><tr><th>#</th><th>Registered wallet</th><th>Bitmap</th><th>Local result</th></tr></thead><tbody>${scanRows}</tbody></table></div><div class="button-row"><button class="button button-primary" data-action="scan" ${!paymentComplete || scanComplete ? "disabled" : ""}>${scanComplete ? "Candidate scan complete" : "Run candidate scan"}</button></div>` : `<div class="empty-state">No private-tag channel has been established.</div>`}</article>`;
   return [
     { id: "registration", label: "Registration", actor: "Registered participants", complete: true, content: registrationReviewCard(p) },
-    { id: "recipient", label: "Recipient keys", actor: "Payer", complete: Boolean(recipient), content: `<article class="panel flow-card"><p class="eyebrow">Payment preparation</p><h2>Retrieve the recipient’s public keys</h2><p>The payer looks up the recipient in the participant registry and obtains <code>pk_spend</code> for the new note commitment and <code>pk_view</code> for payment-data encryption.</p>${recipientKeys}<div class="button-row"><button class="button button-primary" data-action="prepare-recipient" ${recipient ? "disabled" : ""}>${recipient ? "Recipient keys retrieved" : "Retrieve Atlas Bank keys"}</button></div></article>` },
-    { id: "payment", label: "Private payment", actor: "Payer", complete: paymentComplete, content: `<article class="panel flow-card"><p class="eyebrow">Private payment</p><h2>Create and submit the payment</h2><p>The payer encapsulates a fresh shared secret to the recipient’s <code>pk_view</code>, encrypts the note data, creates recipient and change commitments, and proves value conservation and ownership of an existing leaf.</p><div class="payment-construction" aria-label="Private payment construction"><span><b>1</b><strong>ML-KEM encapsulation</strong><small>Fresh secret against recipient pk_view</small></span><span><b>2</b><strong>Commitments</strong><small>Recipient output and payer change</small></span><span><b>3</b><strong>ZK proof</strong><small>Ownership, membership, and conservation</small></span><span><b>4</b><strong>Submit</strong><small>Ciphertext, proof, and nullifier</small></span></div><div class="button-row"><button class="button button-primary" data-action="payment" ${!recipient || paymentComplete ? "disabled" : ""}>${paymentComplete ? "Payment submitted" : "Send private payment"}</button></div></article>` },
-    { id: "scan", label: "Recipient scan", actor: "Recipient", complete: p.transactions.some(tx => tx.type === "scan"), content: `<article class="panel flow-card"><p class="eyebrow">Recipient view</p><h2>Discover the incoming note</h2><p>The recipient processes published payment envelopes with <code>sk_view</code>. A successful decapsulation reveals the encrypted note data; the recipient recomputes the commitment and accepts only an exact match.</p><div class="button-row"><button class="button button-primary" data-action="scan" ${!paymentComplete ? "disabled" : ""}>Scan payment envelopes</button></div></article>` },
+    { id: "private-tags", label: "Private tags", actor: "Payer", complete: Boolean(channel), content: tagContent },
+    { id: "payment", label: "Private payment", actor: "Payer", complete: paymentComplete, content: paymentContent },
+    { id: "scan", label: "Recipient scan", actor: "Candidate wallets", complete: scanComplete, content: scanContent },
     { id: "traffic", label: "Network traffic", actor: "Registered participants", complete: p.traffic, content: trafficCard(p) },
     { id: "audit", label: "Audit access", actor: "Auditor and regulator", complete: p.disclosures.length > 0, content: auditCard(p) },
-    { id: "chain", label: "Public chain", actor: "Public network", complete: p.leaves.length > 0, content: publicChainCard(p) }
+    { id: "chain", label: "Public chain", actor: "Public network", complete: p.transactions.some(tx => tx.encryptedPayload), content: publicChainCard(p) }
   ];
 }
 
@@ -476,23 +589,32 @@ function auctionSteps(p) {
   const userBid = auction.bids.find(bid => bid.bidderPartyId === "party-0");
   const availableNotes = (p.notes || []).filter(note => note.ownerPartyId === "party-0" && note.assetId === auction.cashToken && note.origin === "auction_funding" && note.status === "unspent");
   const winningBid = auction.winnerProof ? auction.bids.find(bid => bid.id === auction.winnerProof.winnerBidId) : null;
+  const candidateBid = auction.bids.filter(bid => bid.valid && bid.status === "active").reduce((best, bid) => !best || bid.amount > best.amount ? bid : best, null);
+  const bidDefault = Math.min(500, availableNotes[0]?.amount || 1);
   const auctionIdentity = `<div class="auction-identity"><div><small>Auction</small><strong>${auction.title}</strong></div><div><small>Auction reference</small><strong class="mono">${auction.reference}</strong></div><div><small>Bidder-visible asset</small><strong>${auction.assetType}</strong></div><span class="policy-badge ${auction.status === "settled" ? "" : "selective"}">${auction.status.replaceAll("_", " ")}</span></div>`;
-  const keyContent = `<article class="panel flow-card"><div class="panel-heading"><div><p class="eyebrow">Auction-specific role key</p><h2>Auctioneer setup</h2></div><span class="context-badge ${auction.auctioneerKey ? "complete" : ""}">${auction.auctioneerKey ? "KEY READY" : "NOT GENERATED"}</span></div><p>The auctioneer—not the operator—generates a dedicated ML-KEM keypair for this auction. Bidders seal bid data to its public key; the secret key remains with the auctioneer.</p>${auctionIdentity}${auction.auctioneerKey ? `<div class="auction-key-pair"><div><small>sk_auction · retained by auctioneer</small><strong class="mono secret-value">${short(auction.auctioneerKey.secretKey, 20, 9)}</strong></div><span>ML-KEM derives</span><div><small>pk_auction · publish for this auction</small><strong class="mono">${short(auction.auctioneerKey.publicKey, 20, 9)}</strong></div></div>` : `<div class="empty-state">No auctioneer key exists for this auction yet.</div>`}<div class="button-row"><button class="button button-auditor" data-action="auctioneer" ${auction.auctioneerKey ? "disabled" : ""}>${auction.auctioneerKey ? "Auctioneer key generated" : "Generate auctioneer keypair"}</button></div></article>`;
+  const keyContent = `<article class="panel flow-card"><div class="panel-heading"><div><p class="eyebrow">Auction-specific role key</p><h2>Auctioneer setup</h2></div><span class="context-badge ${auction.auctioneerKey ? "complete" : ""}">${auction.auctioneerKey ? "KEY READY" : "NOT GENERATED"}</span></div><p>The auctioneer—not the operator—generates a dedicated ML-KEM-768 keypair for this auction. Bidders seal bid data to its public key; the secret key remains with the auctioneer.</p>${auctionIdentity}${auction.auctioneerKey ? `<div class="auction-key-pair"><div><small>sk_auction · retained by auctioneer</small><strong class="mono secret-value">${short(auction.auctioneerKey.secretKey, 20, 9)}</strong></div><span>ML-KEM-768 KeyGen</span><div><small>pk_auction · publish for this auction</small><strong class="mono">${short(auction.auctioneerKey.publicKey, 20, 9)}</strong></div></div>` : `<div class="empty-state">No auctioneer key exists for this auction yet.</div>`}<div class="button-row"><button class="button button-auditor" data-action="auctioneer" ${auction.auctioneerKey ? "disabled" : ""}>${auction.auctioneerKey ? "Auctioneer key generated" : "Generate auctioneer keypair"}</button></div></article>`;
   const registerAuctioneerContent = `<article class="panel flow-card"><div class="panel-heading"><div><p class="eyebrow">Auction configuration</p><h2>Register the auctioneer</h2></div><span class="context-badge ${auction.auctioneerRegistered ? "complete" : ""}">${auction.auctioneerRegistered ? "REGISTERED" : "PENDING"}</span></div><p>The operator binds this auctioneer public key to this auction reference. It cannot be silently reused for a different auction.</p>${auctionIdentity}<div class="registration-binding"><span><small>Auction reference</small><strong class="mono">${auction.reference}</strong></span><b>+</b><span><small>Registered bid-decryption key</small><strong class="mono">${short(auction.auctioneerKey?.publicKey, 18, 8)}</strong></span></div><div class="button-row"><button class="button button-primary" data-action="register-auctioneer" ${!auction.auctioneerKey || auction.auctioneerRegistered ? "disabled" : ""}>${auction.auctioneerRegistered ? "Auctioneer registered" : "Register auctioneer for this auction"}</button></div></article>`;
-  const mintAssetContent = `<article class="panel flow-card"><div class="panel-heading"><div><p class="eyebrow">Asset creation · issuer view</p><h2>Mint the non-fungible asset</h2></div><span class="context-badge ${auction.nftMinted ? "complete" : ""}">${auction.nftMinted ? "OWNED BY SELLER" : "NOT MINTED"}</span></div><p>The issuer creates one specific Class A share certificate and allocates it to the seller before any auction terms exist.</p><div class="nft-certificate"><span>CLASS A</span><div><small>Non-fungible share certificate</small><strong>${auction.assetTokenId}</strong><dl><div><dt>Asset type</dt><dd>${auction.assetType}</dd></div><div><dt>Quantity</dt><dd>1</dd></div><div><dt>Owner</dt><dd>${p.registrations[2]?.name || "Boreal Markets"}</dd></div></dl></div></div><div class="button-row"><button class="button button-primary" data-action="mint-nft" ${!auction.auctioneerRegistered || auction.nftMinted ? "disabled" : ""}>${auction.nftMinted ? "Asset minted to seller" : "Mint Class A share"}</button></div></article>`;
-  const listContent = `<article class="panel flow-card"><div class="panel-heading"><div><p class="eyebrow">Seller listing</p><h2>Lock the asset and open the auction</h2></div><span class="context-badge ${auction.listed ? "complete" : ""}">${auction.listed ? `${auction.biddingDuration} BLOCK WINDOW` : "DRAFT"}</span></div><p>The seller converts its specific certificate into a locked auction commitment and defines when bidding closes. Bidders see the asset type, auction reference, and remaining time—not the certificate’s private details.</p><div class="listing-visibility"><section><small>Seller and auditor know</small><strong>${auction.assetTokenId}</strong><span>Specific Class A certificate · quantity 1</span></section><section><small>Bidders are shown</small><strong>${auction.assetType}</strong><span>Asset type only · details remain private</span></section></div><div class="amount-action"><label>Bidding timeout · blocks<input id="auctionDuration" type="number" min="2" value="${auction.biddingDuration}" ${auction.listed ? "disabled" : ""}></label><button class="button button-primary" data-action="list-asset" ${!auction.nftMinted || auction.listed ? "disabled" : ""}>${auction.listed ? "Asset locked · bidding open" : "List asset for auction"}</button></div>${auction.listed ? commitmentTree(p, auction.assetType, "party-2") : ""}</article>`;
+  const mintAssetContent = `<article class="panel flow-card"><div class="panel-heading"><div><p class="eyebrow">Asset creation · issuer view</p><h2>Mint the non-fungible asset</h2></div><span class="context-badge ${auction.nftMinted ? "complete" : ""}">${auction.nftMinted ? "OWNED BY SELLER" : "NOT MINTED"}</span></div><p>The issuer creates one specific non-fungible certificate representing a chosen number of Class A shares and allocates it to the seller before any auction terms exist.</p><div class="nft-certificate"><span>CLASS A</span><div><small>Non-fungible share certificate</small><strong>${auction.assetTokenId}</strong><dl><div><dt>Asset type</dt><dd>${auction.assetType}</dd></div><div><dt>Shares represented</dt><dd>${formatAmount(auction.assetQuantity)}</dd></div><div><dt>Owner</dt><dd>${p.registrations[2]?.name || "Boreal Markets"}</dd></div></dl></div></div><div class="amount-action"><label>Number of Class A shares<input id="auctionAssetQuantity" type="number" min="1" step="1" value="${auction.assetQuantity || 25}" ${auction.nftMinted ? "disabled" : ""}></label><button class="button button-primary" data-action="mint-nft" ${!auction.auctioneerRegistered || auction.nftMinted ? "disabled" : ""}>${auction.nftMinted ? `${formatAmount(auction.assetQuantity)} shares minted` : "Mint share certificate"}</button></div></article>`;
+  const listContent = `<article class="panel flow-card"><div class="panel-heading"><div><p class="eyebrow">Seller listing</p><h2>Lock the asset and open the auction</h2></div><span class="context-badge ${auction.listed ? "complete" : ""}">${auction.listed ? `${auction.biddingDuration} BLOCK WINDOW` : "DRAFT"}</span></div><p>The seller converts its specific certificate into a locked auction commitment and defines when bidding closes. Bidders see the asset type, auction reference, and remaining time—not the certificate’s private details.</p><div class="listing-visibility"><section><small>Seller and auditor know</small><strong>${auction.assetTokenId}</strong><span>Specific certificate · ${formatAmount(auction.assetQuantity)} Class A shares</span></section><section><small>Bidders are shown</small><strong>${auction.assetType}</strong><span>Asset type only · certificate details remain private</span></section></div><div class="amount-action"><label>Bidding timeout · blocks<input id="auctionDuration" type="number" min="2" value="${auction.biddingDuration}" ${auction.listed ? "disabled" : ""}></label><button class="button button-primary" data-action="list-asset" ${!auction.nftMinted || auction.listed ? "disabled" : ""}>${auction.listed ? "Asset locked · bidding open" : "List asset for auction"}</button></div>${auction.listed ? commitmentTree(p, auction.assetType, "party-2") : ""}</article>`;
   const mintCashContent = `<article class="panel flow-card"><div class="panel-heading"><div><p class="eyebrow">Bidder funding · operator</p><h2>Mint USD to the bidder</h2></div><span class="context-badge ${auction.publicCash > 0 || auction.privateCash > 0 ? "complete" : ""}">${formatAmount(auction.publicCash)} PUBLIC USD</span></div><p>The bidder needs funds before constructing a bid. The operator allocates a public USD balance; this operation reveals no bid and creates no auction commitment.</p><div class="dvp-leg cash-leg"><span>$</span><div><small>Your public balance</small><strong>${formatAmount(auction.publicCash)} USD</strong></div><b>${auction.publicCash > 0 ? "Available" : "Empty"}</b></div><div class="amount-action"><label>Amount to mint<input id="auctionMintCashAmount" type="number" min="1" value="1000"></label><button class="button button-primary" data-action="mint-cash">Mint USD to user</button></div></article>`;
   const shieldDefault = Math.min(auction.publicCash || 1, 650);
-  const shieldCashContent = `<article class="panel flow-card"><div class="panel-heading"><div><p class="eyebrow">Bidder funding · you</p><h2>Shield USD for bidding</h2></div><span class="context-badge ${auction.privateCash > 0 ? "complete" : ""}">${formatAmount(auction.privateCash)} PRIVATE USD</span></div><p>Choose the value of a private bidding note. Each shielding action creates its own salt, commitment, and USD-tree leaf; that exact note can later become one sealed bid.</p><div class="balance-movement"><span>Public balance<strong>${formatAmount(auction.publicCash)} USD</strong></span><b aria-hidden="true">→</b><span>Private notes<strong>${formatAmount(auction.privateCash)} USD</strong></span></div><div class="amount-action"><label>Amount to shield<input id="auctionShieldCashAmount" type="number" min="1" max="${auction.publicCash}" value="${shieldDefault}" ${auction.publicCash <= 0 || userBid ? "disabled" : ""}></label><button class="button button-primary" data-action="shield-cash" ${auction.publicCash <= 0 || userBid ? "disabled" : ""}>Shield into a new USD note</button></div>${privateNoteConstruction(p, "party-0", auction.cashToken)}${commitmentTree(p, auction.cashToken, "party-0")}</article>`;
-  const noteOptions = availableNotes.map(note => `<option value="${note.id}">Leaf ${note.leafIndex} · ${formatAmount(note.amount)} USD · ${short(note.commitment, 11, 5)}</option>`).join("");
-  const bidContent = `<article class="panel flow-card"><div class="panel-heading"><div><p class="eyebrow">Sealed bid · you</p><h2>Bid on the asset type</h2></div><span class="context-badge ${userBid ? "complete" : ""}">${userBid ? "BID LOCKED" : `${auction.blocksRemaining} BLOCKS LEFT`}</span></div><p>You know this auction offers one <strong>${auction.assetType}</strong>. You do not receive the certificate ID or private asset details. Your selected USD note becomes the bid amount and is locked—not publicly revealed.</p><div class="bid-target"><span>AUCTION TARGET</span><strong>${auction.assetType}</strong><small>${auction.reference} · certificate details withheld</small></div>${userBid ? `<div class="sealed-bid-receipt"><span><small>Your private amount</small><strong>${formatAmount(userBid.amount)} USD</strong></span><span><small>Published bid commitment</small><strong class="mono">${short(userBid.commitA, 18, 8)}</strong></span><span><small>Bid envelope</small><strong class="mono">${short(userBid.ciphertext, 18, 8)}</strong></span></div><div class="callout success-callout">The public contract sees an opaque commitment, ciphertext, nullifier, and validity proof. The auctioneer can decrypt the bid with <code>sk_auction</code>; the auditor can open it through the bidder’s registration-time audit access.</div>` : `<label class="bid-note-select">Private USD note to lock<select id="auctionBidNote">${noteOptions}</select><small>The note amount is visible here only because you control it.</small></label><div class="payment-construction"><span><b>1</b><strong>Select note</strong><small>Choose one funded USD leaf</small></span><span><b>2</b><strong>Seal bid</strong><small>Encapsulate to pk_auction</small></span><span><b>3</b><strong>Prove validity</strong><small>Ownership and note membership</small></span><span><b>4</b><strong>Lock</strong><small>Submit opaque bid commitment</small></span></div><div class="button-row"><button class="button button-primary" data-action="submit-bid" ${!availableNotes.length || auction.status !== "bidding" ? "disabled" : ""}>Submit sealed bid</button></div>`}</article>`;
+  const shieldCashContent = `<article class="panel flow-card"><div class="panel-heading"><div><p class="eyebrow">Bidder funding · you</p><h2>Shield USD for bidding</h2></div><span class="context-badge ${auction.privateCash > 0 ? "complete" : ""}">${formatAmount(auction.privateCash)} PRIVATE USD</span></div><p>Choose the value of a private funding note. Each shielding action creates its own salt, commitment, and USD-tree leaf. A later bid may spend any amount up to that note’s value and returns the remainder as a new private change leaf.</p><div class="balance-movement"><span>Public balance<strong>${formatAmount(auction.publicCash)} USD</strong></span><b aria-hidden="true">→</b><span>Private notes<strong>${formatAmount(auction.privateCash)} USD</strong></span></div><div class="amount-action"><label>Amount to shield<input id="auctionShieldCashAmount" type="number" min="1" max="${auction.publicCash}" value="${shieldDefault}" ${auction.publicCash <= 0 || userBid ? "disabled" : ""}></label><button class="button button-primary" data-action="shield-cash" ${auction.publicCash <= 0 || userBid ? "disabled" : ""}>Shield into a new USD note</button></div>${privateNoteConstruction(p, "party-0", auction.cashToken, ["auction_funding", "auction_change"])}${commitmentTree(p, auction.cashToken, "party-0")}</article>`;
+  const noteOptions = availableNotes.map(note => `<option value="${note.id}" data-amount="${note.amount}">Leaf ${note.leafIndex} · ${formatAmount(note.amount)} USD · ${short(note.commitment, 11, 5)}</option>`).join("");
+  const bidContent = `<article class="panel flow-card"><div class="panel-heading"><div><p class="eyebrow">Sealed bid · you</p><h2>Choose and submit your bid</h2></div><span class="context-badge ${userBid ? "complete" : ""}">${userBid ? "BID LOCKED" : `${auction.blocksRemaining} BLOCKS LEFT`}</span></div><p>You know the auction reference and asset type, while the specific certificate data stays private. Select a funding note and choose any bid up to its value; unused value returns immediately as a new private change note.</p><div class="bid-target"><span>AUCTION TARGET</span><strong>${auction.assetType}</strong><small>${auction.reference} · certificate ID, quantity, and metadata withheld</small></div>${userBid ? `<div class="sealed-bid-receipt"><span><small>Your private bid</small><strong>${formatAmount(userBid.amount)} USD</strong></span><span><small>Private change</small><strong>${formatAmount((p.notes || []).find(note => note.id === userBid.changeNoteId)?.amount || 0)} USD</strong></span><span><small>Published bid commitment</small><strong class="mono">${short(userBid.commitA, 18, 8)}</strong></span></div><div class="callout success-callout">The original funding leaf was consumed. The bid amount is locked behind an opaque commitment, while any remainder is now a separate participant-controlled USD leaf. The auctioneer and auditor can open the bid data; the public cannot.</div>` : `<div class="bid-entry-grid"><label class="bid-note-select">Private USD note to spend<select id="auctionBidNote">${noteOptions}</select><small>The selected leaf defines the maximum, not the required bid.</small></label><label class="bid-note-select">Your bid amount<input id="auctionBidAmount" type="number" min="1" max="${availableNotes[0]?.amount || 1}" value="${bidDefault}"><small>Any unbid remainder becomes a fresh private change note.</small></label></div><div class="payment-construction"><span><b>1</b><strong>Spend funding leaf</strong><small>Prove ownership and membership</small></span><span><b>2</b><strong>Create bid</strong><small>Lock only the chosen amount</small></span><span><b>3</b><strong>Create change</strong><small>Return the unused value privately</small></span><span><b>4</b><strong>Seal and submit</strong><small>Encrypt bid to pk_auction</small></span></div><div class="button-row"><button class="button button-primary" data-action="submit-bid" ${!availableNotes.length || auction.status !== "bidding" ? "disabled" : ""}>Submit sealed bid</button></div>`}</article>`;
   const biddingContent = `<article class="panel flow-card"><div class="panel-heading"><div><p class="eyebrow">Bidding window</p><h2>Collect bids until timeout</h2></div><span class="context-badge ${auction.status === "closed" || auction.status === "winner_announced" || auction.status === "settled" ? "complete" : ""}">${auction.blocksRemaining} BLOCKS REMAINING</span></div><p>Bid envelopes enter against the same auction reference. The public network can count them but cannot read their amounts or associate commitments with participant identities.</p><div class="auction-clock"><span>${auction.blocksRemaining}</span><div><small>Bidding timeout</small><strong>${auction.status === "bidding" ? "Submissions remain open" : "Deadline reached · submissions closed"}</strong></div><b>${auction.bids.length} sealed bids</b></div><div class="opaque-bid-stream">${auction.bids.map((bid, index) => `<div><span>Bid ${String(index + 1).padStart(2, "0")}</span><strong class="mono">${short(bid.commitA, 16, 7)}</strong><small>amount hidden</small></div>`).join("") || `<div class="empty-state">No bids submitted.</div>`}</div><div class="button-row">${!auction.otherBidsCollected ? `<button class="button button-primary" data-action="collect-bids" ${!userBid ? "disabled" : ""}>Receive remaining sealed bids</button>` : `<button class="button button-auditor" data-action="close-bidding" ${auction.status !== "bidding" ? "disabled" : ""}>Advance to bidding timeout</button>`}</div></article>`;
-  const privateBidRows = auction.bids.map((bid, index) => `<tr><td>${String(index + 1).padStart(2, "0")}</td><td>${bid.bidderName}</td><td class="mono">${short(bid.commitA, 13, 6)}</td><td><strong>${formatAmount(bid.amount)} USD</strong></td><td><span class="policy-badge">Valid</span></td></tr>`).join("");
+  const privateBidRows = auction.bids.map((bid, index) => `<tr class="${bid.id === candidateBid?.id ? "winning-bid" : ""}" data-bid-id="${bid.id}"><td>${String(index + 1).padStart(2, "0")}</td><td>${bid.bidderName}</td><td class="mono">${short(bid.commitA, 13, 6)}</td><td><strong>${formatAmount(bid.amount)} USD</strong></td><td><span class="policy-badge">${bid.id === candidateBid?.id ? "Highest valid" : "Valid"}</span></td></tr>`).join("");
   const reviewContent = `<article class="panel flow-card wide"><div class="panel-heading"><div><p class="eyebrow">After the bidding timeout</p><h2>Open and validate the sealed bids</h2></div><span class="context-badge ${auction.status !== "bidding" && auction.bids.length ? "complete" : ""}">${auction.bids.length} BID ENVELOPES</span></div><p>Only after submissions close does the auctioneer use <code>sk_auction</code> to open every bid. The auditor independently reaches the same bid data through the view-key access granted during participant registration.</p><div class="auction-view-grid"><section class="auction-view public"><small>Public network</small><h3>Opaque commitments only</h3><p>Amounts and bidder identities remain hidden.</p><strong>${auction.bids.length} commitments</strong></section><section class="auction-view private"><small>Auctioneer</small><h3>All valid bids opened</h3><p>Decrypts with the auction-specific key.</p><strong>${auction.status === "bidding" ? "Available after timeout" : `${auction.bids.length} amounts visible`}</strong></section><section class="auction-view auditor"><small>Auditor</small><h3>All valid bids auditable</h3><p>Uses registration-time view-key envelopes.</p><strong>${auction.status === "bidding" ? "Waiting for close" : `${auction.bids.length} amounts visible`}</strong></section></div>${auction.status === "bidding" ? `<div class="empty-state">The auctioneer does not open bids while submissions are still accepted.</div>` : `<div class="table-wrap private-bid-table"><table><thead><tr><th>Bid</th><th>Opened identity</th><th>Commitment</th><th>Private amount</th><th>Validity</th></tr></thead><tbody>${privateBidRows}</tbody></table></div><div class="privacy-boundary"><span>Visible in this private view</span><strong>Auctioneer and auditor only</strong><small>None of these amounts are added to the public auction state.</small></div>`}</article>`;
-  const proofContent = `<article class="panel flow-card"><div class="panel-heading"><div><p class="eyebrow">Winner selection · auctioneer</p><h2>Prove the highest valid bid</h2></div><span class="context-badge ${auction.winnerProof ? "complete" : ""}">${auction.winnerProof ? "WINNER ANNOUNCED" : "PROOF PENDING"}</span></div><p>The auctioneer evaluates the opened bids privately. It announces one winning commitment and proves the comparison without publishing the winning amount or any losing amount.</p><div class="proof-statement"><span>PROOF STATEMENT</span><strong>“Out of all valid bids, this specific bid has the highest amount.”</strong><p>The proof establishes that the selected commitment is active and valid, and that its hidden amount is greater than or equal to every other active valid bid.</p></div>${auction.winnerProof ? `<div class="winner-announcement"><span><small>Public winner announcement</small><strong class="mono">${short(auction.winnerProof.winnerCommitment, 22, 10)}</strong></span><span><small>Proof</small><strong class="mono">${short(auction.winnerProof.id, 22, 10)}</strong></span><b>Winning amount remains private</b></div>` : `<div class="button-row"><button class="button button-primary" data-action="prove-winner" ${auction.status !== "closed" ? "disabled" : ""}>Prove and announce winning commitment</button></div>`}</article>`;
+  const proofContent = `<article class="panel flow-card wide"><div class="panel-heading"><div><p class="eyebrow">Winner selection · auctioneer</p><h2>Prove the highest valid bid</h2></div><span class="context-badge ${auction.winnerProof ? "complete" : ""}">${auction.winnerProof ? "WINNER ANNOUNCED" : "PROOF PENDING"}</span></div><p>The auctioneer evaluates the opened bids privately and produces a Groth16 proof over BN254. The highlighted row is the winning witness selected by the circuit; the public receives its commitment and a proof, never the amount column below.</p>${auction.status === "bidding" ? `<div class="empty-state">Bid comparison begins only after the bidding timeout.</div>` : `<div class="proof-workspace"><div class="table-wrap private-bid-table proof-bid-table"><table><thead><tr><th>Bid</th><th>Private bidder</th><th>Commitment</th><th>Private amount</th><th>Circuit result</th></tr></thead><tbody>${privateBidRows}</tbody></table></div><div class="zk-circuit" aria-label="Highest valid bid zero-knowledge circuit"><div class="circuit-boundary-label"><span>PRIVATE WITNESS</span><span>ZERO-KNOWLEDGE CIRCUIT</span><span>PUBLIC OUTPUT</span></div><div class="circuit-flow"><section><small>Encrypted bid openings</small><strong>pk · salt · amount</strong><span>${auction.bids.length} private bid witnesses</span></section><i>→</i><section><small>Poseidon commitments</small><strong>Recompute every commitment</strong><span>Active + well-formed bids only</span></section><i>→</i><section class="circuit-gate winner-gate"><small>Dominance constraints</small><strong>amount* ≥ amountᵢ</strong><span>For every valid bid i</span></section><i>→</i><section class="circuit-output"><small>Revealed to contract</small><strong>winning commitment + π</strong><span>No amount is a public output</span></section></div></div></div><div class="proof-statement"><span>PROOF STATEMENT</span><strong>“Out of all valid bids, this specific bid has the highest amount.”</strong><p>The circuit proves that the highlighted commitment is active and valid and that its private amount is greater than or equal to every other valid bid amount.</p></div>${auction.winnerProof ? `<div class="winner-announcement"><span><small>Public winner announcement</small><strong class="mono">${short(auction.winnerProof.winnerCommitment, 22, 10)}</strong></span><span><small>Proof</small><strong class="mono">${short(auction.winnerProof.id, 22, 10)}</strong></span><b>Winning amount remains private</b></div>` : `<div class="button-row"><button class="button button-primary" data-action="prove-winner" ${auction.status !== "closed" ? "disabled" : ""}>Generate proof and announce commitment</button></div>`}`}</article>`;
+  const settlementNotes = auction.settlement ? (p.notes || []).filter(note => note.sourceTxId === auction.settlement.txId) : [];
+  const settlementPerspectiveButtons = `<div class="perspective-switcher" role="tablist" aria-label="Settlement perspective"><button type="button" role="tab" data-auction-perspective="public" aria-selected="${auctionSettlementPerspective === "public"}">Public chain</button><button type="button" role="tab" data-auction-perspective="wallet" aria-selected="${auctionSettlementPerspective === "wallet"}">Your wallet</button><button type="button" role="tab" data-auction-perspective="auditor" aria-selected="${auctionSettlementPerspective === "auditor"}">Auditor</button></div>`;
+  const publicSettlementView = `<section class="perspective-panel public-perspective" role="tabpanel"><div class="perspective-heading"><span>PUBLIC CHAIN VIEW</span><strong>Commitments and roots only</strong><p>The chain cannot attribute any leaf to a participant. Every leaf has the same neutral presentation.</p></div><div class="asset-tree-stack">${commitmentTree(p, auction.assetType)}${commitmentTree(p, auction.cashToken)}</div></section>`;
+  const walletSettlementView = `<section class="perspective-panel wallet-perspective" role="tabpanel"><div class="perspective-heading"><span>YOUR WALLET VIEW</span><strong>Only notes recognized with your private view key</strong><p>Purple indicates leaves your wallet can open. It does not publish ownership or reveal another participant’s notes.</p></div><div class="asset-tree-stack">${commitmentTree(p, auction.assetType, "party-0")}${commitmentTree(p, auction.cashToken, "party-0")}</div></section>`;
+  const auditorRows = settlementNotes.map(note => `<tr><td>${note.ownerName}</td><td>${note.origin === "auction_output" ? "Settlement output" : "Bid recovery"}</td><td>${formatAmount(note.amount)} ${note.assetId}</td><td class="mono">${short(note.commitment, 13, 6)}</td></tr>`).join("");
+  const auditorSettlementView = `<section class="perspective-panel auditor-perspective" role="tabpanel"><div class="perspective-heading"><span>AUTHORIZED AUDITOR VIEW</span><strong>Commitments opened through registration-time access</strong><p>The auditor can associate the settlement outputs with their encrypted note fields. This attribution is not written into the public tree.</p></div><div class="table-wrap private-bid-table auditor-output-table"><table><thead><tr><th>Participant</th><th>Result</th><th>Opened note</th><th>Commitment</th></tr></thead><tbody>${auditorRows}</tbody></table></div></section>`;
+  const selectedSettlementView = auctionSettlementPerspective === "wallet" ? walletSettlementView : auctionSettlementPerspective === "auditor" ? auditorSettlementView : publicSettlementView;
   let settlementBody = `<div class="empty-state">The auctioneer must first announce a winning commitment with the highest-valid-bid proof.</div>`;
   if (auction.winnerProof && !auction.settlement) settlementBody = `<div class="settlement-contract"><div><span>1</span><strong>Verify winner proof</strong><small>Highest valid bid; amount remains hidden</small></div><div><span>2</span><strong>Consume locked notes</strong><small>Winning USD bid + listed NFT</small></div><div><span>3</span><strong>Atomic outputs</strong><small>NFT to winner + USD to seller</small></div><div><span>4</span><strong>Recover losing bids</strong><small>Fresh unlinkable USD notes</small></div></div>${auction.challengeOpen ? `<div class="callout">A challenger requested explicit verification. The contract now verifies the same proof before executing the atomic DvP.</div><div class="button-row"><button class="button button-primary" data-action="settle">Verify challenged proof and execute DvP</button></div>` : `<div class="button-row"><button class="button button-primary" data-action="settle">Execute atomic DvP</button><button class="button button-auditor" data-action="challenge">Challenge winner proof</button></div>`}`;
-  if (auction.settlement) settlementBody = `<div class="callout success-callout"><strong>Atomic auction settlement complete.</strong> The winning commitment received the Class A share, the seller received a private USD note, and every losing bid received a fresh recovery note. No bid amount was published.</div><div class="settlement-outputs"><span><small>Winning bid</small><strong class="mono">${short(auction.settlement.winnerCommitment, 18, 8)}</strong></span><span><small>Valid bids compared</small><strong>${auction.settlement.validBidCount}</strong></span><span><small>Public winning amount</small><strong>Not disclosed</strong></span></div><div class="asset-tree-stack">${commitmentTree(p, auction.assetType, auction.settlement.winnerPartyId)}${commitmentTree(p, auction.cashToken)}</div>`;
+  if (auction.settlement) settlementBody = `<div class="callout success-callout"><strong>Atomic auction settlement complete.</strong> The winning commitment received the Class A share, the seller received a private USD note, and every losing bid received a fresh recovery note. No bid amount was published.</div><div class="settlement-outputs"><span><small>Winning bid</small><strong class="mono">${short(auction.settlement.winnerCommitment, 18, 8)}</strong></span><span><small>Valid bids compared</small><strong>${auction.settlement.validBidCount}</strong></span><span><small>Public winning amount</small><strong>Not disclosed</strong></span></div>${settlementPerspectiveButtons}${selectedSettlementView}`;
   const settlementContent = `<article class="panel flow-card full"><div class="panel-heading"><div><p class="eyebrow">Contract execution</p><h2>Atomic auction DvP</h2></div><span class="context-badge ${auction.settlement ? "complete" : ""}">${auction.settlement ? "SETTLED" : auction.challengeOpen ? "CHALLENGED" : "AWAITING PROOF"}</span></div><p>The contract acts only on the proven winning commitment. Asset delivery and seller payment occur atomically; a partial settlement cannot persist.</p>${settlementBody}</article>`;
   const auditContent = `<article class="panel flow-card wide"><div class="panel-heading"><div><p class="eyebrow">Auction privacy boundary</p><h2>Who can see what</h2></div><span class="context-badge">NO PUBLIC BID AMOUNTS</span></div><div class="auction-visibility-matrix"><div><strong>Public network</strong><span>Auction reference and asset type</span><span>Bid commitments and proof</span><span>Updated asset roots</span><b>Cannot open any bid amount</b></div><div><strong>Individual bidder</strong><span>Public auction information</span><span>Its own note and bid amount</span><span>Whether its commitment won</span><b>Cannot open competing bids</b></div><div><strong>Auctioneer</strong><span>All valid bids after timeout</span><span>Winner-comparison witness</span><span>Settlement output construction</span><b>Cannot spend participant notes</b></div><div><strong>Auditor</strong><span>All bids through registered view access</span><span>Asset lock and settlement outputs</span><span>Winner-proof result</span><b>Cannot bid, choose, or spend</b></div></div>${auction.settlement ? `<div class="callout success-callout">The auditor can open the winning USD payout, NFT delivery, and losing-bid recovery notes using the access established during registration. The public sees only opaque commitments.</div>` : `<div class="empty-state">Complete settlement to inspect its final audit scope.</div>`}</article>`;
   return [
@@ -521,7 +643,7 @@ function scenarioSteps(p) {
 
 function scenarioActivity(p) {
   const items = p.ledger.slice(0, 5);
-  return `<aside class="panel scenario-aside"><div><p class="eyebrow">Executing entity</p><div class="scenario-actor"><span aria-hidden="true">${screenFromHash() === "audit" ? "AU" : "→"}</span><strong data-scenario-actor></strong></div></div><div class="scenario-receipts"><p class="eyebrow">Recent receipts</p>${items.map(item => `<div class="scenario-receipt"><strong>${item.label}</strong><span>block ${item.block} · ${short(item.hash, 11, 6)}</span></div>`).join("") || `<div class="activity-empty">No action receipts yet.</div>`}</div></aside>`;
+  return `<aside class="panel scenario-aside"><div><p class="eyebrow">Executing entity</p><div class="scenario-actor"><span aria-hidden="true">${screenFromHash() === "audit" ? "AU" : "→"}</span><strong data-scenario-actor></strong></div></div>${publicNetworkRegistry(p)}<details class="scenario-receipts"><summary>Recent protocol receipts</summary>${items.map(item => `<div class="scenario-receipt"><strong>${item.label}</strong><span>block ${item.block} · ${short(item.hash, 11, 6)}</span></div>`).join("") || `<div class="activity-empty">No action receipts yet.</div>`}</details></aside>`;
 }
 
 function renderExperience(p) {
@@ -583,7 +705,50 @@ async function run(label, operation) {
   finally { busy = false; delete document.body.dataset.busy; render(); }
 }
 
+// Hover and keyboard focus show the description; tap pins it until dismissed.
+for (const eventName of ["pointerover", "focusin"]) {
+  document.addEventListener(eventName, event => {
+    const card = event.target.closest(".contract-card");
+    if (card && !card.contains(event.relatedTarget)) card.classList.remove("tooltip-dismissed");
+  });
+}
+document.addEventListener("keydown", event => {
+  if (event.key !== "Escape") return;
+  document.querySelectorAll(".contract-card").forEach(card => {
+    card.classList.add("tooltip-dismissed");
+    card.classList.remove("tooltip-pinned");
+  });
+});
+
 document.addEventListener("click", async event => {
+  const contractCard = event.target.closest(".contract-card");
+  document.querySelectorAll(".contract-card.tooltip-pinned").forEach(card => {
+    if (card !== contractCard) card.classList.remove("tooltip-pinned");
+  });
+  if (event.target.closest(".contract-help")) {
+    const pinned = contractCard.classList.toggle("tooltip-pinned");
+    contractCard.classList.toggle("tooltip-dismissed", !pinned);
+    return;
+  }
+  const auctionPerspective = event.target.closest("[data-auction-perspective]")?.dataset.auctionPerspective;
+  if (auctionPerspective) {
+    auctionSettlementPerspective = auctionPerspective;
+    render();
+    return;
+  }
+  const tagMode = event.target.closest("[data-retail-tag-mode]")?.dataset.retailTagMode;
+  if (tagMode && !engineAdapter.protocol("retail").flow.retailTagChannel) {
+    retailTagDraft.mode = tagMode;
+    render();
+    return;
+  }
+  const recipientIndex = event.target.closest("[data-retail-recipient]")?.dataset.retailRecipient;
+  if (recipientIndex !== undefined && !engineAdapter.protocol("retail").flow.retailTagChannel) {
+    retailTagDraft.recipientIndex = Number(recipientIndex);
+    retailTagDraft.excludedIndices.delete(retailTagDraft.recipientIndex);
+    render();
+    return;
+  }
   const command = event.target.closest("[data-command]")?.dataset.command;
   const action = event.target.closest("[data-action]")?.dataset.action;
   const share = event.target.closest("[data-share]")?.dataset.share;
@@ -617,9 +782,12 @@ document.addEventListener("click", async event => {
       };
     }
     if (route === "auctions" && action === "list-asset") payload = { duration: $("#auctionDuration")?.value };
+    if (route === "auctions" && action === "mint-nft") payload = { quantity: $("#auctionAssetQuantity")?.value };
     if (route === "auctions" && action === "mint-cash") payload = { amount: $("#auctionMintCashAmount")?.value };
     if (route === "auctions" && action === "shield-cash") payload = { amount: $("#auctionShieldCashAmount")?.value };
-    if (route === "auctions" && action === "submit-bid") payload = { noteId: $("#auctionBidNote")?.value };
+    if (route === "auctions" && action === "submit-bid") payload = { noteId: $("#auctionBidNote")?.value, amount: $("#auctionBidAmount")?.value };
+    if (route === "retail" && action === "configure-tags") payload = { recipientIndex: retailTagDraft.recipientIndex, mode: retailTagDraft.mode, excludedIndices: [...retailTagDraft.excludedIndices] };
+    if (route === "retail" && action === "payment") payload = { amount: $("#retailPaymentAmount")?.value };
     await run("Protocol action completed", () => engineAdapter.executeProtocolAction(route, action, payload));
   }
   if (share) await run("Symmetric note-data key disclosed to additional regulator", () => engineAdapter.shareTransactionKey(route, share));
@@ -627,6 +795,20 @@ document.addEventListener("click", async event => {
 
 document.addEventListener("change", event => {
   if (event.target.matches("[data-traffic]")) engineAdapter.setTraffic(route, event.target.checked, event.target.dataset.trafficAsset || null);
+  if (event.target.matches("#auctionBidNote")) {
+    const amountInput = $("#auctionBidAmount");
+    const selectedAmount = Number(event.target.selectedOptions[0]?.dataset.amount || 1);
+    if (amountInput) {
+      amountInput.max = String(selectedAmount);
+      amountInput.value = String(Math.min(Number(amountInput.value) || selectedAmount, selectedAmount));
+    }
+  }
+  if (event.target.matches("[data-retail-exclusion]") && !engineAdapter.protocol("retail").flow.retailTagChannel) {
+    const index = Number(event.target.dataset.retailExclusion);
+    if (event.target.checked) retailTagDraft.excludedIndices.add(index);
+    else retailTagDraft.excludedIndices.delete(index);
+    render();
+  }
 });
 
 $("#resetProtocol").addEventListener("click", () => {

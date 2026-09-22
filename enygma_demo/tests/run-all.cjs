@@ -4,7 +4,7 @@ const path = require("path");
 const http = require("http");
 
 const root = path.join(__dirname, "..");
-const suites = ["demo-test.cjs", "source-test.cjs"];
+const suites = ["deployment-test.cjs", "demo-test.cjs", "source-test.cjs"];
 const server = spawn(process.execPath, [path.join(__dirname, "static-server.cjs")], { cwd: root, stdio: ["ignore", "pipe", "pipe"] });
 
 function ready() {

@@ -1,0 +1,4 @@
+.DS_Store
+
+# Local audit working directories contain copied source and private-key evidence.
+/.audit-*/
