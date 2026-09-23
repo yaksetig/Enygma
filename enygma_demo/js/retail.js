@@ -33,6 +33,8 @@ export function retailState(p) {
   return s;
 }
 
+export const hasRetailChannel = (p, peerId) => retailState(p).channels.some(channel => channel.senderPartyId === "party-0" && channel.recipientPartyId === peerId);
+
 export function migrateRetail(p) {
   const s = retailState(p);
   s.activity = null;
@@ -107,6 +109,7 @@ export async function executeRetail(engine, action, payload, token, candidates) 
     if (action === "configure-tags") {
       const recipientIndex = Number(payload.recipientIndex), recipient = p.registrations[recipientIndex];
       if (!recipient || recipientIndex === 0) throw new Error("Select a registered channel peer other than yourself.");
+      if (hasRetailChannel(p, recipient.partyId)) throw new Error(`A channel with ${recipient.name} is already established. Select another channel peer.`);
       const mode = ["none", "subset", "rift", "full"].includes(payload.mode) ? payload.mode : "full";
       const excludedIndices = mode === "rift" ? [...new Set((payload.excludedIndices || []).map(Number).filter(i => Number.isInteger(i) && i >= 0 && i < p.registrations.length && i !== recipientIndex))] : [];
       if (mode === "rift" && excludedIndices.length >= p.registrations.length - 1) throw new Error("Rift must leave more than the channel peer. Choose No privacy for a single candidate.");

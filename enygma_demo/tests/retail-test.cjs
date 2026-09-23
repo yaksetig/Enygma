@@ -55,6 +55,18 @@ const pass = label => { passed++; console.log(`  PASS  ${label}`); };
 
     await page.goto(`${BASE_URL}/#/retail/private-tags`);
     await clickAndWait(page, '[data-action="configure-tags"]');
+    assert.equal(await page.locator('[data-retail-recipient="1"]').isDisabled(), true);
+    assert.match(await page.locator('[data-retail-recipient="1"]').innerText(), /Channel established/);
+    assert.equal(await page.locator('[data-action="configure-tags"]').isDisabled(), true);
+    const established = await state();
+    for (const mode of ['full', 'subset', 'rift', 'none']) {
+      assert.match(await act('configure-tags', { recipientIndex: 1, mode }), /already established/);
+    }
+    const afterDuplicates = await state();
+    assert.deepEqual(afterDuplicates.flow.retail.channels, established.flow.retail.channels);
+    assert.deepEqual(afterDuplicates.transactions, established.transactions);
+    assert.deepEqual(afterDuplicates.ledger, established.ledger);
+    pass("established peers are disabled and duplicate channel requests cannot publish in any privacy mode");
     await page.click('[data-retail-recipient="2"]');
     await page.click('[data-retail-tag-mode="subset"]');
     await clickAndWait(page, '[data-action="configure-tags"]');
@@ -64,6 +76,11 @@ const pass = label => { passed++; console.log(`  PASS  ${label}`); };
     assert.equal(await page.locator('[data-channel-record]').count(), 2);
     assert.equal(await page.locator('.retail-channel-map path.established').count(), 2);
     assert.equal(await page.locator('[data-retail-tag-mode="full"]').isEnabled(), true);
+    await page.reload();
+    assert.equal(await page.locator('[data-retail-recipient="1"]').isDisabled(), true);
+    assert.equal(await page.locator('[data-retail-recipient="2"]').isDisabled(), true);
+    assert.equal(await page.locator('[data-retail-recipient="3"]').isEnabled(), true);
+    assert.equal(await page.locator('[data-action="configure-tags"]').isDisabled(), true);
     pass("multiple independent private channels remain selectable after publishing each request");
 
     await page.goto(`${BASE_URL}/#/retail/payment`);
@@ -165,6 +182,19 @@ const pass = label => { passed++; console.log(`  PASS  ${label}`); };
     }
     assert.deepEqual(errors, []);
     pass("all Retail screens retain their visuals on mobile without page overflow or console errors");
+    await page.goto(`${BASE_URL}/#/retail/private-tags`);
+    for (let peer = 3; peer < 10; peer++) {
+      await page.click(`[data-retail-recipient="${peer}"]`);
+      await clickAndWait(page, '[data-action="configure-tags"]');
+    }
+    assert.equal((await state()).flow.retail.channels.length, 9);
+    assert.equal(await page.locator('[data-retail-recipient]:disabled').count(), 9);
+    assert.equal(await page.locator('[data-action="configure-tags"]').isDisabled(), true);
+    assert.match(await page.locator('[data-action="configure-tags"]').innerText(), /All channels established/);
+    await page.goto(`${BASE_URL}/#/retail/payment`);
+    assert.equal(await page.locator('#retailPaymentRecipient option').count(), 9);
+    assert.equal(await page.locator('[data-action="payment"]').isEnabled(), true);
+    pass("connecting every peer closes channel creation while all existing channels remain available for payments");
     await context.close();
   } finally { await browser.close(); }
   console.log(`\n${passed} Retail checks passed.`);

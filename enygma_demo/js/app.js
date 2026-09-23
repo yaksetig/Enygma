@@ -1,4 +1,4 @@
-import { retailState } from "./retail.js";
+import { retailState, hasRetailChannel } from "./retail.js";
 import { retailUI, retailShieldCard, retailChannelCard, retailPaymentCard, retailScanCard, retailChainCard, retailPayload, retailInput, retailChange, retailClick } from "./retail-ui.js";
 import { PROTOCOLS, PROTOCOL_IDS, SETUP_STEPS, PARTY_NAMES, PROTOCOL_PRIMITIVES, spendPublicKeyFor, initializationSteps } from "./config.js";
 import { engineAdapter } from "./demo-engine.js";
@@ -245,11 +245,12 @@ function retailTagRegistry(p) {
   const rows = p.registrations.map((registration, index) => {
     const isPayer = index === 0;
     const isRecipient = index === recipientIndex;
+    const connected = hasRetailChannel(p, registration.partyId);
     const included = candidates.includes(index);
     const excluded = mode === "rift" && exclusions.includes(index) && !isRecipient;
     const privateControl = isPayer
       ? `<span class="tag-row-state payer">Channel initiator</span>`
-      : `<button type="button" class="recipient-choice ${isRecipient ? "selected" : ""}" data-retail-recipient="${index}" aria-pressed="${isRecipient}">${isRecipient ? "Selected channel peer" : "Select peer"}</button>${mode === "rift" && !isRecipient ? `<label class="rift-exclusion"><input type="checkbox" data-retail-exclusion="${index}" ${excluded ? "checked" : ""}> Exclude</label>` : ""}`;
+      : `<button type="button" class="recipient-choice ${connected ? "established" : isRecipient ? "selected" : ""}" data-retail-recipient="${index}" aria-pressed="${isRecipient && !connected}" ${connected ? "disabled" : ""}>${connected ? "✓ Channel established" : isRecipient ? "Selected channel peer" : "Select peer"}</button>${mode === "rift" && !isRecipient ? `<label class="rift-exclusion"><input type="checkbox" data-retail-exclusion="${index}" ${excluded ? "checked" : ""}> Exclude</label>` : ""}`;
     return `<tr class="${included ? "tag-included" : "tag-outside"}" data-tag-party-row="${index}"><td><span class="registry-index">${String(index).padStart(2, "0")}</span></td><td><div class="registry-party"><span class="avatar">${registration.name.split(" ").map(value => value[0]).slice(0, 2).join("")}</span><span><strong>${registration.name}</strong>${isPayer ? "<small>You</small>" : ""}</span></div></td><td data-key="spend">${registryKey("spend public key", registration.spendPublicKey)}</td><td data-key="view">${registryKey("view public key", registration.viewPublicKey)}</td><td class="private-selection-cell">${privateControl}</td><td><span class="bitmap-membership ${included ? "included" : "outside"}"><b>${included ? "1" : "0"}</b><span>${included ? "Candidate" : "Outside"}</span></span></td></tr>`;
   }).join("");
   return `<div class="tag-registry-boundary"><div class="tag-registry-labels"><span>PUBLIC PARTICIPANT REGISTRY</span><span>PRIVATE CHANNEL CONFIGURATION</span><span>PUBLIC BITMAP</span></div><div class="registry-table-wrap tag-registry-table"><table class="registry-table"><thead><tr><th>#</th><th>Participant</th><th>Spend public key</th><th>View public key</th><th>Channel peer / Rift exclusion</th><th>Published bit</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
@@ -760,6 +761,8 @@ document.addEventListener("click", async event => {
   }
   const recipientIndex = event.target.closest("[data-retail-recipient]")?.dataset.retailRecipient;
   if (recipientIndex !== undefined) {
+    const protocol = engineAdapter.protocol("retail");
+    if (hasRetailChannel(protocol, protocol.registrations[Number(recipientIndex)]?.partyId)) return;
     retailTagDraft.recipientIndex = Number(recipientIndex);
     retailTagDraft.excludedIndices.delete(retailTagDraft.recipientIndex);
     render();

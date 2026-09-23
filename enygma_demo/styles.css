@@ -1232,3 +1232,4 @@ select, input { width: 100%; min-height: 39px; padding: 8px 10px; color: var(--t
 .retail-workspace .table-wrap code { font-size: .62rem; }
 .retail-binding .binding-path { display: block; }
 .retail-binding .binding-path code { display: block; font-size: .62rem; margin-top: 7px; }
+.recipient-choice.established:disabled { opacity: 1; color: var(--success); border-color: #B7DDCD; background: var(--success-soft); cursor: default; }

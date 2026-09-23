@@ -1,4 +1,4 @@
-import { retailState, availableRetailNotes, RETAIL_DEPTH } from "./retail.js";
+import { retailState, hasRetailChannel, availableRetailNotes, RETAIL_DEPTH } from "./retail.js";
 
 export const retailUI = {
   channelDraft: { recipientIndex: 1, mode: "full", excludedIndices: new Set([8, 9]) },
@@ -83,11 +83,14 @@ function channelMap(p, preview) {
 
 export function retailChannelCard(p, modes, registry) {
   const s = retailState(p), draft = retailUI.channelDraft, recipient = p.registrations[draft.recipientIndex];
+  const connected = hasRetailChannel(p, recipient.partyId);
+  const allConnected = p.registrations.slice(1).every(peer => hasRetailChannel(p, peer.partyId));
   const ch = s.activity?.channel || s.channels.at(-1);
   return `<article class="panel flow-card retail-workspace">${head("Private tags · establish channels", "Connect with multiple channel peers.", `${s.channels.length} ESTABLISHED`)}${channelMap(p, draft)}<div class="retail-section-heading"><h3>Create another channel</h3><span>Select a participant to establish a channel with, then choose the public candidate bitmap.</span></div><div class="tag-mode-grid">${modes}</div>${registry}
     <div class="retail-channel-request ${s.activity?.kind === "channel" ? "animating" : ""}"><div><span class="avatar">${initials(recipient.name)}</span><strong>${recipient.name}</strong><small>Registry binding · pk_view</small></div><i>→</i><div><b>ML-KEM-768</b><small>Encapsulate → c1 + shared secret</small><b>AES-256-GCM</b><small>HKDF channel key → encrypted c2</small></div><i>→</i><div class="retail-envelope"><b>Relayer → openChannel()</b><span><code>c1</code><code>c2</code><code>bitmap</code></span><small>TagChannelRegistry</small></div></div>
     ${steps([["encapsulate", "Encapsulate", "Channel peer’s pk_view"], ["encrypt", "Seal channel data", "HKDF + AES-256-GCM"], ["relay", "Relay request", "c1 · c2 · bitmap"], ["published", "Store channel", "ChannelOpened event"]], s.activity?.kind === "channel" ? s.activity.step : null)}
-    <button class="button button-primary" data-action="configure-tags">Establish private-tag channel</button>
+    ${connected ? `<div class="callout success-callout">${allConnected ? "You have established a channel with every other participant. Choose an existing channel below to make a payment." : `Your channel with ${recipient.name} is established. Select another participant above to create a new channel.`}</div>` : ""}
+    <button class="button button-primary" data-action="configure-tags" ${connected ? "disabled" : ""}>${allConnected ? "All channels established" : connected ? "Select another channel peer" : "Establish private-tag channel"}</button>
     <div class="retail-channel-list">${s.channels.map(c => `<div class="channel-record" data-channel-record="${c.id}"><span class="avatar">${initials(nameOf(p, c.recipientPartyId))}</span><span><small>YOUR CHANNEL ${c.index}</small><strong>You → ${nameOf(p, c.recipientPartyId)}</strong><code>${short(c.id, 15, 6)}</code></span><span><small>${c.mode === "full" ? "Full privacy" : c.mode}</small><strong class="mono">${c.bitmap}</strong><small>Published bitmap · ${c.candidateIndices.length} candidates</small></span><button class="button button-small button-ghost" data-retail-use-channel="${c.id}">Use channel for a payment →</button></div>`).join("")}</div>
     ${ch ? `<details class="retail-math"><summary>Latest on-chain channel record · openChannel(c1, c2, bitmap)</summary><dl><dt>ML-KEM capsule · c1</dt><dd>${code(ch.c1)}</dd><dt>Encrypted channel data · c2</dt><dd>${code(ch.c2)}</dd><dt>Public bitmap</dt><dd><code>${ch.bitmap}</code></dd></dl></details>` : ""}</article>`;
 }
