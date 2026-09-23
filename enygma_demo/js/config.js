@@ -56,7 +56,7 @@ export function spendPublicKeyFor(identity, protocolId) {
 export const PROTOCOLS = {
   institutional: {
     name: "Institutional Payments", short: "Institutional", icon: "IP",
-    description: "Private bilateral channels, controlled operations, and cross-network settlement for institutions.",
+    description: "Confidential payments through commitment batches, verified balance updates, and authorized audit access.",
     deploymentSource: "enygma_payments/run_scripts/deploy_node.js",
     initializationSource: "enygma_payments/demo/main.go",
     deploymentNote: "Deploy Enygma with its epoch interval, deploy its transfer verifier, then initialize Enygma and register the verifier.",
@@ -65,7 +65,7 @@ export const PROTOCOLS = {
       contract("Verifier", "Checks proofs for confidential institutional transfers. This is the verifier deployed from EnygmaVerifier.sol.", "EnygmaVerifier", true)
     ],
     initialization: [initialize("Enygma", "initialize"), initialize("Enygma", "addVerifier", ["EnygmaVerifier"])],
-    actions: ["channels", "payment", "freeze", "bridge"]
+    actions: ["channels", "fund", "calculate", "prove", "post", "pause-contract", "resume-contract", "freeze-user", "unfreeze-user"]
   },
   retail: {
     name: "Retail Payments", short: "Retail", icon: "RP",

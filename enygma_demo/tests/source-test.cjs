@@ -3,7 +3,7 @@ const fs = require("fs");
 const path = require("path");
 const { root } = require("./_env.cjs");
 
-const deployable = ["index.html", "styles.css", "js/app.js", "js/config.js", "js/demo-engine.js"];
+const deployable = ["index.html", "styles.css", "js/app.js", "js/config.js", "js/demo-engine.js", "js/institutional.js", "js/institutional-ui.js", "js/institutional-crypto.js"];
 const source = deployable.map(file => fs.readFileSync(path.join(root, file), "utf8")).join("\n");
 const unrelatedCurve = /secp256k1|ECDH|ECDSA/i;
 const environmentFraming = new RegExp(["simu" + "lat", "fix" + "ture", "mock" + "ed", "presentation" + "-only"].join("|"), "i");

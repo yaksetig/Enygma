@@ -177,17 +177,16 @@ function pass(name) { passed += 1; console.log(`  PASS  ${name}`); }
     pass("institutional matrix exposes all 45 unique pairwise channels");
     pass("protocol setup and ledger state remain independent");
 
-    await page.goto(`${BASE_URL}/#/institutional/policy`);
-    await page.click('[data-action="freeze"]'); await page.waitForTimeout(40);
-    assert.equal((await page.evaluate(() => window.__ENYGMA_DEMO__.state())).protocols.institutional.flow.frozen, true);
-    await page.click('[data-action="resume"]'); await page.waitForTimeout(40);
+    await page.goto(`${BASE_URL}/#/institutional/funding`);
+    await clickAndWait(page, '[data-action="fund"]');
     await page.goto(`${BASE_URL}/#/institutional/payment`);
-    await page.click('[data-action="payment"]'); await page.waitForTimeout(40);
+    for (const action of ["calculate", "prove", "post"]) await clickAndWait(page, `[data-action="${action}"]`);
     await page.goto(`${BASE_URL}/#/institutional/chain`);
     assert.match(await page.locator(".scenario-page").innerText(), /Pedersen commitments on BabyJubJub/);
     assert.equal(await page.locator(".commitment-tree").count(), 0);
+    assert.equal(await page.locator("[data-institutional-payments] tbody tr").count(), 2);
     assert.equal((await page.evaluate(() => window.__ENYGMA_DEMO__.state())).protocols.institutional.leaves.length, 0);
-    pass("institutional payment, freeze, and recovery paths");
+    pass("institutional payments post commitment batches and update account balances");
 
     await page.goto(`${BASE_URL}/#/retail/payment`);
     assert.equal(await page.locator('[data-action="payment"]').isDisabled(), true);

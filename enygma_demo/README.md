@@ -70,13 +70,31 @@ The identity ceremony is deliberately sequential: `sk_spend` appears first, foll
 
 Progress is stored in `sessionStorage`. Routes such as `#/retail`, `#/dvp`, and `#/auctions` resume the corresponding protocol, while action routes such as `#/dvp/seller-holdings`, `#/dvp/settlement`, and `#/dvp/audit` open one specific walkthrough screen. “Reset protocol” keeps the global identity; “Reset entire demo” clears everything in the current browser session.
 
+## Institutional payments
+
+The Institutional walkthrough follows registration → pairwise channels → owner funding → payment construction → public chain → trading controls → audit access. It has no private-bridge, channel-freeze, or separate Perspectives step.
+
+The owner explicitly funds the registered accounts with EN. The payer workspace lists all ten registered users and their public balance commitments. Any user can be selected as payer or recipient. A batch contains either two accounts (confidential transfer) or six accounts (the payer, recipient, and four selectable zero-value participants). The payer first calculates the batch, generates its proof, then posts it for verification. Account balances change together only after verification completes.
+
+`js/institutional-crypto.js` evaluates Poseidon and Pedersen commitments with the exact field, subgroup order, G and H generators used by `enygma_payments/contracts/enygma/contracts/CurveBabyJubJub.sol`. Its optimized Poseidon rounds follow `enygma_payments/gnark-server/poseidon/poseidon.go`; `node scripts/sync-institutional-constants.cjs` extracts the constants from that package. The calculations use the current circuit's nullifier and directional per-slot nonce for tags and random factors. The payer's random delta is the sum of the other slots' hashes; the other slots negate their hashes. Consequently, both value and randomness are conserved and the commitment deltas sum to `(0, 1)`.
+
+Each calculation exposes `Δvᵢ`, `rᵢ`, `Δvᵢ·G`, `rᵢ·H`, `ΔCᵢ`, and `Bᵢ′ = Bᵢ + ΔCᵢ` in the payer workspace. The public posting exposes sorted account IDs, commitment points, public signals and a Groth16 proof reference. The contract sequence follows `Enygma.transfer`: verifier, public-input/state binding, confirmed fingerprints, epoch/domain checks, nullifier consumption, then atomic balance updates. The proof and transaction panels visualize this call path; the arithmetic and state consistency checks execute in the browser.
+
+The public-chain table shows all registered balance commitments and every posted batch. It defaults to sealed values. Selecting a participant opens only that account's balance and payment deltas; the auditor screen opens all accounts that granted view-key access at registration. Zero-value participants receive fresh commitment points without changing their balances.
+
+Contract pause/resume is explicitly **owner-only**. The auditor's view-key access does not grant owner authority. The separate auditor user controls freeze or restore an account's eligibility for inclusion in payment batches; unfreezing a user does not override a contract pause.
+
+Deployment compatibility: the current Solidity transfer ABI and deployed verifier support **k=6** (`DEFAULT_SIZE`, 81 public signals). The configurable gnark circuit supports different commitment counts, but deploying a k=2 path requires corresponding verifier/ABI changes. The k=2 selection and per-user trading restrictions are requested browser behaviors; the current `Enygma.sol` has no per-user freeze entry point. These changes remain entirely inside `enygma_demo`; no contracts, circuits or deployment scripts are changed.
+
+`tests/institutional-test.cjs` checks source constants, independent cryptographic vectors, both batch sizes, selectable roles and membership, conserved balances, failed/tampered payments, owner-only pause, independent user restrictions, role-specific openings, reload behavior and mobile layout. Older institutional placeholder-payment and obsolete bridge/channel-freeze records are removed when loading a saved session; setup and other protocols remain intact.
+
 ## Audit access
 
 Every participant uses long-term auditing by default. After public-key registration, a separate operation creates an ML-KEM-768 envelope for the participant’s view secret and shares it with the configured auditor, allowing that auditor to inspect later transactions involving the participant.
 
 An additional regulator has a separate public key and no standing access. In protocols that demonstrate selective disclosure, a participant can share a symmetric note-data key with that regulator for one chosen encrypted payload only. DvP instead demonstrates the long-term auditor path already established during registration: its audit screen compares what an outsider, one ordinary participant, and the auditor can open after settlement. The outsider sees only commitments and updated roots; a participant opens only its own received note; the auditor uses the registered encrypted `sk_view` envelopes to open both encrypted output notes. No second disclosure action is required. Notes use `Poseidon(pk_spend, salt, amount, token_id)`. ML-KEM-768 and HKDF-SHA256 derive the note salt and encryption key; AES-256-GCM protects the token identifier and amount. DvP swap payloads use ChaCha20-Poly1305 and also carry the settlement salt.
 
-Neither access path reveals spend keys or grants spending, freezing, or administrative authority. Auctions also generate a separate auctioneer ML-KEM-768 keypair for bid decryption and bind it to one auction reference; it is not a participant, auditor, or regulator key. The auctioneer may inspect and compare bids after the timeout but cannot spend them or choose a different commitment without violating the highest-valid-bid proof.
+Neither disclosure path reveals spend keys or grants spending or contract-owner authority. Institutional user-trading controls are a separate auditor action. Auctions also generate a separate auctioneer ML-KEM-768 keypair for bid decryption and bind it to one auction reference; it is not a participant, auditor, or regulator key. The auctioneer may inspect and compare bids after the timeout but cannot spend them or choose a different commitment without violating the highest-valid-bid proof.
 
 ## Traffic and commitment leaves
 

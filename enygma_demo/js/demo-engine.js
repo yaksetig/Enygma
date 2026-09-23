@@ -1,4 +1,6 @@
 import { PARTY_NAMES, PROTOCOL_IDS, PROTOCOLS, PROTOCOL_PRIMITIVES, spendPublicKeyFor, initializationSteps } from "./config.js";
+import { spendPublic } from "./institutional-crypto.js";
+import { institutionalState, mintInstitutional, buildInstitutionalPayment, validateInstitutionalPayment, institutionalBinding, settleInstitutionalPayment } from "./institutional.js";
 
 const STORAGE_KEY = "enygma-demo-state-v12";
 const VERSION = 12;
@@ -29,7 +31,7 @@ function token(prefix, label, length = 64) {
 function spendPublicKeys(secret) {
   return {
     spendPublicKey: token("spend_pk_", `Poseidon(${secret})`),
-    institutionalSpendPublicKey: token("spend_pk_", `Poseidon(${secret},${secret}) mod subgroup-order`)
+    institutionalSpendPublicKey: `spend_pk_${spendPublic(secret).toString(16).padStart(64, "0")}`
   };
 }
 
@@ -299,8 +301,6 @@ function blankProtocol(id) {
     flow: {
       channels: false,
       channelPairs: [],
-      frozen: false,
-      bridgeReady: false,
       retailRecipient: null,
       retailTagChannel: null,
       issued: 0,
@@ -360,7 +360,7 @@ export class DemoEngine extends EventTarget {
       if (parsed?.version === VERSION && parsed.protocols) {
         // Keep existing walkthrough progress while adding the institutional derivation.
         for (const identity of [...(parsed.identities || []), parsed.identityCeremony].filter(Boolean)) {
-          if (identity.spendPublicKey && !identity.institutionalSpendPublicKey) {
+          if (identity.spendPublicKey) {
             identity.institutionalSpendPublicKey = spendPublicKeys(identity.spendPrivateKey).institutionalSpendPublicKey;
           }
         }
@@ -369,6 +369,15 @@ export class DemoEngine extends EventTarget {
         if (institutional) {
           institutional.leaves = [];
           institutional.trees = {};
+          delete institutional.flow.frozen;
+          delete institutional.flow.bridgeReady;
+          institutional.transactions = institutional.transactions.filter(tx => !["bridge", "freeze", "resume"].includes(tx.type) && (tx.type !== "payment" || tx.batch));
+          institutional.ledger = institutional.ledger.filter(entry => !["bridge", "freeze", "resume"].includes(entry.kind) && (entry.kind !== "payment" || !entry.label.includes("envelope")));
+          const accountState = institutionalState(institutional);
+          if (["submitted", "verifying"].includes(accountState.draft?.status)) {
+            accountState.draft.status = "proved";
+            accountState.draft.verification = 0;
+          }
         }
         for (const registration of institutional?.registrations || []) {
           const identity = parsed.identities.find(item => item.id === registration.partyId);
@@ -660,10 +669,72 @@ export class DemoEngine extends EventTarget {
         tx = this.addTransaction(id, action, `${p.flow.channelPairs.length} pairwise channels established`);
         break;
       }
-      case "institutional:payment": tx = this.addTransaction(id, action, "Private payment envelope posted", { encryptedNote: { ownerPartyId: "party-3", tokenId: "USD", amount: 125000 } }); break;
-      case "institutional:freeze": p.flow.frozen = true; tx = this.addTransaction(id, action, "Channel frozen by policy operator"); break;
-      case "institutional:resume": p.flow.frozen = false; tx = this.addTransaction(id, action, "Channel resumed by policy operator"); break;
-      case "institutional:bridge": p.flow.bridgeReady = true; tx = this.addTransaction(id, action, "Private bridge transfer completed", { encryptedNote: { ownerPartyId: "party-4", tokenId: "USD", amount: 75000 } }); break;
+      case "institutional:fund": {
+        mintInstitutional(p, Number(payload.amount));
+        tx = this.addTransaction(id, action, `Owner minted ${Number(payload.amount).toLocaleString("en-US")} EN to each registered account`);
+        break;
+      }
+      case "institutional:calculate": {
+        institutionalState(p).draft = buildInstitutionalPayment(p, this.state.identities, payload);
+        break;
+      }
+      case "institutional:edit-payment": institutionalState(p).draft = null; break;
+      case "institutional:prove": {
+        const draft = institutionalState(p).draft;
+        const checks = validateInstitutionalPayment(p, draft);
+        const expected = buildInstitutionalPayment(p, this.state.identities, draft);
+        if (institutionalBinding(expected) !== institutionalBinding(draft)) throw new Error("Payment witness or public inputs changed. Calculate the batch again.");
+        draft.checks = checks;
+        draft.proof = { id: token("groth16_", institutionalBinding(draft), 64), binding: institutionalBinding(draft) };
+        draft.status = "proved";
+        break;
+      }
+      case "institutional:post": {
+        const s = institutionalState(p), draft = s.draft;
+        validateInstitutionalPayment(p, draft);
+        if (!draft.proof || draft.proof.binding !== institutionalBinding(draft)) throw new Error("Generate the ZK proof before posting.");
+        const expected = buildInstitutionalPayment(p, this.state.identities, draft);
+        if (institutionalBinding(expected) !== institutionalBinding(draft)) throw new Error("Payment inputs changed. Calculate and prove a fresh batch.");
+        draft.status = "submitted";
+        draft.verification = 0;
+        this.persist();
+        try {
+          await this.pause(400);
+          draft.status = "verifying";
+          for (let i = 1; i <= 6; i++) {
+            draft.verification = i;
+            this.persist();
+            await this.pause(220);
+          }
+          const batch = settleInstitutionalPayment(p);
+          tx = this.addTransaction(id, "payment", `${batch.k} commitment deltas verified and applied`, { from: -1, to: -1 });
+          Object.assign(tx, { batch, proof: batch.proof.id, from: "relayer", to: "Enygma", block: p.ledger[0].block });
+        } catch (error) {
+          draft.status = "proved";
+          draft.verification = 0;
+          this.persist();
+          throw error;
+        }
+        break;
+      }
+      case "institutional:pause-contract":
+      case "institutional:resume-contract": {
+        if (payload.actor !== "owner") throw new Error("Only the contract owner can pause or resume the contract.");
+        const s = institutionalState(p);
+        s.paused = action === "pause-contract";
+        tx = this.addTransaction(id, action, s.paused ? "Owner paused the Enygma contract" : "Owner resumed the Enygma contract");
+        break;
+      }
+      case "institutional:freeze-user":
+      case "institutional:unfreeze-user": {
+        if (payload.actor !== "auditor") throw new Error("Switch to the auditor to manage user trading eligibility.");
+        const s = institutionalState(p), accountId = Number(payload.accountId);
+        const account = s.accounts.find(a => a.accountId === accountId);
+        if (!account) throw new Error("Choose a registered user.");
+        s.frozen = action === "freeze-user" ? [...new Set([...s.frozen, accountId])] : s.frozen.filter(id => id !== accountId);
+        tx = this.addTransaction(id, action, `Auditor ${action === "freeze-user" ? "froze" : "unfroze"} ${account.name} from trading`);
+        break;
+      }
       case "retail:configure-tags": {
         const recipientIndex = Number(payload.recipientIndex);
         const recipient = p.registrations[recipientIndex];

@@ -1,5 +1,7 @@
 import { PROTOCOLS, PROTOCOL_IDS, SETUP_STEPS, PARTY_NAMES, PROTOCOL_PRIMITIVES, spendPublicKeyFor, initializationSteps } from "./config.js";
 import { engineAdapter } from "./demo-engine.js";
+import { institutionalState } from "./institutional.js";
+import { institutionalUI, institutionalFundingCard, institutionalPaymentCard, institutionalChainCard, institutionalControlCard, institutionalAuditCard, institutionalPayload, changeInstitutionalControl, inputInstitutionalAmount } from "./institutional-ui.js";
 
 const $ = selector => document.querySelector(selector);
 const els = {
@@ -227,7 +229,7 @@ function publicNetworkRegistry(p) {
   const channel = p.id === "retail" ? p.flow.retailTagChannel : null;
   const rows = p.registrations.map((registration, index) => {
     const bit = channel ? channel.candidateIndices.includes(index) : null;
-    return `<tr data-public-party-row="${index}"><td><span class="registry-index">${String(index).padStart(2, "0")}</span></td><td><strong>${registration.name}</strong>${index === 0 ? "<small>You</small>" : ""}</td><td>${registryKey("spend public key", registration.spendPublicKey)}</td><td>${registryKey("view public key", registration.viewPublicKey)}</td>${p.id === "retail" ? `<td><span class="compact-bitmap ${bit === null ? "unset" : bit ? "included" : "outside"}">${bit === null ? "—" : bit ? "1" : "0"}</span></td>` : ""}</tr>`;
+    return `<tr data-public-party-row="${index}"><td><span class="registry-index">${String(p.id === "institutional" ? index + 1 : index).padStart(2, "0")}</span></td><td><strong>${registration.name}</strong>${index === 0 ? "<small>You</small>" : ""}</td><td>${registryKey("spend public key", registration.spendPublicKey)}</td><td>${registryKey("view public key", registration.viewPublicKey)}</td>${p.id === "retail" ? `<td><span class="compact-bitmap ${bit === null ? "unset" : bit ? "included" : "outside"}">${bit === null ? "—" : bit ? "1" : "0"}</span></td>` : ""}</tr>`;
   }).join("");
   return `<section class="network-registry" aria-label="Public participant registry"><header><div><p class="eyebrow">Public blockchain state</p><h3>Participant registry</h3></div><span>${p.registrations.length} entries</span></header><p>Names and both public keys remain available throughout the protocol.</p><div class="network-registry-scroll"><table><thead><tr><th>#</th><th>Participant</th><th>pk_spend</th><th>pk_view</th>${p.id === "retail" ? "<th>Tag bit</th>" : ""}</tr></thead><tbody>${rows}</tbody></table></div>${channel ? `<footer><span>${channel.mode} channel</span><code>${channel.bitmap}</code></footer>` : ""}</section>`;
 }
@@ -311,10 +313,7 @@ function auditCard(p) {
 }
 
 function publicChainCard(p) {
-  if (p.id === "institutional") {
-    const payments = p.transactions.filter(tx => tx.encryptedPayload);
-    return `<article class="panel flow-card full"><div class="panel-heading"><div><p class="eyebrow">Public chain view</p><h2>Confidential balance commitments</h2></div></div><p>Institutional balances use Pedersen commitments on BabyJubJub: <code>C = v·G + r·H</code>. The public network verifies a Groth16 proof over BN254 for each balance update; amounts and blinding factors remain private.</p><div class="transaction-list">${payments.map(tx => `<div class="transaction"><div><strong>${tx.label}</strong><small>${short(tx.hash, 18, 8)}</small></div><span><b>${short(tx.encryptedPayload.commitment, 18, 8)}</b><small>Pedersen commitment</small></span><span class="policy-badge">Groth16 proof</span></div>`).join("") || `<div class="empty-state">Balance updates will appear here after a private payment.</div>`}</div></article>`;
-  }
+  if (p.id === "institutional") return institutionalChainCard(p);
   const treeIds = Object.keys(p.trees || {});
   return `<article class="panel flow-card full"><div class="panel-heading"><div><p class="eyebrow">Public chain view</p><h2>Commitment leaves</h2></div><span>${p.leaves.length} leaves</span></div>
     <p class="panel-copy">Each asset has its own Poseidon commitment tree and root. Every leaf below was produced by a source transaction. Privacy comes from a Groth16 proof of knowledge of an opening and membership of some leaf without revealing which leaf.</p>
@@ -464,15 +463,16 @@ function institutionalChannelCard(p) {
 }
 
 function institutionalSteps(p) {
+  const state = institutionalState(p);
+  const payerId = state.draft?.payerId || institutionalUI.payerId;
   return [
     { id: "registration", label: "Registration", actor: "Registered participants", complete: true, content: registrationReviewCard(p) },
     { id: "channels", label: "Pairwise channels", actor: "Registered institutions", complete: p.flow.channels, content: institutionalChannelCard(p) },
-    { id: "payment", label: "Private payment", actor: "Paying institution", complete: p.transactions.some(tx => tx.type === "payment"), content: `<article class="panel flow-card"><p class="eyebrow">Private payment</p><h2>Post a payment envelope</h2><p>ML-KEM-768 establishes the pairwise secret. Poseidon derives the transaction tags and blinding factors; Pedersen commitments on BabyJubJub hide the balances. A Groth16 proof over BN254 verifies the transfer.</p><div class="button-row"><button class="button button-primary" data-action="payment" ${!p.flow.channels || p.flow.frozen ? "disabled" : ""}>Post payment</button></div></article>` },
-    { id: "policy", label: "Policy control", actor: "System operator", complete: p.transactions.some(tx => tx.type === "freeze"), content: `<article class="panel flow-card"><p class="eyebrow">Operator control</p><h2>Freeze and resume a channel</h2><p>Exercise protocol policy without exposing any participant spend key.</p><div class="button-row"><button class="button button-auditor" data-action="${p.flow.frozen ? "resume" : "freeze"}" ${!p.flow.channels ? "disabled" : ""}>${p.flow.frozen ? "Resume channel" : "Freeze channel"}</button></div></article>` },
-    { id: "bridge", label: "Private bridge", actor: "Originating institution", complete: p.flow.bridgeReady, content: `<article class="panel flow-card"><p class="eyebrow">Interoperability</p><h2>Bridge private assets</h2><p>Create linked source and destination commitments with a compact receipt.</p><div class="button-row"><button class="button button-primary" data-action="bridge">Bridge assets</button></div></article>` },
-    { id: "perspectives", label: "Perspectives", actor: "Demo viewer", complete: false, content: `<article class="panel flow-card"><p class="eyebrow">Perspectives</p><h2>Inspect each protocol view</h2><p>Change perspective without changing the underlying transaction.</p><select aria-label="Institutional perspective"><option>Participant: own envelope details</option><option>Network: commitments only</option><option>Auditor: consented scope</option><option>Operator: policy controls</option></select></article>` },
-    { id: "audit", label: "Audit access", actor: "Auditor and regulator", complete: p.disclosures.length > 0, content: auditCard(p) },
-    { id: "chain", label: "Public chain", actor: "Public network", complete: p.transactions.some(tx => tx.encryptedPayload), content: publicChainCard(p) }
+    { id: "funding", label: "Fund accounts", actor: "Contract owner", complete: state.funded, content: institutionalFundingCard(p) },
+    { id: "payment", label: "Build payment", actor: `${p.registrations[payerId - 1]?.name} · Payer`, complete: p.transactions.some(tx => tx.batch), content: institutionalPaymentCard(p) },
+    { id: "chain", label: "Public chain", actor: institutionalUI.viewer === "public" ? "Public network" : p.registrations[Number(institutionalUI.viewer) - 1]?.name, complete: p.transactions.some(tx => tx.batch), content: institutionalChainCard(p) },
+    { id: "policy", label: "Trading controls", actor: institutionalUI.controlsRole === "owner" ? "Contract owner" : "Auditor", complete: p.transactions.some(tx => ["pause-contract", "freeze-user"].includes(tx.type)), content: institutionalControlCard(p) },
+    { id: "audit", label: "Audit access", actor: "Auditor", complete: p.transactions.some(tx => tx.batch), content: institutionalAuditCard(p) }
   ];
 }
 
@@ -675,7 +675,7 @@ function renderExperience(p) {
   const next = activeIndex < steps.length - 1 ? `<a class="button button-primary" href="#/${p.id}/${steps[activeIndex + 1].id}">Next: ${steps[activeIndex + 1].label} →</a>` : `<a class="button button-primary" href="#/choose">Finish walkthrough</a>`;
   els.experience.innerHTML = `<div class="experience-header"><div><p class="eyebrow">Protocol walkthrough · ${activeIndex + 1} of ${steps.length}</p><h2>${active.label}</h2></div><span class="context-badge">ONE STEP AT A TIME</span></div>
     <nav class="scenario-progress" aria-label="${PROTOCOLS[p.id].name} walkthrough">${stepLinks}</nav>
-    <div class="scenario-layout"><section class="scenario-page" aria-live="polite">${active.content}</section>${scenarioActivity(p)}</div>
+    <div class="scenario-layout ${p.id === "institutional" ? "institutional-layout" : ""}"><section class="scenario-page" aria-live="polite">${active.content}</section>${scenarioActivity(p)}</div>
     <nav class="scenario-footer" aria-label="Walkthrough navigation">${previous}${next}</nav>`;
   els.experience.querySelector("[data-scenario-actor]").textContent = active.actor;
 }
@@ -792,7 +792,7 @@ document.addEventListener("click", async event => {
     if (operations[command]) await run(...operations[command]);
   }
   if (action) {
-    let payload = {};
+    let payload = route === "institutional" ? institutionalPayload(action, event.target) : {};
     if (route === "dvp" && action === "mint-security") payload = { amount: $("#dvpMintSecurityAmount")?.value };
     if (route === "dvp" && action === "mint-cash") payload = { amount: $("#dvpMintCashAmount")?.value };
     if (route === "dvp" && action === "shield-security") payload = { amount: $("#dvpShieldSecurityAmount")?.value };
@@ -816,7 +816,12 @@ document.addEventListener("click", async event => {
   if (share) await run("Symmetric note-data key disclosed to additional regulator", () => engineAdapter.shareTransactionKey(route, share));
 });
 
+document.addEventListener("input", event => {
+  if (route === "institutional") inputInstitutionalAmount(event.target);
+});
+
 document.addEventListener("change", event => {
+  if (route === "institutional" && changeInstitutionalControl(event.target, engineAdapter.protocol(route))) { render(); return; }
   if (event.target.matches("[data-traffic]")) engineAdapter.setTraffic(route, event.target.checked, event.target.dataset.trafficAsset || null);
   if (event.target.matches("#auctionBidNote")) {
     const amountInput = $("#auctionBidAmount");
