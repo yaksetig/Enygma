@@ -18,9 +18,9 @@ let busy = false;
 let auditorGenerating = null;
 let auctionSettlementPerspective = "public";
 const RETAIL_TAG_MODES = [
-  { id: "none", name: "No privacy", detail: "Recipient only", explanation: "The single set bit identifies the recipient." },
-  { id: "subset", name: "Subset", detail: "Recipient + √N decoys", explanation: "The recipient is hidden among a smaller candidate set." },
-  { id: "rift", name: "Rift", detail: "All except exclusions", explanation: "The payer dissociates the channel from selected participants." },
+  { id: "none", name: "No privacy", detail: "Channel peer only", explanation: "The single set bit identifies the channel peer." },
+  { id: "subset", name: "Subset", detail: "Channel peer + √N decoys", explanation: "The channel peer is hidden among a smaller candidate set." },
+  { id: "rift", name: "Rift", detail: "All except exclusions", explanation: "The initiator dissociates the channel from selected participants." },
   { id: "full", name: "Full privacy", detail: "Every participant", explanation: "Every registry row is a candidate." }
 ];
 const retailTagDraft = retailUI.channelDraft;
@@ -248,11 +248,11 @@ function retailTagRegistry(p) {
     const included = candidates.includes(index);
     const excluded = mode === "rift" && exclusions.includes(index) && !isRecipient;
     const privateControl = isPayer
-      ? `<span class="tag-row-state payer">Payer</span>`
-      : `<button type="button" class="recipient-choice ${isRecipient ? "selected" : ""}" data-retail-recipient="${index}" aria-pressed="${isRecipient}">${isRecipient ? "Selected recipient" : "Select"}</button>${mode === "rift" && !isRecipient ? `<label class="rift-exclusion"><input type="checkbox" data-retail-exclusion="${index}" ${excluded ? "checked" : ""}> Exclude</label>` : ""}`;
+      ? `<span class="tag-row-state payer">Channel initiator</span>`
+      : `<button type="button" class="recipient-choice ${isRecipient ? "selected" : ""}" data-retail-recipient="${index}" aria-pressed="${isRecipient}">${isRecipient ? "Selected channel peer" : "Select peer"}</button>${mode === "rift" && !isRecipient ? `<label class="rift-exclusion"><input type="checkbox" data-retail-exclusion="${index}" ${excluded ? "checked" : ""}> Exclude</label>` : ""}`;
     return `<tr class="${included ? "tag-included" : "tag-outside"}" data-tag-party-row="${index}"><td><span class="registry-index">${String(index).padStart(2, "0")}</span></td><td><div class="registry-party"><span class="avatar">${registration.name.split(" ").map(value => value[0]).slice(0, 2).join("")}</span><span><strong>${registration.name}</strong>${isPayer ? "<small>You</small>" : ""}</span></div></td><td data-key="spend">${registryKey("spend public key", registration.spendPublicKey)}</td><td data-key="view">${registryKey("view public key", registration.viewPublicKey)}</td><td class="private-selection-cell">${privateControl}</td><td><span class="bitmap-membership ${included ? "included" : "outside"}"><b>${included ? "1" : "0"}</b><span>${included ? "Candidate" : "Outside"}</span></span></td></tr>`;
   }).join("");
-  return `<div class="tag-registry-boundary"><div class="tag-registry-labels"><span>PUBLIC PARTICIPANT REGISTRY</span><span>PRIVATE PAYER CONFIGURATION</span><span>PUBLIC BITMAP</span></div><div class="registry-table-wrap tag-registry-table"><table class="registry-table"><thead><tr><th>#</th><th>Participant</th><th>Spend public key</th><th>View public key</th><th>Recipient / Rift exclusion</th><th>Published bit</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+  return `<div class="tag-registry-boundary"><div class="tag-registry-labels"><span>PUBLIC PARTICIPANT REGISTRY</span><span>PRIVATE CHANNEL CONFIGURATION</span><span>PUBLIC BITMAP</span></div><div class="registry-table-wrap tag-registry-table"><table class="registry-table"><thead><tr><th>#</th><th>Participant</th><th>Spend public key</th><th>View public key</th><th>Channel peer / Rift exclusion</th><th>Published bit</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
 }
 
 function registrationProcess(p) {
@@ -486,7 +486,7 @@ function retailSteps(p) {
   return [
     { id: "registration", label: "Registration", actor: "Registered participants", complete: true, content: registrationReviewCard(p) },
     { id: "shielding", label: "Shield notes", actor: "You · Payer", complete: p.notes.some(n => n.ownerPartyId === "party-0"), content: retailShieldCard(p) },
-    { id: "private-tags", label: "Private channels", actor: "You · Payer", complete: state.channels.length > 0, content: retailChannelCard(p, modeCards, retailTagRegistry(p)) },
+    { id: "private-tags", label: "Private channels", actor: "You · Channel initiator", complete: state.channels.length > 0, content: retailChannelCard(p, modeCards, retailTagRegistry(p)) },
     { id: "payment", label: "Private payment", actor: "You · Payer", complete: p.transactions.some(t => t.type === "payment"), content: retailPaymentCard(p) },
     { id: "scan", label: "Recipient scan", actor: "Recipient wallet", complete: p.transactions.some(t => t.scanned), content: retailScanCard(p) },
     { id: "chain", label: "Chain & wallets", actor: "Public network / selected wallet", complete: p.leaves.length > 0, content: retailChainCard(p) },

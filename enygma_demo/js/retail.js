@@ -106,10 +106,10 @@ export async function executeRetail(engine, action, payload, token, candidates) 
     }
     if (action === "configure-tags") {
       const recipientIndex = Number(payload.recipientIndex), recipient = p.registrations[recipientIndex];
-      if (!recipient || recipientIndex === 0) throw new Error("Select a registered recipient other than the payer.");
+      if (!recipient || recipientIndex === 0) throw new Error("Select a registered channel peer other than yourself.");
       const mode = ["none", "subset", "rift", "full"].includes(payload.mode) ? payload.mode : "full";
       const excludedIndices = mode === "rift" ? [...new Set((payload.excludedIndices || []).map(Number).filter(i => Number.isInteger(i) && i >= 0 && i < p.registrations.length && i !== recipientIndex))] : [];
-      if (mode === "rift" && excludedIndices.length >= p.registrations.length - 1) throw new Error("Rift must leave more than the recipient. Choose No privacy for a single candidate.");
+      if (mode === "rift" && excludedIndices.length >= p.registrations.length - 1) throw new Error("Rift must leave more than the channel peer. Choose No privacy for a single candidate.");
       const candidateIndices = candidates(mode, p.registrations.length, recipientIndex, excludedIndices);
       const sharedSecret = randomField();
       const ch = { id: token("tag_channel_", `${sharedSecret}:${recipientIndex}`, 22), index: s.channels.length, senderPartyId: "party-0", recipientPartyId: recipient.partyId, mode, excludedIndices, candidateIndices, bitmap: p.registrations.map((_, i) => candidateIndices.includes(i) ? "1" : "0").join(""), sharedSecret, c1: token("mlkem_ct_", sharedSecret, 64), c2: token("channel_ct_", `${sharedSecret}:data`, 64) };
