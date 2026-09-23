@@ -478,15 +478,21 @@ export class DemoEngine extends EventTarget {
 
   async generateAuditorKey(id) {
     const protocol = this.protocol(id);
-    if (protocol.stage !== 1) return;
-    await this.pause(360);
+    if (protocol.stage !== 1 || protocol.auditor) return;
+    await this.pause(800);
     protocol.auditor = {
       algorithm: "ML-KEM-768",
       publicKey: token("mlkem_pub_", `${id}:auditor:public`, 80),
       privateKey: token("mlkem_sec_", `${id}:auditor:private`, 80),
     };
-    protocol.stage = 2;
     this.receipt(id, "auditor", "Auditor ML-KEM-768 keypair generated", true);
+    this.persist();
+  }
+
+  confirmAuditorKey(id) {
+    const protocol = this.protocol(id);
+    if (protocol.stage !== 1 || !protocol.auditor?.privateKey || !protocol.auditor?.publicKey) return;
+    protocol.stage = 2;
     this.persist();
   }
 

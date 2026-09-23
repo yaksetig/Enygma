@@ -28,7 +28,7 @@ async function clickAndWait(page, selector) {
 
 async function setupProtocol(page, id, all = true) {
   await page.goto(`${BASE_URL}/#/${id}`);
-  for (const command of ["deploy", "auditor", "configure"]) await clickAndWait(page, `[data-command="${command}"]`);
+  for (const command of ["deploy", "auditor", "auditor-confirm", "configure"]) await clickAndWait(page, `[data-command="${command}"]`);
   if (await page.locator('[data-command="identity-spend-secret"]').count()) {
     for (const command of ["identity-spend-secret", "identity-spend-public", "identity-view-secret", "identity-view-public"]) {
       await clickAndWait(page, `[data-command="${command}"]`);

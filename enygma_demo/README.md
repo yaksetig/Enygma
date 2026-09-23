@@ -47,7 +47,7 @@ Initialization registers the configured circuit verification keys in order, conn
 Every protocol follows the same ordered setup:
 
 1. The system operator deploys each contract in script order, then initializes and connects the suite.
-2. The auditor generates a protocol-specific ML-KEM-768 keypair.
+2. The auditor runs ML-KEM-768 KeyGen in its private workspace. Both outputs appear together: the secret key stays with the auditor and the public key goes to the operator. The keypair remains visible until the visitor continues to public-key registration.
 3. The operator registers the auditor public key in the protocol configuration.
 4. The visitor completes the personal key ceremony in strict order: spend secret key, spend public key, view secret key, view public key—then confirms the global Enygma identity or reviews and reuses its secrets with the selected protocol’s spend-key derivation.
 5. The visitor first registers both public keys, then separately encrypts and shares the view key with the auditor. A “Register others” action visibly performs the same two operations for each of the nine additional parties. The registry table exposes every participant name, spend public key, view public key, key-registration status, and auditor-sharing status; full keys can be expanded inline.

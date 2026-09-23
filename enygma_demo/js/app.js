@@ -11,6 +11,7 @@ const els = {
 
 let route = "choose";
 let busy = false;
+let auditorGenerating = null;
 let auctionSettlementPerspective = "public";
 const RETAIL_TAG_MODES = [
   { id: "none", name: "No privacy", detail: "Recipient only", explanation: "The single set bit identifies the recipient." },
@@ -114,13 +115,28 @@ function renderDeploy(p) {
 }
 
 function renderAuditor(p) {
-  return `${stageHero(2, "auditor", "Generate the auditor key", "Create a protocol-specific ML-KEM-768 keypair. This key can reveal only the audit scope participants grant; it never grants spending, freezing, or operator authority.")}
-    <div class="stage-body">${deploymentReceipts(p)}<div class="callout">The auditor generates and retains this keypair. The system operator receives only the public key for configuration.</div><div class="button-row" style="margin-top:18px"><button class="button button-auditor" data-command="auditor">Generate ML-KEM-768 keypair</button></div></div>`;
+  const keypair = p.auditor;
+  const generating = auditorGenerating === p.id;
+  const phase = keypair ? "complete" : generating ? "generating" : "empty";
+  const waiting = generating ? "Generating…" : "Waiting for auditor to run KeyGen";
+  return `${stageHero(2, "auditor", "The auditor generates its keypair", "The auditor runs ML-KEM-768 KeyGen in its own private workspace. One operation creates the auditor’s secret key and public key together.")}
+    <div class="stage-body">
+      <section class="auditor-keygen" data-auditor-keygen="${phase}" aria-label="Auditor key generation" aria-busy="${generating}">
+        <header class="auditor-keygen-heading"><span class="ceremony-icon">AU</span><div><p class="eyebrow">Auditor’s private workspace</p><h3>Generated and owned by the auditor</h3></div></header>
+        <div class="auditor-keygen-operation"><code>ML-KEM-768.KeyGen()</code><span role="status">${keypair ? "Keypair generated" : generating ? "Generating both keys…" : "Two outputs · one keypair"}</span></div>
+        <div class="ceremony-grid auditor-keygen-outputs">
+          <article class="key-output secret-output ${keypair ? "is-ready" : ""}" data-auditor-key="secret"><label>Secret key · sk_audit</label><span class="key-value">${keypair?.privateKey || waiting}</span><strong class="key-custody">Stays with the auditor</strong><small>Private decapsulation key for opening audit access granted by participants.</small></article>
+          <article class="key-output public-output ${keypair ? "is-ready" : ""}" data-auditor-key="public"><label>Public key · pk_audit</label><span class="key-value">${keypair?.publicKey || waiting}</span><strong class="key-custody">Shared with the system operator</strong><small>Public encapsulation key registered in this protocol’s configuration.</small></article>
+        </div>
+      </section>
+      <div class="ceremony-footer"><p>${keypair ? "Both keys are ready. The auditor keeps sk_audit; only pk_audit goes to the system operator." : "The auditor alone generates and holds this keypair."}</p>${keypair ? `<button class="button button-auditor" data-command="auditor-confirm">Continue with public key →</button>` : `<button class="button button-auditor" data-command="auditor" ${generating ? "disabled" : ""}>${generating ? "Auditor generating keypair…" : "Auditor: generate keypair"}</button>`}</div>
+      ${deploymentReceipts(p)}
+    </div>`;
 }
 
 function renderConfigure(p) {
   return `${stageHero(3, "operator", "Register the auditor public key", "The operator writes the auditor’s public key into this protocol’s independent system configuration.")}
-    <div class="stage-body"><div class="detail-card"><label>Auditor public key</label><span class="key-value">${p.auditor.publicKey}</span></div><div class="button-row" style="margin-top:18px"><button class="button button-primary" data-command="configure">Set auditor key in system</button></div></div>`;
+    <div class="stage-body"><div class="callout">The auditor has shared <code>pk_audit</code> with the system operator. The secret key <code>sk_audit</code> stays in the auditor’s private workspace.</div><div class="detail-card auditor-public-handoff"><label>Auditor public key · pk_audit</label><span class="key-value">${p.auditor.publicKey}</span></div><div class="button-row" style="margin-top:18px"><button class="button button-primary" data-command="configure">Set auditor key in system</button></div></div>`;
 }
 
 function renderIdentity(p) {
@@ -755,7 +771,14 @@ document.addEventListener("click", async event => {
   if (command) {
     const operations = {
       deploy: ["Contract suite deployed", () => engineAdapter.deploy(route)],
-      auditor: ["Auditor key generated", () => engineAdapter.generateAuditorKey(route)],
+      auditor: ["Auditor secret and public keys generated", async () => {
+        const id = route;
+        auditorGenerating = id;
+        render();
+        try { await engineAdapter.generateAuditorKey(id); }
+        finally { auditorGenerating = null; }
+      }],
+      "auditor-confirm": ["Auditor public key shared with operator", () => engineAdapter.confirmAuditorKey(route)],
       configure: ["Auditor key configured", () => engineAdapter.configureAuditor(route)],
       "identity-spend-secret": ["Spend secret key generated", () => engineAdapter.generateSpendSecret(route)],
       "identity-spend-public": ["Spend public key generated", () => engineAdapter.generateSpendPublic(route)],
