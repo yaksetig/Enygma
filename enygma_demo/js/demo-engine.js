@@ -1,4 +1,5 @@
 import { PARTY_NAMES, PROTOCOL_IDS, PROTOCOLS, PROTOCOL_PRIMITIVES, spendPublicKeyFor, initializationSteps } from "./config.js";
+import { executeRetail, migrateRetail, retailTree, retailTraffic } from "./retail.js";
 import { spendPublic } from "./institutional-crypto.js";
 import { institutionalState, mintInstitutional, buildInstitutionalPayment, validateInstitutionalPayment, institutionalBinding, settleInstitutionalPayment } from "./institutional.js";
 
@@ -201,6 +202,7 @@ function recordPrivateNote(protocol, tx, details) {
 }
 
 function rebuildCommitmentTrees(protocol) {
+  if (protocol.id === "retail") { retailTree(protocol); return; }
   const groups = new Map();
   for (const leaf of protocol.leaves) {
     if (!leaf.assetId) {
@@ -424,6 +426,7 @@ export class DemoEngine extends EventTarget {
         const retailFlow = parsed.protocols.retail?.flow;
         if (retailFlow && typeof retailFlow.retailRecipient === "undefined") retailFlow.retailRecipient = null;
         if (retailFlow && typeof retailFlow.retailTagChannel === "undefined") retailFlow.retailTagChannel = null;
+        if (parsed.protocols.retail) migrateRetail(parsed.protocols.retail);
         return parsed;
       }
     } catch { /* A clean session is a valid starting point. */ }
@@ -735,47 +738,12 @@ export class DemoEngine extends EventTarget {
         tx = this.addTransaction(id, action, `Auditor ${action === "freeze-user" ? "froze" : "unfroze"} ${account.name} from trading`);
         break;
       }
-      case "retail:configure-tags": {
-        const recipientIndex = Number(payload.recipientIndex);
-        const recipient = p.registrations[recipientIndex];
-        const mode = ["none", "subset", "rift", "full"].includes(payload.mode) ? payload.mode : "full";
-        if (!recipient || recipient.partyId === "party-0") throw new Error("Select a registered recipient other than the payer.");
-        const excludedIndices = mode === "rift" ? (payload.excludedIndices || []).map(Number).filter(index => Number.isInteger(index) && index >= 0 && index < p.registrations.length && index !== recipientIndex) : [];
-        const candidateIndices = retailTagCandidateIndices(mode, p.registrations.length, recipientIndex, excludedIndices);
-        p.flow.retailRecipient = {
-          partyId: recipient.partyId,
-          name: recipient.name,
-          spendPublicKey: recipient.spendPublicKey,
-          viewPublicKey: recipient.viewPublicKey
-        };
-        p.flow.retailTagChannel = {
-          id: token("tag_channel_", `${id}:party-0:${recipient.partyId}:${mode}`, 22),
-          senderPartyId: "party-0",
-          recipientPartyId: recipient.partyId,
-          mode,
-          excludedIndices,
-          candidateIndices,
-          bitmap: Array.from({ length: p.registrations.length }, (_, index) => candidateIndices.includes(index) ? "1" : "0").join(""),
-          c1: token("mlkem_ct_", `${id}:${recipient.viewPublicKey}:tag-channel`, 54),
-          c2: token("channel_ct_", `${id}:${recipient.partyId}:${mode}:channel-data`, 54)
-        };
-        tx = this.addTransaction(id, action, `Payer established a ${mode} private-tag channel with ${candidateIndices.length} bitmap candidates`, { from: 0, to: recipientIndex });
-        break;
-      }
-      case "retail:payment": {
-        if (!p.flow.retailRecipient || !p.flow.retailTagChannel) throw new Error("Establish the private-tag channel before creating a payment.");
-        const amount = positiveAmount(payload.amount, "Payment amount");
-        const recipientIndex = p.registrations.findIndex(item => item.partyId === p.flow.retailRecipient.partyId);
-        tx = this.addTransaction(id, action, `Private payment sent to ${p.flow.retailRecipient.name}`, { leaves: 2, from: 0, to: recipientIndex, encryptedNote: { ownerPartyId: p.flow.retailRecipient.partyId, tokenId: "USD", amount } });
-        tx.tagChannelId = p.flow.retailTagChannel.id;
-        tx.privateTag = token("tag_", `${id}:${tx.id}:${p.flow.retailTagChannel.id}`, 40);
-        break;
-      }
-      case "retail:scan": {
-        if (!p.transactions.some(item => item.type === "payment")) throw new Error("Submit the private payment before the recipient scans for it.");
-        tx = this.addTransaction(id, action, `${p.flow.retailRecipient?.name || "Recipient"} recovered one matching private note`, { from: 1, to: 1 });
-        break;
-      }
+      case "retail:mint-cash":
+      case "retail:shield":
+      case "retail:configure-tags":
+      case "retail:payment":
+      case "retail:scan":
+        return executeRetail(this, action, payload, token, retailTagCandidateIndices);
       case "dvp:propose-terms": {
         if (p.flow.dvpTerms.status !== "draft") throw new Error("The DvP terms have already been proposed.");
         if (p.flow.sellerShieldedSecurity <= 0 || p.flow.buyerShieldedCash <= 0) throw new Error("Both counterparties must shield their holdings before negotiating terms.");
@@ -1125,6 +1093,7 @@ export class DemoEngine extends EventTarget {
     const timer = setInterval(() => {
       const protocol = this.protocol(id);
       if (!protocol.traffic) return;
+      if (id === "retail") { retailTraffic(this, token); this.persist(); return; }
       const count = protocol.transactions.filter(tx => tx.background).length + 1;
       const type = id === "retail" ? "background-payment" : "background-shield";
       const label = id === "retail" ? `Background payment ${count}` : `Background participant shielded holding ${count}`;

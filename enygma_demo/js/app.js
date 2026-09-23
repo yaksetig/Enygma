@@ -1,3 +1,5 @@
+import { retailState } from "./retail.js";
+import { retailUI, retailShieldCard, retailChannelCard, retailPaymentCard, retailScanCard, retailChainCard, retailPayload, retailInput, retailChange, retailClick } from "./retail-ui.js";
 import { PROTOCOLS, PROTOCOL_IDS, SETUP_STEPS, PARTY_NAMES, PROTOCOL_PRIMITIVES, spendPublicKeyFor, initializationSteps } from "./config.js";
 import { engineAdapter } from "./demo-engine.js";
 import { institutionalState } from "./institutional.js";
@@ -21,7 +23,7 @@ const RETAIL_TAG_MODES = [
   { id: "rift", name: "Rift", detail: "All except exclusions", explanation: "The payer dissociates the channel from selected participants." },
   { id: "full", name: "Full privacy", detail: "Every participant", explanation: "Every registry row is a candidate." }
 ];
-const retailTagDraft = { recipientIndex: 1, mode: "full", excludedIndices: new Set([8, 9]) };
+const retailTagDraft = retailUI.channelDraft;
 
 function short(value, lead = 15, tail = 8) {
   if (!value) return "—";
@@ -226,21 +228,20 @@ function retailTagCandidateIndices(mode, recipientIndex, excludedIndices = []) {
 }
 
 function publicNetworkRegistry(p) {
-  const channel = p.id === "retail" ? p.flow.retailTagChannel : null;
+  const retail = p.id === "retail" ? retailState(p) : null;
+  const scanPayment = retail && screenFromHash() === "scan" ? p.transactions.find(t => t.id === retailUI.txId && t.type === "payment") || p.transactions.find(t => t.type === "payment") : null;
+  const channel = retail ? retail.channels.find(c => c.id === (scanPayment?.tagChannelId || retailUI.channelId)) || retail.channels.at(-1) : null;
   const rows = p.registrations.map((registration, index) => {
     const bit = channel ? channel.candidateIndices.includes(index) : null;
     return `<tr data-public-party-row="${index}"><td><span class="registry-index">${String(p.id === "institutional" ? index + 1 : index).padStart(2, "0")}</span></td><td><strong>${registration.name}</strong>${index === 0 ? "<small>You</small>" : ""}</td><td>${registryKey("spend public key", registration.spendPublicKey)}</td><td>${registryKey("view public key", registration.viewPublicKey)}</td>${p.id === "retail" ? `<td><span class="compact-bitmap ${bit === null ? "unset" : bit ? "included" : "outside"}">${bit === null ? "—" : bit ? "1" : "0"}</span></td>` : ""}</tr>`;
   }).join("");
-  return `<section class="network-registry" aria-label="Public participant registry"><header><div><p class="eyebrow">Public blockchain state</p><h3>Participant registry</h3></div><span>${p.registrations.length} entries</span></header><p>Names and both public keys remain available throughout the protocol.</p><div class="network-registry-scroll"><table><thead><tr><th>#</th><th>Participant</th><th>pk_spend</th><th>pk_view</th>${p.id === "retail" ? "<th>Tag bit</th>" : ""}</tr></thead><tbody>${rows}</tbody></table></div>${channel ? `<footer><span>${channel.mode} channel</span><code>${channel.bitmap}</code></footer>` : ""}</section>`;
+  return `<section class="network-registry" aria-label="Public participant registry"><header><div><p class="eyebrow">Public blockchain state</p><h3>Participant registry</h3></div><span>${p.registrations.length} entries</span></header><p>Names and both public keys remain available throughout the protocol.</p><div class="network-registry-scroll"><table><thead><tr><th>#</th><th>Participant</th><th>pk_spend</th><th>pk_view</th>${p.id === "retail" ? "<th>Tag bit</th>" : ""}</tr></thead><tbody>${rows}</tbody></table></div>${channel ? `<footer><span>${channel.mode} · channel ${channel.index ?? 0}</span><code>${channel.bitmap}</code></footer>` : ""}</section>`;
 }
 
 function retailTagRegistry(p) {
-  const channel = p.flow.retailTagChannel;
-  const mode = channel?.mode || retailTagDraft.mode;
-  const recipientIndex = channel ? p.registrations.findIndex(item => item.partyId === channel.recipientPartyId) : retailTagDraft.recipientIndex;
-  const exclusions = channel?.excludedIndices || [...retailTagDraft.excludedIndices];
-  const candidates = channel?.candidateIndices || retailTagCandidateIndices(mode, recipientIndex, exclusions);
-  const locked = Boolean(channel);
+  const { mode, recipientIndex } = retailTagDraft;
+  const exclusions = [...retailTagDraft.excludedIndices];
+  const candidates = retailTagCandidateIndices(mode, recipientIndex, exclusions);
   const rows = p.registrations.map((registration, index) => {
     const isPayer = index === 0;
     const isRecipient = index === recipientIndex;
@@ -248,7 +249,7 @@ function retailTagRegistry(p) {
     const excluded = mode === "rift" && exclusions.includes(index) && !isRecipient;
     const privateControl = isPayer
       ? `<span class="tag-row-state payer">Payer</span>`
-      : `<button type="button" class="recipient-choice ${isRecipient ? "selected" : ""}" data-retail-recipient="${index}" aria-pressed="${isRecipient}" ${locked ? "disabled" : ""}>${isRecipient ? "Selected recipient" : "Select"}</button>${mode === "rift" && !isRecipient ? `<label class="rift-exclusion"><input type="checkbox" data-retail-exclusion="${index}" ${excluded ? "checked" : ""} ${locked ? "disabled" : ""}> Exclude</label>` : ""}`;
+      : `<button type="button" class="recipient-choice ${isRecipient ? "selected" : ""}" data-retail-recipient="${index}" aria-pressed="${isRecipient}">${isRecipient ? "Selected recipient" : "Select"}</button>${mode === "rift" && !isRecipient ? `<label class="rift-exclusion"><input type="checkbox" data-retail-exclusion="${index}" ${excluded ? "checked" : ""}> Exclude</label>` : ""}`;
     return `<tr class="${included ? "tag-included" : "tag-outside"}" data-tag-party-row="${index}"><td><span class="registry-index">${String(index).padStart(2, "0")}</span></td><td><div class="registry-party"><span class="avatar">${registration.name.split(" ").map(value => value[0]).slice(0, 2).join("")}</span><span><strong>${registration.name}</strong>${isPayer ? "<small>You</small>" : ""}</span></div></td><td data-key="spend">${registryKey("spend public key", registration.spendPublicKey)}</td><td data-key="view">${registryKey("view public key", registration.viewPublicKey)}</td><td class="private-selection-cell">${privateControl}</td><td><span class="bitmap-membership ${included ? "included" : "outside"}"><b>${included ? "1" : "0"}</b><span>${included ? "Candidate" : "Outside"}</span></span></td></tr>`;
   }).join("");
   return `<div class="tag-registry-boundary"><div class="tag-registry-labels"><span>PUBLIC PARTICIPANT REGISTRY</span><span>PRIVATE PAYER CONFIGURATION</span><span>PUBLIC BITMAP</span></div><div class="registry-table-wrap tag-registry-table"><table class="registry-table"><thead><tr><th>#</th><th>Participant</th><th>Spend public key</th><th>View public key</th><th>Recipient / Rift exclusion</th><th>Published bit</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
@@ -477,39 +478,19 @@ function institutionalSteps(p) {
 }
 
 function retailSteps(p) {
-  const recipient = p.flow.retailRecipient;
-  const channel = p.flow.retailTagChannel;
-  const paymentComplete = p.transactions.some(tx => tx.type === "payment");
-  const scanComplete = p.transactions.some(tx => tx.type === "scan");
-  const activeMode = channel?.mode || retailTagDraft.mode;
-  const activeRecipientIndex = channel ? p.registrations.findIndex(item => item.partyId === channel.recipientPartyId) : retailTagDraft.recipientIndex;
-  const activeExclusions = channel?.excludedIndices || [...retailTagDraft.excludedIndices];
-  const activeCandidates = channel?.candidateIndices || retailTagCandidateIndices(activeMode, activeRecipientIndex, activeExclusions);
-  const activeRecipient = p.registrations[activeRecipientIndex];
-  const bitmap = channel?.bitmap || PARTY_NAMES.map((_, index) => activeCandidates.includes(index) ? "1" : "0").join("");
+  const state = retailState(p);
   const modeCards = RETAIL_TAG_MODES.map(mode => {
-    const count = retailTagCandidateIndices(mode.id, activeRecipientIndex, mode.id === "rift" ? activeExclusions : []).length;
-    return `<button type="button" class="tag-mode-card ${activeMode === mode.id ? "selected" : ""}" data-retail-tag-mode="${mode.id}" aria-pressed="${activeMode === mode.id}" ${channel ? "disabled" : ""}><span>${mode.name}</span><strong>${mode.detail}</strong><small>${mode.explanation}</small><b>${count} / ${PARTY_NAMES.length} bitmap rows</b></button>`;
+    const count = retailTagCandidateIndices(mode.id, retailTagDraft.recipientIndex, mode.id === "rift" ? [...retailTagDraft.excludedIndices] : []).length;
+    return `<button type="button" class="tag-mode-card ${retailTagDraft.mode === mode.id ? "selected" : ""}" data-retail-tag-mode="${mode.id}" aria-pressed="${retailTagDraft.mode === mode.id}"><span>${mode.name}</span><strong>${mode.detail}</strong><small>${mode.explanation}</small><b>${count} / ${PARTY_NAMES.length} bitmap rows</b></button>`;
   }).join("");
-  const tagContent = `<article class="panel flow-card wide"><div class="panel-heading"><div><p class="eyebrow">Private-tag channel setup</p><h2>Choose who scans for this payer</h2></div><span class="context-badge ${channel ? "complete" : ""}">${channel ? "CHANNEL ESTABLISHED" : "CONFIGURATION PREVIEW"}</span></div><p>The public registry supplies each participant’s <code>pk_spend</code> and <code>pk_view</code>. The payer privately selects a recipient and publishes a bitmap that determines which registered rows attempt the private tag; only the payer configuration column below identifies the intended recipient.</p><div class="tag-mode-grid" aria-label="Private tag privacy modes">${modeCards}</div>${retailTagRegistry(p)}<div class="tag-construction"><section><small>1 · Registry lookup</small><strong>${activeRecipient.name}</strong><span><code>pk_spend</code> + <code>pk_view</code></span></section><i>→</i><section><small>2 · Private channel data</small><strong>ML-KEM-768 c1 + AES-256-GCM c2</strong><span>${channel ? short(channel.c1, 15, 7) : "HKDF-SHA256 derives the channel key"}</span></section><i>→</i><section><small>3 · On-chain visibility</small><strong class="mono">${bitmap}</strong><span>${activeCandidates.length} candidate rows · recipient undisclosed within the set</span></section></div>${channel ? `<div class="channel-record"><span><small>Channel</small><strong class="mono">${short(channel.id, 18, 8)}</strong></span><span><small>Mode</small><strong>${RETAIL_TAG_MODES.find(mode => mode.id === channel.mode)?.name}</strong></span><span><small>Published bitmap</small><strong class="mono">${channel.bitmap}</strong></span></div>` : `<div class="button-row"><button class="button button-primary" data-action="configure-tags">Establish private-tag channel</button></div>`}</article>`;
-  const registryBinding = recipient ? `<div class="registry-binding-visual"><div class="binding-recipient"><small>Selected registry row</small><strong>${recipient.name}</strong><span>index ${String(activeRecipientIndex).padStart(2, "0")}</span></div><div class="binding-path"><span><small>pk_spend</small><strong class="mono">${short(recipient.spendPublicKey, 16, 7)}</strong></span><i>→</i><b>Recipient commitment</b></div><div class="binding-path"><span><small>pk_view</small><strong class="mono">${short(recipient.viewPublicKey, 16, 7)}</strong></span><i>→</i><b>Encrypted note data</b></div></div>` : `<div class="empty-state">Establish a private-tag channel from the registry before creating a payment.</div>`;
-  const payment = p.transactions.find(tx => tx.type === "payment");
-  const paymentContent = `<article class="panel flow-card"><div class="panel-heading"><div><p class="eyebrow">Payment construction · payer view</p><h2>Build the payment from registered keys</h2></div><span class="context-badge ${paymentComplete ? "complete" : ""}">${paymentComplete ? "PAYMENT PUBLISHED" : channel ? "KEYS BOUND" : "CHANNEL REQUIRED"}</span></div><p>The payer reads the selected public registry row. ML-KEM-768 encapsulates to <code>pk_view</code>; HKDF-SHA256 derives the note salt and encryption key with the labels <code>note salt</code> and <code>encryption key</code>. AES-256-GCM protects <code>token_id · amount</code>, and <code>C = Poseidon(pk_spend, salt, amount, token_id)</code> binds the note.</p>${registryBinding}<div class="payment-construction" aria-label="Private payment construction"><span><b>1</b><strong>Registry binding</strong><small>Selected pk_spend and pk_view</small></span><span><b>2</b><strong>Commitments</strong><small>Recipient output and payer change</small></span><span><b>3</b><strong>Groth16 proof</strong><small>BN254 · ownership, membership, conservation</small></span><span><b>4</b><strong>Private tag</strong><small>Poseidon(block_number, pk_spend, ss_field)</small></span></div>${payment ? `<div class="payment-publication"><span><small>Private tag</small><strong class="mono">${short(payment.privateTag, 17, 7)}</strong></span><span><small>Recipient commitment</small><strong class="mono">${short(payment.encryptedPayload?.commitment, 17, 7)}</strong></span><span><small>Published bitmap</small><strong class="mono">${channel.bitmap}</strong></span></div>` : `<div class="amount-action"><label>Payment amount · USD<input id="retailPaymentAmount" type="number" min="1" value="30" ${!channel ? "disabled" : ""}></label><button class="button button-primary" data-action="payment" ${!channel ? "disabled" : ""}>Construct proof and publish payment</button></div>`}</article>`;
-  const scanRows = channel ? p.registrations.map((registration, index) => {
-    const included = channel.candidateIndices.includes(index);
-    const isRecipient = registration.partyId === channel.recipientPartyId;
-    const outcome = !included ? "Skipped · bitmap bit 0" : isRecipient ? (scanComplete ? "Note opened and commitment matched" : "Will recover with sk_view") : (scanComplete ? "Authentication rejected" : "Will attempt decapsulation");
-    return `<tr class="${isRecipient && scanComplete ? "scan-match" : ""}"><td>${String(index).padStart(2, "0")}</td><td>${registration.name}</td><td><span class="compact-bitmap ${included ? "included" : "outside"}">${included ? "1" : "0"}</span></td><td>${outcome}</td></tr>`;
-  }).join("") : "";
-  const scanContent = `<article class="panel flow-card"><div class="panel-heading"><div><p class="eyebrow">Recipient discovery · wallet view</p><h2>Process the private-tag candidate set</h2></div><span class="context-badge ${scanComplete ? "complete" : ""}">${scanComplete ? "NOTE RECOVERED" : channel ? `${channel.candidateIndices.length} CANDIDATES` : "CHANNEL REQUIRED"}</span></div><p>Rows outside the bitmap skip this channel. Included wallets attempt ML-KEM-768 decapsulation and derive the channel key with HKDF-SHA256. Decoys fail AES-256-GCM authentication. The recipient matches the Poseidon tag, opens the note payload, derives its salt, and recomputes its Poseidon commitment.</p>${channel ? `<div class="table-wrap scan-table"><table><thead><tr><th>#</th><th>Registered wallet</th><th>Bitmap</th><th>Local result</th></tr></thead><tbody>${scanRows}</tbody></table></div><div class="button-row"><button class="button button-primary" data-action="scan" ${!paymentComplete || scanComplete ? "disabled" : ""}>${scanComplete ? "Candidate scan complete" : "Run candidate scan"}</button></div>` : `<div class="empty-state">No private-tag channel has been established.</div>`}</article>`;
   return [
     { id: "registration", label: "Registration", actor: "Registered participants", complete: true, content: registrationReviewCard(p) },
-    { id: "private-tags", label: "Private tags", actor: "Payer", complete: Boolean(channel), content: tagContent },
-    { id: "payment", label: "Private payment", actor: "Payer", complete: paymentComplete, content: paymentContent },
-    { id: "scan", label: "Recipient scan", actor: "Candidate wallets", complete: scanComplete, content: scanContent },
-    { id: "traffic", label: "Network traffic", actor: "Registered participants", complete: p.traffic, content: trafficCard(p) },
-    { id: "audit", label: "Audit access", actor: "Auditor and regulator", complete: p.disclosures.length > 0, content: auditCard(p) },
-    { id: "chain", label: "Public chain", actor: "Public network", complete: p.transactions.some(tx => tx.encryptedPayload), content: publicChainCard(p) }
+    { id: "shielding", label: "Shield notes", actor: "You · Payer", complete: p.notes.some(n => n.ownerPartyId === "party-0"), content: retailShieldCard(p) },
+    { id: "private-tags", label: "Private channels", actor: "You · Payer", complete: state.channels.length > 0, content: retailChannelCard(p, modeCards, retailTagRegistry(p)) },
+    { id: "payment", label: "Private payment", actor: "You · Payer", complete: p.transactions.some(t => t.type === "payment"), content: retailPaymentCard(p) },
+    { id: "scan", label: "Recipient scan", actor: "Recipient wallet", complete: p.transactions.some(t => t.scanned), content: retailScanCard(p) },
+    { id: "chain", label: "Chain & wallets", actor: "Public network / selected wallet", complete: p.leaves.length > 0, content: retailChainCard(p) },
+    { id: "audit", label: "Audit access", actor: "Auditor and regulator", complete: p.disclosures.length > 0, content: auditCard(p) }
   ];
 }
 
@@ -663,11 +644,14 @@ function scenarioActivity(p) {
 }
 
 function renderExperience(p) {
+  const oldTreeScroll = els.experience.querySelector(".retail-tree-scroll");
+  const oldScroll = oldTreeScroll ? { left: oldTreeScroll.scrollLeft, top: oldTreeScroll.scrollTop, count: oldTreeScroll.querySelectorAll("[data-retail-leaf]").length } : null;
+  const focused = p.id === "retail" ? document.activeElement?.id : null;
   const ready = engineAdapter.isReady(p.id);
   els.experience.hidden = !ready;
   if (!ready) return;
   const steps = scenarioSteps(p);
-  const requested = screenFromHash();
+  const requested = p.id === "retail" && screenFromHash() === "traffic" ? "shielding" : screenFromHash();
   const activeIndex = Math.max(0, steps.findIndex(step => step.id === requested));
   const active = steps[activeIndex];
   const stepLinks = steps.map((step, index) => `<a href="#/${p.id}/${step.id}" class="${index === activeIndex ? "active" : step.complete ? "complete" : ""}" ${index === activeIndex ? 'aria-current="step"' : ""}><span>${step.complete ? "✓" : index + 1}</span><strong>${step.label}</strong></a>`).join("");
@@ -675,9 +659,24 @@ function renderExperience(p) {
   const next = activeIndex < steps.length - 1 ? `<a class="button button-primary" href="#/${p.id}/${steps[activeIndex + 1].id}">Next: ${steps[activeIndex + 1].label} →</a>` : `<a class="button button-primary" href="#/choose">Finish walkthrough</a>`;
   els.experience.innerHTML = `<div class="experience-header"><div><p class="eyebrow">Protocol walkthrough · ${activeIndex + 1} of ${steps.length}</p><h2>${active.label}</h2></div><span class="context-badge">ONE STEP AT A TIME</span></div>
     <nav class="scenario-progress" aria-label="${PROTOCOLS[p.id].name} walkthrough">${stepLinks}</nav>
-    <div class="scenario-layout ${p.id === "institutional" ? "institutional-layout" : ""}"><section class="scenario-page" aria-live="polite">${active.content}</section>${scenarioActivity(p)}</div>
+    <div class="scenario-layout ${p.id === "institutional" ? "institutional-layout" : p.id === "retail" ? "retail-layout" : ""}"><section class="scenario-page" aria-live="polite">${active.content}</section>${scenarioActivity(p)}</div>
     <nav class="scenario-footer" aria-label="Walkthrough navigation">${previous}${next}</nav>`;
   els.experience.querySelector("[data-scenario-actor]").textContent = active.actor;
+  const currentScreen = `${p.id}/${active.id}`;
+  if (p.id === "retail" && els.experience.dataset.screen === currentScreen) {
+    const scroll = els.experience.querySelector(".retail-tree-scroll");
+    if (scroll && oldScroll) {
+      scroll.scrollLeft = p.leaves.length > oldScroll.count ? scroll.scrollWidth - scroll.clientWidth : oldScroll.left;
+      scroll.scrollTop = oldScroll.top;
+    }
+    if (!busy && focused) document.getElementById(focused)?.focus({ preventScroll: true });
+  }
+  if (p.id === "retail" && els.experience.dataset.screen !== currentScreen) {
+    const scroll = els.experience.querySelector(".retail-tree-scroll");
+    if (scroll) scroll.scrollLeft = Math.max(0, (scroll.scrollWidth - scroll.clientWidth) / 2);
+  }
+  els.experience.dataset.screen = currentScreen;
+  if (busy && p.id === "retail") els.experience.querySelectorAll("button, input, select").forEach(control => { control.disabled = true; });
 }
 
 function renderWorkspace() {
@@ -752,14 +751,15 @@ document.addEventListener("click", async event => {
     render();
     return;
   }
+  if (route === "retail" && retailClick(event.target)) { render(); return; }
   const tagMode = event.target.closest("[data-retail-tag-mode]")?.dataset.retailTagMode;
-  if (tagMode && !engineAdapter.protocol("retail").flow.retailTagChannel) {
+  if (tagMode) {
     retailTagDraft.mode = tagMode;
     render();
     return;
   }
   const recipientIndex = event.target.closest("[data-retail-recipient]")?.dataset.retailRecipient;
-  if (recipientIndex !== undefined && !engineAdapter.protocol("retail").flow.retailTagChannel) {
+  if (recipientIndex !== undefined) {
     retailTagDraft.recipientIndex = Number(recipientIndex);
     retailTagDraft.excludedIndices.delete(retailTagDraft.recipientIndex);
     render();
@@ -809,8 +809,8 @@ document.addEventListener("click", async event => {
     if (route === "auctions" && action === "mint-cash") payload = { amount: $("#auctionMintCashAmount")?.value };
     if (route === "auctions" && action === "shield-cash") payload = { amount: $("#auctionShieldCashAmount")?.value };
     if (route === "auctions" && action === "submit-bid") payload = { noteId: $("#auctionBidNote")?.value, amount: $("#auctionBidAmount")?.value };
+    if (route === "retail") payload = retailPayload(action);
     if (route === "retail" && action === "configure-tags") payload = { recipientIndex: retailTagDraft.recipientIndex, mode: retailTagDraft.mode, excludedIndices: [...retailTagDraft.excludedIndices] };
-    if (route === "retail" && action === "payment") payload = { amount: $("#retailPaymentAmount")?.value };
     await run("Protocol action completed", () => engineAdapter.executeProtocolAction(route, action, payload));
   }
   if (share) await run("Symmetric note-data key disclosed to additional regulator", () => engineAdapter.shareTransactionKey(route, share));
@@ -818,9 +818,15 @@ document.addEventListener("click", async event => {
 
 document.addEventListener("input", event => {
   if (route === "institutional") inputInstitutionalAmount(event.target);
+  if (route === "retail" && retailInput(event.target)) {
+    const id = event.target.id;
+    render();
+    document.getElementById(id)?.focus({ preventScroll: true });
+  }
 });
 
 document.addEventListener("change", event => {
+  if (route === "retail" && retailChange(event.target)) { render(); return; }
   if (route === "institutional" && changeInstitutionalControl(event.target, engineAdapter.protocol(route))) { render(); return; }
   if (event.target.matches("[data-traffic]")) engineAdapter.setTraffic(route, event.target.checked, event.target.dataset.trafficAsset || null);
   if (event.target.matches("#auctionBidNote")) {
@@ -831,7 +837,7 @@ document.addEventListener("change", event => {
       amountInput.value = String(Math.min(Number(amountInput.value) || selectedAmount, selectedAmount));
     }
   }
-  if (event.target.matches("[data-retail-exclusion]") && !engineAdapter.protocol("retail").flow.retailTagChannel) {
+  if (event.target.matches("[data-retail-exclusion]")) {
     const index = Number(event.target.dataset.retailExclusion);
     if (event.target.checked) retailTagDraft.excludedIndices.add(index);
     else retailTagDraft.excludedIndices.delete(index);
@@ -847,6 +853,12 @@ $("#resetAll").addEventListener("click", () => {
   if (confirm("Reset every protocol and remove the shared identity from this session?")) { engineAdapter.resetAll(); toast("Entire demo reset"); }
 });
 
+document.addEventListener("keydown", event => {
+  if (route === "retail" && ["Enter", " "].includes(event.key) && event.target.matches("[data-retail-leaf]")) {
+    event.preventDefault();
+    if (retailClick(event.target)) render();
+  }
+});
 window.addEventListener("hashchange", render);
 engineAdapter.addEventListener("change", render);
 engineAdapter.restoreTimers();

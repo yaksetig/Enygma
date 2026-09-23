@@ -80,7 +80,7 @@ export const PROTOCOLS = {
       contract("TagRegistry", "Publishes payment tags and encrypted payloads, indexed by block, so recipients can find and decrypt incoming messages.")
     ],
     initialization: [initializeVerifier, initializeDvp, ...["Payment", "Payment2in", "PaymentFee", "PaymentRelayerFeePublic"].map(name => initialize("Verifier", "addVerificationKey", [name])), registerMint, registerVault("Erc20CoinVault", "RaylsERC20", 1)],
-    actions: ["configure-tags", "payment", "scan", "traffic"]
+    actions: ["mint-cash", "shield", "configure-tags", "payment", "scan"]
   },
   dvp: {
     name: "Delivery versus Payment", short: "DvP", icon: "DvP",

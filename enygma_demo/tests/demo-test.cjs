@@ -206,7 +206,7 @@ function pass(name) { passed += 1; console.log(`  PASS  ${name}`); }
     assert.equal(await page.locator(".tag-registry-table .bitmap-membership.included").count(), 8);
     assert.equal(await page.locator('[data-tag-party-row="1"] [data-retail-exclusion]').count(), 0);
     await page.click('[data-retail-tag-mode="full"]');
-    await page.click('[data-action="configure-tags"]'); await page.waitForTimeout(40);
+    await clickAndWait(page, '[data-action="configure-tags"]');
     state = await page.evaluate(() => window.__ENYGMA_DEMO__.state());
     assert.deepEqual(state.protocols.retail.flow.retailRecipient, {
       partyId: state.protocols.retail.registrations[1].partyId,
@@ -219,24 +219,27 @@ function pass(name) { passed += 1; console.log(`  PASS  ${name}`); }
     assert.equal(state.protocols.retail.flow.retailTagChannel.candidateIndices.length, 10);
     assert.match(await page.locator(".channel-record").innerText(), /Full privacy[\s\S]*1111111111/i);
     pass("retail private-tag table visualizes None, Subset, Rift, and Full bitmap membership");
+    await page.goto(`${BASE_URL}/#/retail/shielding`);
+    await clickAndWait(page, '[data-action="mint-cash"]');
+    await clickAndWait(page, '[data-action="shield"]');
     await page.goto(`${BASE_URL}/#/retail/payment`);
     assert.equal(await page.getByText(/Retrieve Atlas Bank keys|Retrieve the recipient’s public keys/i).count(), 0);
-    assert.match(await page.locator(".registry-binding-visual").innerText(), /Atlas Bank[\s\S]*pk_spend[\s\S]*Recipient commitment[\s\S]*pk_view[\s\S]*Encrypted note data/i);
-    assert.match(await page.locator(".payment-construction").innerText(), /Registry binding[\s\S]*Commitments[\s\S]*Groth16 proof[\s\S]*Private tag/);
+    assert.match(await page.locator(".registry-binding-visual").innerText(), /Atlas Bank[\s\S]*pk_spend[\s\S]*commitment[\s\S]*pk_view[\s\S]*encrypted note/i);
+    assert.match(await page.locator(".retail-process").innerText(), /Prove membership[\s\S]*Create outputs[\s\S]*Generate proof[\s\S]*Publish private tag/);
     await page.fill("#retailPaymentAmount", "45");
-    await page.click('[data-action="payment"]'); await page.waitForTimeout(40);
+    await clickAndWait(page, '[data-action="payment"]');
     state = await page.evaluate(() => window.__ENYGMA_DEMO__.state());
     const retailPayment = state.protocols.retail.transactions.find(tx => tx.type === "payment");
     assert.equal(retailPayment.from, "party-0");
     assert.equal(retailPayment.to, "party-1");
     assert.equal(retailPayment.encryptedPayload.amount, 45);
-    assert(retailPayment.privateTag.startsWith("tag_"));
+    assert(/^0x[0-9a-f]{64}$/.test(retailPayment.privateTag));
     assert.equal(state.protocols.retail.leaves.filter(leaf => leaf.sourceTxId === retailPayment.id).length, 2);
     await page.goto(`${BASE_URL}/#/retail/scan`);
     assert.equal(await page.locator(".scan-table tbody tr").count(), 10);
-    await page.click('[data-action="scan"]'); await page.waitForTimeout(40);
+    await clickAndWait(page, '[data-action="scan"]');
     assert.equal(await page.locator(".scan-table tr.scan-match").count(), 1);
-    assert.match(await page.locator(".scan-table tr.scan-match").innerText(), /Atlas Bank[\s\S]*Note opened and commitment matched/i);
+    assert.match(await page.locator(".scan-table tr.scan-match").innerText(), /Atlas Bank[\s\S]*tag matched[\s\S]*note recovered/i);
     pass("retail payment binds registry keys visually and candidate wallets process the published bitmap");
 
     await page.goto(`${BASE_URL}/#/dvp/terms-proposal`);

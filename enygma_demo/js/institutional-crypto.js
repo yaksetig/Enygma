@@ -36,8 +36,8 @@ const pow5 = n => { const sq = mod(n * n); return mod(sq * sq * n); };
 
 // Same optimized rounds and matrix orientation as gnark-server/poseidon/poseidon.go.
 export function poseidon(inputs) {
-  if (inputs.length < 1 || inputs.length > 3) throw new Error("Poseidon accepts one to three inputs here");
-  const t = inputs.length + 1, index = t - 2, rounds = [56, 57, 56][index];
+  if (inputs.length < 1 || inputs.length > 4) throw new Error("Poseidon accepts one to four inputs here");
+  const t = inputs.length + 1, index = t - 2, rounds = [56, 57, 56, 60][index];
   const C = tables.C[index], S = tables.S[index], M = tables.M[index], P = tables.P[index];
   const mix = (state, matrix) => state.map((_, i) => mod(state.reduce((sum, v, j) => sum + matrix[j][i] * v, 0n)));
   const ark = (state, offset) => state.map((v, i) => mod(v + C[offset + i]));

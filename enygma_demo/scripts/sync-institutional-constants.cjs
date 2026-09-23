@@ -5,7 +5,7 @@ const source = fs.readFileSync(path.join(__dirname, "../../enygma_payments/gnark
 const constants = {};
 for (const kind of ["C", "S", "M", "P"]) {
   const section = source.split(`func GetPoseidon${kind}(`)[1].split(/\nfunc /)[0];
-  constants[kind] = [2, 3, 4].map(t => {
+  constants[kind] = [2, 3, 4, 5].map(t => {
     if (kind === "C" || kind === "S") {
       const block = section.match(new RegExp(`constantHex${t}\\s*:=\\s*\\[\\]string\\s*\\{([\\s\\S]*?)\\}`))[1];
       return [...block.matchAll(/"(0x[\da-f]+)"/g)].map(match => match[1]);

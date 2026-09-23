@@ -3,13 +3,13 @@ const fs = require("fs");
 const path = require("path");
 const { root } = require("./_env.cjs");
 
-const deployable = ["index.html", "styles.css", "js/app.js", "js/config.js", "js/demo-engine.js", "js/institutional.js", "js/institutional-ui.js", "js/institutional-crypto.js"];
+const deployable = ["index.html", "styles.css", "js/app.js", "js/config.js", "js/demo-engine.js", "js/institutional.js", "js/institutional-ui.js", "js/institutional-crypto.js", "js/retail.js", "js/retail-ui.js"];
 const source = deployable.map(file => fs.readFileSync(path.join(root, file), "utf8")).join("\n");
 const unrelatedCurve = /secp256k1|ECDH|ECDSA/i;
 const environmentFraming = new RegExp(["simu" + "lat", "fix" + "ture", "mock" + "ed", "presentation" + "-only"].join("|"), "i");
 const dvpSource = source.slice(source.indexOf("function dvpSteps"), source.indexOf("function auctionSteps"));
 const auctionSource = source.slice(source.indexOf("function auctionSteps"), source.indexOf("function scenarioSteps"));
-const retailSource = source.slice(source.indexOf("function retailSteps"), source.indexOf("function formatAmount"));
+const retailSource = fs.readFileSync(path.join(root, "js/retail-ui.js"), "utf8");
 const checks = [
   [!unrelatedCurve.test(source), "no host-chain wallet primitives in protocol explanations"],
   [/Pedersen on BabyJubJub/.test(source) && /Groth16 over BN254/.test(source), "institutional commitments and proof curves match the protocol"],
