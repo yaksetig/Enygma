@@ -154,7 +154,7 @@ function pass(name) { passed += 1; console.log(`  PASS  ${name}`); }
     }
     assert.notEqual(state.identities[0].spendPublicKey, state.identities[0].institutionalSpendPublicKey);
     pass("registries use the protocol-specific Poseidon spend key and shared ML-KEM-768 view key");
-    pass("the public participant registry remains visible throughout every protocol");
+    pass("the public participant registry remains available after setup in every protocol");
     pass("all participants use long-term auditing in every protocol");
     assert(ids.every(id => state.protocols[id].leaves.length === 0));
     pass("every commitment tree starts empty with no seeded leaves");
@@ -182,9 +182,9 @@ function pass(name) { passed += 1; console.log(`  PASS  ${name}`); }
     await page.goto(`${BASE_URL}/#/institutional/payment`);
     for (const action of ["calculate", "prove", "post"]) await clickAndWait(page, `[data-action="${action}"]`);
     await page.goto(`${BASE_URL}/#/institutional/chain`);
-    assert.match(await page.locator(".scenario-page").innerText(), /Pedersen commitments on BabyJubJub/);
+    assert.match(await page.locator(".scenario-page").innerText(), /What can each participant see/);
     assert.equal(await page.locator(".commitment-tree").count(), 0);
-    assert.equal(await page.locator("[data-institutional-payments] tbody tr").count(), 2);
+    assert.equal(await page.locator("[data-institutional-payments] [data-payment-account]").count(), 2);
     assert.equal((await page.evaluate(() => window.__ENYGMA_DEMO__.state())).protocols.institutional.leaves.length, 0);
     pass("institutional payments post commitment batches and update account balances");
 

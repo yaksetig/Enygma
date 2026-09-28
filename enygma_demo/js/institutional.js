@@ -5,6 +5,36 @@ const pairSecret = (a, b) => scalar(poseidon([Math.min(a, b), Math.max(a, b), 76
 const fingerprint = (a, b) => a === b ? "0" : String(scalar(poseidon([pairSecret(a, b)])));
 const clone = value => JSON.parse(JSON.stringify(value));
 
+// A perspective projection for the browser walkthrough. Use the same scalar
+// as payment construction, including for channels restored from older sessions.
+export function institutionalChannelView(p, viewer = "public") {
+  if (!p.flow.channels) return [];
+  return (p.flow.channelPairs || []).map(pair => {
+    const leftIndex = p.registrations.findIndex(r => r.partyId === pair.leftPartyId);
+    const rightIndex = p.registrations.findIndex(r => r.partyId === pair.rightPartyId);
+    const left = p.registrations[leftIndex], right = p.registrations[rightIndex];
+    const canOpen = Boolean(left && right && (viewer === left.partyId || viewer === right.partyId || (viewer === "auditor" && left.auditEnvelope && right.auditEnvelope)));
+    return { ...pair, leftName: left?.name, rightName: right?.name, canOpen, sharedKey: canOpen ? `0x${pairSecret(leftIndex + 1, rightIndex + 1).toString(16).padStart(64, "0")}` : null };
+  });
+}
+
+// Opening a payment delta does not grant the opening of an account's balance.
+export function institutionalPaymentView(batch, viewer = "public") {
+  const sender = viewer === String(batch.payerId), auditor = viewer === "auditor";
+  const member = batch.rows.some(row => viewer === String(row.accountId));
+  return {
+    scope: auditor ? "auditor" : sender ? "sender" : member ? "participant" : viewer === "public" ? "public" : "outside",
+    rows: batch.rows.map(row => {
+      const own = viewer === String(row.accountId);
+      return {
+        accountId: row.accountId, name: row.name, delta: [...row.delta], after: [...row.after], own,
+        opening: sender || auditor || own ? { value: row.value, randomness: row.r } : null,
+        balanceOpening: auditor || own ? { before: row.previousBalance, after: row.balance } : null
+      };
+    })
+  };
+}
+
 export function institutionalState(p) {
   if (!p.flow.institutional) p.flow.institutional = { accounts: [], funded: false, paused: false, frozen: [], draft: null, epoch: 9000, mintCount: 0 };
   const state = p.flow.institutional;
@@ -13,24 +43,35 @@ export function institutionalState(p) {
     blindings[9] = scalar(-blindings.slice(0, 9).reduce((a, b) => a + b, 0n));
     state.accounts = p.registrations.map((reg, i) => ({ accountId: i + 1, partyId: reg.partyId, name: reg.name, balance: 0, randomness: String(blindings[i]), commitment: point(0, blindings[i]) }));
   }
+  state.totalSupplyAmount ??= state.accounts.reduce((sum, a) => sum + a.balance, 0);
+  state.totalSupplyCommitment ??= encodePoint(state.accounts.reduce((sum, a) => pointAdd(sum, a.commitment), [0n, 1n]));
   return state;
 }
 
-export function mintInstitutional(p, amount) {
+export function mintInstitutional(p, input) {
   const s = institutionalState(p);
+  if (input.actor !== "owner") throw new Error("Only the contract owner can mint funds.");
   if (s.paused) throw new Error("The contract is paused. Only the owner can resume it.");
+  const recipientId = Number(input.recipientId), amount = Number(input.amount);
+  const recipient = s.accounts.find(a => a.accountId === recipientId);
+  if (!Number.isSafeInteger(recipientId) || !recipient) throw new Error("Choose a registered recipient.");
   if (!Number.isSafeInteger(amount) || amount < 1 || amount > 1_000_000_000) throw new Error("Choose a whole-token funding amount from 1 to 1,000,000,000.");
-  const randoms = s.accounts.map(a => scalar(poseidon([41, a.accountId, s.mintCount + 1])));
-  randoms[randoms.length - 1] = scalar(-randoms.slice(0, -1).reduce((a, b) => a + b, 0n));
-  s.accounts.forEach((a, i) => {
-    a.balance += amount;
-    a.randomness = String(scalar(BigInt(a.randomness) + randoms[i]));
-    a.commitment = point(a.balance, a.randomness);
-  });
+  if (!Number.isSafeInteger(s.totalSupplyAmount + amount) || !Number.isSafeInteger(recipient.balance + amount)) throw new Error("This mint would exceed the supported balance range.");
+  const randomness = scalar(poseidon([41, recipientId, s.mintCount + 1])) || 1n;
+  const before = [...recipient.commitment];
+  const commitment = point(amount, randomness);
+  const nextBalance = encodePoint(pointAdd(recipient.commitment, commitment));
+  const nextSupply = encodePoint(pointAdd(s.totalSupplyCommitment, commitment));
+  recipient.balance += amount;
+  recipient.randomness = String(scalar(BigInt(recipient.randomness) + randomness));
+  recipient.commitment = nextBalance;
+  s.totalSupplyAmount += amount;
+  s.totalSupplyCommitment = nextSupply;
   s.mintCount++;
   s.epoch++;
   s.funded = true;
   s.draft = null;
+  return { recipientId, recipientName: recipient.name, amount, commitment, before, after: nextBalance, blinding: randomness === 0n ? "none" : "secret" };
 }
 
 function allowed(s, accountIds) {

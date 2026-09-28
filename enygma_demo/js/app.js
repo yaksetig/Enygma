@@ -2,7 +2,7 @@ import { retailState, hasRetailChannel } from "./retail.js";
 import { retailUI, retailShieldCard, retailChannelCard, retailPaymentCard, retailScanCard, retailChainCard, retailPayload, retailInput, retailChange, retailClick } from "./retail-ui.js";
 import { PROTOCOLS, PROTOCOL_IDS, SETUP_STEPS, PARTY_NAMES, PROTOCOL_PRIMITIVES, spendPublicKeyFor, initializationSteps } from "./config.js";
 import { engineAdapter } from "./demo-engine.js";
-import { institutionalState } from "./institutional.js";
+import { institutionalState, institutionalChannelView } from "./institutional.js";
 import { institutionalUI, institutionalFundingCard, institutionalPaymentCard, institutionalChainCard, institutionalControlCard, institutionalAuditCard, institutionalPayload, changeInstitutionalControl, inputInstitutionalAmount } from "./institutional-ui.js";
 
 const $ = selector => document.querySelector(selector);
@@ -227,15 +227,18 @@ function retailTagCandidateIndices(mode, recipientIndex, excludedIndices = []) {
   return PARTY_NAMES.map((_, index) => index);
 }
 
-function publicNetworkRegistry(p) {
+function publicNetworkRegistry(p, featured = false) {
   const retail = p.id === "retail" ? retailState(p) : null;
   const scanPayment = retail && screenFromHash() === "scan" ? p.transactions.find(t => t.id === retailUI.txId && t.type === "payment") || p.transactions.find(t => t.type === "payment") : null;
   const channel = retail ? retail.channels.find(c => c.id === (scanPayment?.tagChannelId || retailUI.channelId)) || retail.channels.at(-1) : null;
   const rows = p.registrations.map((registration, index) => {
     const bit = channel ? channel.candidateIndices.includes(index) : null;
-    return `<tr data-public-party-row="${index}"><td><span class="registry-index">${String(p.id === "institutional" ? index + 1 : index).padStart(2, "0")}</span></td><td><strong>${registration.name}</strong>${index === 0 ? "<small>You</small>" : ""}</td><td>${registryKey("spend public key", registration.spendPublicKey)}</td><td>${registryKey("view public key", registration.viewPublicKey)}</td>${p.id === "retail" ? `<td><span class="compact-bitmap ${bit === null ? "unset" : bit ? "included" : "outside"}">${bit === null ? "—" : bit ? "1" : "0"}</span></td>` : ""}</tr>`;
+    const participant = featured
+      ? `<div class="registry-party"><span class="avatar" aria-hidden="true">${registration.name.split(" ").map(value => value[0]).slice(0, 2).join("")}</span><span><strong>${registration.name}</strong><small>${index === 0 ? "You · " : ""}Keys registered</small></span></div>`
+      : `<strong>${registration.name}</strong>${index === 0 ? "<small>You</small>" : ""}`;
+    return `<tr data-public-party-row="${index}"><td><span class="registry-index">${String(p.id === "institutional" ? index + 1 : index).padStart(2, "0")}</span></td><td>${participant}</td><td>${registryKey("spend public key", registration.spendPublicKey)}</td><td>${registryKey("view public key", registration.viewPublicKey)}</td>${featured ? `<td><span class="registry-status ${registration.auditEnvelope ? "registered" : "pending"}">${registration.auditEnvelope ? "✓ View key shared" : "Pending"}</span></td>` : ""}${p.id === "retail" ? `<td><span class="compact-bitmap ${bit === null ? "unset" : bit ? "included" : "outside"}">${bit === null ? "—" : bit ? "1" : "0"}</span></td>` : ""}</tr>`;
   }).join("");
-  return `<section class="network-registry" aria-label="Public participant registry"><header><div><p class="eyebrow">Public blockchain state</p><h3>Participant registry</h3></div><span>${p.registrations.length} entries</span></header><p>Names and both public keys remain available throughout the protocol.</p><div class="network-registry-scroll"><table><thead><tr><th>#</th><th>Participant</th><th>pk_spend</th><th>pk_view</th>${p.id === "retail" ? "<th>Tag bit</th>" : ""}</tr></thead><tbody>${rows}</tbody></table></div>${channel ? `<footer><span>${channel.mode} · channel ${channel.index ?? 0}</span><code>${channel.bitmap}</code></footer>` : ""}</section>`;
+  return `<section class="network-registry${featured ? " network-registry-featured" : ""}" aria-label="Public participant registry"><header><div><p class="eyebrow">Public blockchain state</p><h3>${featured ? "Registered participants" : "Participant registry"}</h3></div><span>${p.registrations.length} ${featured ? "participants" : "entries"}</span></header><p>${featured ? "These accounts form the institution network in the next step. Select a public key to inspect its full value." : "Names and both public keys remain available throughout the protocol."}</p><div class="network-registry-scroll"${featured ? ' tabindex="0" role="region" aria-label="Registered participants and public keys"' : ""}><table><thead><tr><th>${featured ? "Account" : "#"}</th><th>Participant</th><th>${featured ? "Spend public key" : "pk_spend"}</th><th>${featured ? "View public key" : "pk_view"}</th>${featured ? "<th>Auditor access</th>" : ""}${p.id === "retail" ? "<th>Tag bit</th>" : ""}</tr></thead><tbody>${rows}</tbody></table></div>${channel ? `<footer><span>${channel.mode} · channel ${channel.index ?? 0}</span><code>${channel.bitmap}</code></footer>` : ""}</section>`;
 }
 
 function retailTagRegistry(p) {
@@ -412,9 +415,9 @@ function participantInitials(name) {
   return name.split(" ").map(part => part[0]).join("").slice(0, 3).toUpperCase();
 }
 
-function pairwiseChannelMatrix(p) {
+function pairwiseChannelMatrix(p, channels, viewer) {
   const parties = p.registrations;
-  const established = new Set(p.flow.channelPairs?.map(pair => `${pair.leftPartyId}:${pair.rightPartyId}`) || []);
+  const established = new Map(channels.map(pair => [`${pair.leftPartyId}:${pair.rightPartyId}`, pair]));
   let pairOrder = 0;
   const headers = parties.map(party => `<th scope="col"><abbr title="${party.name}">${participantInitials(party.name)}</abbr></th>`).join("");
   const rows = parties.map((rowParty, row) => {
@@ -422,13 +425,15 @@ function pairwiseChannelMatrix(p) {
       if (column > row) return `<td class="channel-cell channel-cell-empty" aria-hidden="true"></td>`;
       if (column === row) return `<td class="channel-cell channel-cell-self"><span aria-label="${rowParty.name}; same participant">—</span></td>`;
       const key = `${columnParty.partyId}:${rowParty.partyId}`;
-      const isEstablished = established.has(key);
+      const pair = established.get(key);
+      const isEstablished = Boolean(pair);
+      const visibility = !isEstablished ? "pending" : pair.canOpen ? "key visible in this view" : "key sealed in this view";
       const label = `${columnParty.name} ↔ ${rowParty.name}`;
       const currentOrder = pairOrder;
       pairOrder += 1;
-      return `<td class="channel-cell channel-cell-pair ${isEstablished ? "established" : "pending"}" style="--pair-order:${currentOrder}" title="${label}: ${isEstablished ? "established" : "pending"}"><span aria-label="Channel ${label}; ${isEstablished ? "established" : "pending"}">${isEstablished ? "✓" : ""}</span></td>`;
+      return `<td class="channel-cell channel-cell-pair ${isEstablished ? "established" : "pending"}${pair?.canOpen ? " channel-cell-readable" : isEstablished ? " channel-cell-sealed" : ""}" data-channel-visible="${Boolean(pair?.canOpen)}" style="--pair-order:${currentOrder}" title="${label}: ${visibility}"><span aria-label="Channel ${label}; ${visibility}">${isEstablished ? pair.canOpen ? "✓" : "•" : ""}</span></td>`;
     }).join("");
-    return `<tr><th scope="row"><span class="channel-row-index">${String(row + 1).padStart(2, "0")}</span><span>${rowParty.name}</span></th>${cells}</tr>`;
+    return `<tr${viewer === rowParty.partyId ? ' class="channel-viewer-row"' : ""}><th scope="row"><span class="channel-row-index">${String(row + 1).padStart(2, "0")}</span><span>${rowParty.name}</span></th>${cells}</tr>`;
   }).join("");
   return `<div class="channel-matrix-wrap">
     <table class="channel-matrix">
@@ -456,12 +461,27 @@ function protocolPrimitiveDetails(p) {
 }
 
 function registrationReviewCard(p) {
-  return `<article class="panel flow-card registration-review-card"><div class="panel-heading"><div><p class="eyebrow">Registration complete</p><h2>The network is ready</h2></div><span class="context-badge complete">10 / 10 REGISTERED</span></div><p>Every participant has registered both public keys and separately shared its view key with the auditor. The public participant registry remains visible beside every subsequent protocol action.</p>${registrationProcess(p)}${deploymentReceipts(p)}${protocolPrimitiveDetails(p)}<div class="callout success-callout">The registry shown on this page is persistent public blockchain state. Protocol actions look up keys directly from those rows; there is no separate “retrieve keys” transaction.</div></article>`;
+  const featuredRegistry = p.id === "institutional";
+  return `<article class="panel flow-card registration-review-card"><div class="panel-heading"><div><p class="eyebrow">Registration complete</p><h2>The network is ready</h2></div><span class="context-badge complete">10 / 10 REGISTERED</span></div><p>Every participant has registered both public keys and separately shared its view key with the auditor. The public participant registry remains visible beside every subsequent protocol action.</p>${featuredRegistry ? publicNetworkRegistry(p, true) : registrationProcess(p)}${deploymentReceipts(p)}${protocolPrimitiveDetails(p)}<div class="callout success-callout">The registry shown on this page is persistent public blockchain state. Protocol actions look up keys directly from those rows; there is no separate “retrieve keys” transaction.</div></article>`;
 }
 
 function institutionalChannelCard(p) {
-  const channelCount = p.flow.channelPairs?.length || 0;
-  return `<article class="panel flow-card channel-network-card"><div class="panel-heading"><div><p class="eyebrow">Pairwise channels</p><h2>Institution network</h2></div><span class="context-badge ${p.flow.channels ? "complete" : ""}">${channelCount} / 45 ESTABLISHED</span></div><p>ML-KEM-768 establishes a shared secret for each pair. Each cell in the triangle is one bilateral private channel between the participant on its row and the participant at the top of its column.</p>${pairwiseChannelMatrix(p)}<div class="channel-matrix-footer"><div class="channel-legend"><span><i class="legend-cell pending"></i>Pending</span><span><i class="legend-cell established">✓</i>Established</span></div><div class="button-row"><button class="button button-primary" data-action="channels" ${p.flow.channels ? "disabled" : ""}>${p.flow.channels ? "All channels established" : "Establish 45 channels"}</button></div></div></article>`;
+  const viewer = institutionalUI.channelViewer;
+  const participant = p.registrations.find(r => r.partyId === viewer);
+  const channels = institutionalChannelView(p, viewer);
+  const visible = channels.filter(pair => pair.canOpen);
+  const scope = viewer === "auditor" ? "Auditor · all authorized channels" : participant ? `${participant.name} · own channels` : "Public network · channel status";
+  const explanation = viewer === "auditor"
+    ? "The auditor uses the view-key access granted during registration to inspect the shared keys across the network."
+    : participant ? `${participant.name} can open the shared key for each of its nine peers. Keys between other participants stay sealed.`
+      : "The network shows which channels are established. Shared keys are visible only in a participant or auditor view.";
+  const rows = visible.map(pair => `<tr data-channel-key-row="${pair.id}" data-channel-left="${pair.leftPartyId}" data-channel-right="${pair.rightPartyId}"><td><strong>${pair.leftName}</strong><span>↔ ${pair.rightName}</span></td><td><details class="channel-shared-key"><summary title="Show full pairwise key">${short(pair.sharedKey, 16, 10)}</summary><code data-channel-secret>${pair.sharedKey}</code></details></td></tr>`).join("");
+  const empty = !channels.length ? "Establish the channels to inspect the shared keys available to this viewer." : viewer === "public" ? "Choose a participant to inspect its nine shared keys, or choose the auditor to inspect all 45." : "No established channel keys are available to this viewer.";
+  return `<article class="panel flow-card channel-network-card"><div class="panel-heading"><div><p class="eyebrow">Pairwise channels</p><h2>Institution network</h2></div><span class="context-badge ${p.flow.channels ? "complete" : ""}">${channels.length} / 45 ESTABLISHED</span></div><p>ML-KEM-768 establishes a shared secret for each pair. Both participants hold the same pairwise key.</p>
+    <div class="channel-view-selector"><label for="institutionalChannelViewer">View channels as<select id="institutionalChannelViewer"><option value="public" ${viewer === "public" ? "selected" : ""}>Public network</option>${p.registrations.map(r => `<option value="${r.partyId}" ${viewer === r.partyId ? "selected" : ""}>${r.name} · Participant</option>`).join("")}<option value="auditor" ${viewer === "auditor" ? "selected" : ""}>Auditor · All participants</option></select></label><div class="channel-view-count"><strong>${visible.length}<span> / ${channels.length}</span></strong><small>keys visible</small></div></div>
+    <p class="channel-view-description">${explanation}</p>${pairwiseChannelMatrix(p, channels, viewer)}
+    <div class="channel-matrix-footer"><div class="channel-legend"><span><i class="legend-cell pending"></i>Pending</span><span><i class="legend-cell sealed">•</i>Key sealed</span><span><i class="legend-cell established">✓</i>Key visible</span></div><div class="button-row"><button class="button button-primary" data-action="channels" ${p.flow.channels ? "disabled" : ""}>${p.flow.channels ? "All channels established" : "Establish 45 channels"}</button></div></div>
+    <section class="channel-key-workspace" aria-label="Pairwise keys available to the selected viewer"><div class="channel-key-heading"><div><p class="eyebrow">${viewer === "auditor" ? "Auditor access" : participant ? "Participant’s private view" : "Public view"}</p><h3>${scope}</h3></div><span class="context-badge">${visible.length} KEYS</span></div>${rows ? `<p>Select a key to expand its full value. The same pair has the same key in either participant’s view.</p><div class="channel-key-scroll" tabindex="0" role="region" aria-label="Established pairwise keys"><table><thead><tr><th scope="col">Established channel</th><th scope="col">Shared key · sᵢⱼ</th></tr></thead><tbody>${rows}</tbody></table></div>` : `<div class="empty-state">${empty}</div>`}</section></article>`;
 }
 
 function institutionalSteps(p) {
@@ -469,10 +489,10 @@ function institutionalSteps(p) {
   const payerId = state.draft?.payerId || institutionalUI.payerId;
   return [
     { id: "registration", label: "Registration", actor: "Registered participants", complete: true, content: registrationReviewCard(p) },
-    { id: "channels", label: "Pairwise channels", actor: "Registered institutions", complete: p.flow.channels, content: institutionalChannelCard(p) },
+    { id: "channels", label: "Pairwise channels", actor: institutionalUI.channelViewer === "auditor" ? "Auditor" : p.registrations.find(r => r.partyId === institutionalUI.channelViewer)?.name || "Public network", complete: p.flow.channels, content: institutionalChannelCard(p) },
     { id: "funding", label: "Fund accounts", actor: "Contract owner", complete: state.funded, content: institutionalFundingCard(p) },
     { id: "payment", label: "Build payment", actor: `${p.registrations[payerId - 1]?.name} · Payer`, complete: p.transactions.some(tx => tx.batch), content: institutionalPaymentCard(p) },
-    { id: "chain", label: "Public chain", actor: institutionalUI.viewer === "public" ? "Public network" : p.registrations[Number(institutionalUI.viewer) - 1]?.name, complete: p.transactions.some(tx => tx.batch), content: institutionalChainCard(p) },
+    { id: "chain", label: "Inspect transaction", actor: institutionalUI.viewer === "public" ? "Public network" : institutionalUI.viewer === "auditor" ? "Auditor" : p.registrations[Number(institutionalUI.viewer) - 1]?.name, complete: p.transactions.some(tx => tx.batch), content: institutionalChainCard(p) },
     { id: "policy", label: "Trading controls", actor: institutionalUI.controlsRole === "owner" ? "Contract owner" : "Auditor", complete: p.transactions.some(tx => ["pause-contract", "freeze-user"].includes(tx.type)), content: institutionalControlCard(p) },
     { id: "audit", label: "Audit access", actor: "Auditor", complete: p.transactions.some(tx => tx.batch), content: institutionalAuditCard(p) }
   ];
@@ -639,15 +659,16 @@ function scenarioSteps(p) {
   return auctionSteps(p);
 }
 
-function scenarioActivity(p) {
+function scenarioActivity(p, showRegistry = true) {
   const items = p.ledger.slice(0, 5);
-  return `<aside class="panel scenario-aside"><div><p class="eyebrow">Executing entity</p><div class="scenario-actor"><span aria-hidden="true">${screenFromHash() === "audit" ? "AU" : "→"}</span><strong data-scenario-actor></strong></div></div>${publicNetworkRegistry(p)}<details class="scenario-receipts"><summary>Recent protocol receipts</summary>${items.map(item => `<div class="scenario-receipt"><strong>${item.label}</strong><span>block ${item.block} · ${short(item.hash, 11, 6)}</span></div>`).join("") || `<div class="activity-empty">No action receipts yet.</div>`}</details></aside>`;
+  return `<aside class="panel scenario-aside${showRegistry ? "" : " scenario-aside-compact"}"><div><p class="eyebrow">Executing entity</p><div class="scenario-actor"><span aria-hidden="true">${screenFromHash() === "audit" ? "AU" : "→"}</span><strong data-scenario-actor></strong></div></div>${showRegistry ? publicNetworkRegistry(p) : ""}<details class="scenario-receipts"><summary>Recent protocol receipts</summary>${items.map(item => `<div class="scenario-receipt"><strong>${item.label}</strong><span>block ${item.block} · ${short(item.hash, 11, 6)}</span></div>`).join("") || `<div class="activity-empty">No action receipts yet.</div>`}</details></aside>`;
 }
 
 function renderExperience(p) {
   const oldTreeScroll = els.experience.querySelector(".retail-tree-scroll");
-  const oldScroll = oldTreeScroll ? { left: oldTreeScroll.scrollLeft, top: oldTreeScroll.scrollTop, count: oldTreeScroll.querySelectorAll("[data-retail-leaf]").length } : null;
-  const focused = p.id === "retail" ? document.activeElement?.id : null;
+  const oldScroll = oldTreeScroll ? { left: oldTreeScroll.scrollLeft, top: oldTreeScroll.scrollTop, start: oldTreeScroll.closest(".retail-tree-panel").dataset.treeStart, pageSize: oldTreeScroll.closest(".retail-tree-panel").dataset.treePageSize, mapTop: els.experience.querySelector(".retail-tree-map")?.scrollTop || 0 } : null;
+  const activeInput = p.id === "retail" ? document.activeElement : null;
+  const focused = activeInput?.id ? { id: activeInput.id, start: activeInput.selectionStart, end: activeInput.selectionEnd, direction: activeInput.selectionDirection } : null;
   const ready = engineAdapter.isReady(p.id);
   els.experience.hidden = !ready;
   if (!ready) return;
@@ -655,29 +676,44 @@ function renderExperience(p) {
   const requested = p.id === "retail" && screenFromHash() === "traffic" ? "shielding" : screenFromHash();
   const activeIndex = Math.max(0, steps.findIndex(step => step.id === requested));
   const active = steps[activeIndex];
+  const featuredRegistry = p.id === "institutional" && active.id === "registration";
+  const showActivityRegistry = !featuredRegistry && !(p.id === "retail" && active.id === "shielding");
   const stepLinks = steps.map((step, index) => `<a href="#/${p.id}/${step.id}" class="${index === activeIndex ? "active" : step.complete ? "complete" : ""}" ${index === activeIndex ? 'aria-current="step"' : ""}><span>${step.complete ? "✓" : index + 1}</span><strong>${step.label}</strong></a>`).join("");
   const previous = activeIndex > 0 ? `<a class="button button-ghost" href="#/${p.id}/${steps[activeIndex - 1].id}">← Previous</a>` : `<span></span>`;
   const next = activeIndex < steps.length - 1 ? `<a class="button button-primary" href="#/${p.id}/${steps[activeIndex + 1].id}">Next: ${steps[activeIndex + 1].label} →</a>` : `<a class="button button-primary" href="#/choose">Finish walkthrough</a>`;
   els.experience.innerHTML = `<div class="experience-header"><div><p class="eyebrow">Protocol walkthrough · ${activeIndex + 1} of ${steps.length}</p><h2>${active.label}</h2></div><span class="context-badge">ONE STEP AT A TIME</span></div>
     <nav class="scenario-progress" aria-label="${PROTOCOLS[p.id].name} walkthrough">${stepLinks}</nav>
-    <div class="scenario-layout ${p.id === "institutional" ? "institutional-layout" : p.id === "retail" ? "retail-layout" : ""}"><section class="scenario-page" aria-live="polite">${active.content}</section>${scenarioActivity(p)}</div>
+    <div class="scenario-layout ${p.id === "institutional" ? "institutional-layout" : p.id === "retail" ? "retail-layout" : ""}${featuredRegistry ? " institutional-registration-layout" : ""}"><section class="scenario-page" aria-live="polite">${active.content}</section>${scenarioActivity(p, showActivityRegistry)}</div>
     <nav class="scenario-footer" aria-label="Walkthrough navigation">${previous}${next}</nav>`;
   els.experience.querySelector("[data-scenario-actor]").textContent = active.actor;
   const currentScreen = `${p.id}/${active.id}`;
   if (p.id === "retail" && els.experience.dataset.screen === currentScreen) {
     const scroll = els.experience.querySelector(".retail-tree-scroll");
     if (scroll && oldScroll) {
-      scroll.scrollLeft = p.leaves.length > oldScroll.count ? scroll.scrollWidth - scroll.clientWidth : oldScroll.left;
-      scroll.scrollTop = oldScroll.top;
+      const sameGroup = scroll.closest(".retail-tree-panel").dataset.treeStart === oldScroll.start && scroll.closest(".retail-tree-panel").dataset.treePageSize === oldScroll.pageSize;
+      scroll.scrollLeft = sameGroup ? oldScroll.left : 0;
+      scroll.scrollTop = sameGroup ? oldScroll.top : 0;
     }
-    if (!busy && focused) document.getElementById(focused)?.focus({ preventScroll: true });
+    if (!busy && focused) {
+      const input = document.getElementById(focused.id);
+      input?.focus({ preventScroll: true });
+      if (input && focused.start != null) input.setSelectionRange(focused.start, focused.end, focused.direction);
+    }
   }
   if (p.id === "retail" && els.experience.dataset.screen !== currentScreen) {
     const scroll = els.experience.querySelector(".retail-tree-scroll");
-    if (scroll) scroll.scrollLeft = Math.max(0, (scroll.scrollWidth - scroll.clientWidth) / 2);
+    if (scroll) scroll.scrollLeft = 0;
+  }
+  const treeMap = els.experience.querySelector(".retail-tree-map");
+  if (treeMap) {
+    const tree = treeMap.closest(".retail-tree-panel"), selected = treeMap.querySelector('[aria-current="true"]');
+    if (oldScroll && els.experience.dataset.screen === currentScreen && tree.dataset.treeStart === oldScroll.start && tree.dataset.treePageSize === oldScroll.pageSize) treeMap.scrollTop = oldScroll.mapTop;
+    else if (selected) treeMap.scrollTop = selected.offsetTop - (treeMap.clientHeight - selected.offsetHeight) / 2;
   }
   els.experience.dataset.screen = currentScreen;
-  if (busy && p.id === "retail") els.experience.querySelectorAll("button, input, select").forEach(control => { control.disabled = true; });
+  if (busy && p.id === "retail") els.experience.querySelectorAll("button, input, select").forEach(control => {
+    if (!control.matches("[data-retail-tree-show], [data-retail-tree-page], [data-retail-tree-move], #retailTreeFollow")) control.disabled = true;
+  });
 }
 
 function renderWorkspace() {
@@ -752,7 +788,7 @@ document.addEventListener("click", async event => {
     render();
     return;
   }
-  if (route === "retail" && retailClick(event.target)) { render(); return; }
+  if (route === "retail" && retailClick(event.target, engineAdapter.protocol(route))) { render(); return; }
   const tagMode = event.target.closest("[data-retail-tag-mode]")?.dataset.retailTagMode;
   if (tagMode) {
     retailTagDraft.mode = tagMode;
@@ -820,8 +856,8 @@ document.addEventListener("click", async event => {
 });
 
 document.addEventListener("input", event => {
-  if (route === "institutional") inputInstitutionalAmount(event.target);
-  if (route === "retail" && retailInput(event.target)) {
+  if (route === "institutional") inputInstitutionalAmount(event.target, engineAdapter.protocol(route));
+  if (route === "retail" && retailInput(event.target, engineAdapter.protocol(route))) {
     const id = event.target.id;
     render();
     document.getElementById(id)?.focus({ preventScroll: true });
@@ -830,7 +866,12 @@ document.addEventListener("input", event => {
 
 document.addEventListener("change", event => {
   if (route === "retail" && retailChange(event.target)) { render(); return; }
-  if (route === "institutional" && changeInstitutionalControl(event.target, engineAdapter.protocol(route))) { render(); return; }
+  if (route === "institutional" && changeInstitutionalControl(event.target, engineAdapter.protocol(route))) {
+    const id = event.target.id;
+    render();
+    if (["institutionalChannelViewer", "institutionalFundingRecipient", "institutionalViewer"].includes(id)) document.getElementById(id)?.focus({ preventScroll: true });
+    return;
+  }
   if (event.target.matches("[data-traffic]")) engineAdapter.setTraffic(route, event.target.checked, event.target.dataset.trafficAsset || null);
   if (event.target.matches("#auctionBidNote")) {
     const amountInput = $("#auctionBidAmount");
@@ -859,10 +900,13 @@ $("#resetAll").addEventListener("click", () => {
 document.addEventListener("keydown", event => {
   if (route === "retail" && ["Enter", " "].includes(event.key) && event.target.matches("[data-retail-leaf]")) {
     event.preventDefault();
-    if (retailClick(event.target)) render();
+    if (retailClick(event.target, engineAdapter.protocol(route))) render();
   }
 });
 window.addEventListener("hashchange", render);
+for (const query of ["(max-width: 600px)", "(max-width: 1050px)"]) {
+  window.matchMedia(query).addEventListener("change", () => { if (route === "retail") render(); });
+}
 engineAdapter.addEventListener("change", render);
 engineAdapter.restoreTimers();
 window.__ENYGMA_DEMO__ = { engine: engineAdapter, state: () => engineAdapter.snapshot(), protocols: PROTOCOLS };

@@ -673,8 +673,11 @@ export class DemoEngine extends EventTarget {
         break;
       }
       case "institutional:fund": {
-        mintInstitutional(p, Number(payload.amount));
-        tx = this.addTransaction(id, action, `Owner minted ${Number(payload.amount).toLocaleString("en-US")} EN to each registered account`);
+        const mint = mintInstitutional(p, payload);
+        tx = this.addTransaction(id, action, `Owner minted ${mint.amount.toLocaleString("en-US")} EN to ${mint.recipientName}`, { to: mint.recipientId - 1 });
+        tx.from = "owner";
+        tx.block = p.ledger[0].block;
+        tx.mint = mint;
         break;
       }
       case "institutional:calculate": {
@@ -730,12 +733,12 @@ export class DemoEngine extends EventTarget {
       }
       case "institutional:freeze-user":
       case "institutional:unfreeze-user": {
-        if (payload.actor !== "auditor") throw new Error("Switch to the auditor to manage user trading eligibility.");
+        if (!["owner", "auditor"].includes(payload.actor)) throw new Error("Only the contract owner or auditor can manage user trading eligibility.");
         const s = institutionalState(p), accountId = Number(payload.accountId);
         const account = s.accounts.find(a => a.accountId === accountId);
         if (!account) throw new Error("Choose a registered user.");
         s.frozen = action === "freeze-user" ? [...new Set([...s.frozen, accountId])] : s.frozen.filter(id => id !== accountId);
-        tx = this.addTransaction(id, action, `Auditor ${action === "freeze-user" ? "froze" : "unfroze"} ${account.name} from trading`);
+        tx = this.addTransaction(id, action, `${payload.actor === "owner" ? "Owner" : "Auditor"} ${action === "freeze-user" ? "froze" : "unfroze"} ${account.name} from trading`);
         break;
       }
       case "retail:mint-cash":

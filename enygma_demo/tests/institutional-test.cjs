@@ -34,11 +34,123 @@ const pass = label => { passed++; console.log(`  PASS  ${label}`); };
     const nav = await page.locator(".scenario-progress").innerText();
     assert(!/bridge|perspectives|channel frozen/i.test(nav));
     await page.goto(`${BASE_URL}/#/institutional/channels`);
+    assert.equal(await page.locator("#institutionalChannelViewer option").count(), 12);
+    for (const viewer of ["public", "party-0", "auditor"]) {
+      await page.selectOption("#institutionalChannelViewer", viewer);
+      assert.equal(await page.locator("[data-channel-secret]").count(), 0);
+    }
+    await page.selectOption("#institutionalChannelViewer", "public");
     await clickAndWait(page, '[data-action="channels"]');
+    assert.equal(await page.locator("[data-channel-secret]").count(), 0);
+    assert.equal(await page.locator(".channel-cell-sealed").count(), 45);
+    await page.selectOption("#institutionalChannelViewer", "auditor");
+    const displayedKeys = () => page.locator("[data-channel-key-row]").evaluateAll(rows => rows.map(row => ({
+      id: row.dataset.channelKeyRow, left: row.dataset.channelLeft, right: row.dataset.channelRight,
+      key: row.querySelector("[data-channel-secret]").textContent
+    })));
+    const allChannelKeys = await displayedKeys();
+    assert.equal(allChannelKeys.length, 45);
+    assert.equal(new Set(allChannelKeys.map(pair => pair.key)).size, 45);
+    assert.equal(await page.locator(".channel-cell-readable").count(), 45);
+    assert.equal(await page.locator("[data-scenario-actor]").innerText(), "Auditor");
+    const channelState = await snapshot();
+    for (const participant of channelState.registrations) {
+      await page.selectOption("#institutionalChannelViewer", participant.partyId);
+      const expected = allChannelKeys.filter(pair => [pair.left, pair.right].includes(participant.partyId));
+      assert.equal(expected.length, 9);
+      assert.deepEqual(await displayedKeys(), expected, `${participant.name} sees only its own keys, identical to the auditor and counterparty views`);
+      assert.equal(await page.locator(".channel-cell-readable").count(), 9);
+      assert.equal(await page.locator(".channel-cell-sealed").count(), 36);
+      assert.equal(await page.locator("[data-scenario-actor]").innerText(), participant.name);
+      const html = await page.locator(".channel-network-card").innerHTML();
+      for (const pair of allChannelKeys.filter(pair => ![pair.left, pair.right].includes(participant.partyId))) assert(!html.includes(pair.key), "unrelated keys must not enter participant markup");
+    }
+    await page.locator(".channel-shared-key summary").first().click();
+    assert(await page.locator("[data-channel-secret]").first().isVisible());
+    await page.selectOption("#institutionalChannelViewer", "public");
+    const publicHtml = await page.locator(".channel-network-card").innerHTML();
+    allChannelKeys.forEach(pair => assert(!publicHtml.includes(pair.key)));
+    assert.equal(await page.locator("[data-channel-secret]").count(), 0);
+    assert.deepEqual(await snapshot(), channelState, "changing perspectives must not mutate channels or payment state");
+    pass("public, all ten participant, and auditor views expose exactly their authorized pairwise keys");
+
+    await page.reload();
+    await page.selectOption("#institutionalChannelViewer", "auditor");
+    assert.deepEqual(await displayedKeys(), allChannelKeys, "existing channel records retain the same keys on reload");
+    const desktopViewport = page.viewportSize();
+    await page.setViewportSize({ width: 390, height: 844 });
+    assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+    await page.selectOption("#institutionalChannelViewer", "party-1");
+    assert.equal((await displayedKeys()).length, 9);
+    await page.setViewportSize(desktopViewport);
+    pass("channel keys survive reload and the perspective selector works on mobile");
     await page.goto(`${BASE_URL}/#/institutional/funding`);
+    const beforeFunding = await snapshot();
+    const mintInput = { actor: "owner", recipientId: 3, amount: 800 };
+    for (const invalid of [{ actor: "auditor" }, { recipientId: 0 }, { recipientId: 11 }, { recipientId: 1.5 }, { amount: 0 }, { amount: -1 }, { amount: 1.5 }, { amount: "" }, { amount: "invalid" }, { amount: 1_000_000_001 }]) {
+      assert(await act("fund", { ...mintInput, ...invalid }));
+      assert.deepEqual(await snapshot(), beforeFunding, "rejected mints must leave accounts, supply and receipts untouched");
+    }
+    const checkSupply = () => page.evaluate(async () => {
+      const { pointAdd, samePoint, pedersen } = await import("/js/institutional-crypto.js");
+      const s = window.__ENYGMA_DEMO__.state().protocols.institutional.flow.institutional;
+      return s.accounts.reduce((sum, a) => sum + a.balance, 0) === s.totalSupplyAmount
+        && samePoint(s.accounts.reduce((sum, a) => pointAdd(sum, a.commitment), [0n, 1n]), s.totalSupplyCommitment)
+        && s.accounts.every(a => samePoint(a.commitment, pedersen(a.balance, a.randomness)));
+    });
+    await page.fill("#institutionalFundingAmount", "800");
+    await page.selectOption("#institutionalFundingRecipient", "3");
+    assert.equal(await page.inputValue("#institutionalFundingAmount"), "800", "changing recipient retains the entered amount");
+    assert.match(await page.locator("#institutionalMintExplanation").innerText(), /How 800 EN reaches Boreal Markets/);
+    assert.match(await page.locator("#institutionalMintExplanation").innerText(), /800 · G/);
+    assert.match(await page.locator("#institutionalMintExplanation").innerText(), /identical coordinates/);
+    assert.equal(await page.locator("#institutionalMintExplanation .mint-coordinate-details code").first().isVisible(), false);
+    await page.locator("#institutionalMintExplanation .mint-coordinate-details summary").first().click();
+    assert.equal(await page.locator("#institutionalMintExplanation .mint-coordinate-details code").first().isVisible(), true);
     await clickAndWait(page, '[data-action="fund"]');
-    assert((await snapshot()).flow.institutional.accounts.every(a => a.balance === 1000));
-    pass("institutional setup explicitly funds accounts and removes bridge and Perspectives steps");
+    let funded = await snapshot();
+    assert.equal(funded.flow.institutional.accounts[2].balance, 800);
+    funded.flow.institutional.accounts.forEach((a, i) => { if (i !== 2) assert.deepEqual(a, beforeFunding.flow.institutional.accounts[i]); });
+    assert.equal(funded.transactions[0].to, "party-2");
+    assert.equal(funded.transactions[0].from, "owner");
+    assert.equal(funded.transactions[0].mint.recipientId, 3);
+    assert.deepEqual(funded.transactions[0].mint.before, beforeFunding.flow.institutional.accounts[2].commitment);
+    assert.deepEqual(funded.transactions[0].mint.after, funded.flow.institutional.accounts[2].commitment);
+    assert(funded.transactions[0].block);
+    assert.match(await page.locator("[data-mint-receipt]").first().innerText(), /800 EN to Boreal Markets/);
+    await page.locator("[data-mint-receipt] summary").first().click();
+    assert.match(await page.locator("[data-mint-receipt]").first().innerText(), /B_before[\s\S]*C_mint[\s\S]*B_after/);
+    assert(await checkSupply());
+    await page.selectOption("#institutionalFundingRecipient", "5");
+    await page.fill("#institutionalFundingAmount", "2000");
+    await clickAndWait(page, '[data-action="fund"]');
+    await page.selectOption("#institutionalFundingRecipient", "3");
+    await page.fill("#institutionalFundingAmount", "200");
+    await clickAndWait(page, '[data-action="fund"]');
+    funded = await snapshot();
+    const allocations = funded.flow.institutional.accounts.map(a => a.balance);
+    assert.deepEqual(allocations, [0, 0, 1000, 0, 2000, 0, 0, 0, 0, 0]);
+    assert.equal(funded.flow.institutional.totalSupplyAmount, 3000);
+    assert(await checkSupply());
+    assert.equal(await page.locator("[data-mint-receipt]").count(), 3);
+    await page.reload();
+    assert.deepEqual((await snapshot()).flow.institutional, funded.flow.institutional);
+    await page.setViewportSize({ width: 390, height: 844 });
+    assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+    await page.setViewportSize(desktopViewport);
+    pass("owner mints different amounts to selected recipients, supports top-ups, and preserves other accounts and total supply");
+
+    // Older sessions have balances and mint receipts but no aggregate supply fields.
+    await page.evaluate(() => {
+      const key = Object.keys(sessionStorage).find(key => key.startsWith("enygma-demo-state-"));
+      const saved = JSON.parse(sessionStorage.getItem(key));
+      delete saved.protocols.institutional.flow.institutional.totalSupplyAmount;
+      delete saved.protocols.institutional.flow.institutional.totalSupplyCommitment;
+      sessionStorage.setItem(key, JSON.stringify(saved));
+    });
+    await page.reload();
+    assert.deepEqual((await snapshot()).flow.institutional, funded.flow.institutional);
+    pass("recipient-specific minting survives reload and reconstructs supply for existing sessions");
 
     await page.goto(`${BASE_URL}/#/institutional/payment`);
     assert.equal(await page.locator("[data-institutional-users] tbody tr").count(), 10);
@@ -57,9 +169,15 @@ const pass = label => { passed++; console.log(`  PASS  ${label}`); };
     assert.deepEqual(draft.accountIds, [2, 3, 4, 5, 6, 8]);
     assert.equal(draft.rows.filter(row => row.value === 0).length, 4);
     assert.equal(draft.publicSignals.length, 81);
+    const payerRecipientKey = allChannelKeys.find(pair => pair.left === "party-2" && pair.right === "party-4").key;
+    const displayedFingerprint = await page.evaluate(async key => {
+      const { scalar, poseidon } = await import("/js/institutional-crypto.js");
+      return String(scalar(poseidon([BigInt(key)])));
+    }, payerRecipientKey);
+    assert.equal(draft.publicSignals[draft.accountIds.indexOf(3) * draft.k + draft.accountIds.indexOf(5)], displayedFingerprint, "displayed pairwise keys must match payment proof fingerprints");
     assert.equal(draft.rows.reduce((sum, row) => sum + row.value, 0), 0);
     assert.equal(current.transactions.filter(tx => tx.batch).length, 0);
-    assert(current.flow.institutional.accounts.every(a => a.balance === 1000));
+    assert.deepEqual(current.flow.institutional.accounts.map(a => a.balance), allocations);
     assert.match(await act("post"), /Generate the ZK proof/);
     await clickAndWait(page, '[data-action="prove"]');
     assert.equal((await snapshot()).flow.institutional.draft.status, "proved");
@@ -68,19 +186,42 @@ const pass = label => { passed++; console.log(`  PASS  ${label}`); };
     await page.goto(`${BASE_URL}/#/institutional/policy`);
     assert.equal(await page.locator('[data-action="pause-contract"]').isDisabled(), true);
     assert.match(await act("pause-contract", { actor: "auditor" }), /Only the contract owner/);
+    const beforeUnauthorizedControls = await snapshot();
+    for (const action of ["freeze-user", "unfreeze-user"]) {
+      for (const actor of ["public", "participant", undefined]) {
+        assert.match(await act(action, { actor, accountId: 8 }), /Only the contract owner or auditor/);
+      }
+      assert.match(await act(action, { actor: "owner", accountId: 999 }), /Choose a registered user/);
+    }
+    assert.deepEqual(await snapshot(), beforeUnauthorizedControls);
     await clickAndWait(page, '[data-controlled-account="8"] [data-action="freeze-user"]');
     assert.deepEqual((await snapshot()).flow.institutional.frozen, [8]);
+    assert.match((await snapshot()).transactions[0].label, /^Auditor froze/);
     assert.match(await act("post"), /frozen from trading/);
     await page.selectOption("#institutionalControlRole", "owner");
-    assert.equal(await page.locator('[data-controlled-account="8"] [data-action="unfreeze-user"]').isDisabled(), true);
+    assert.equal(await page.locator('[data-controlled-account="8"] [data-action="unfreeze-user"]').isDisabled(), false);
+    await clickAndWait(page, '[data-controlled-account="8"] [data-action="unfreeze-user"]');
+    assert.deepEqual((await snapshot()).flow.institutional.frozen, []);
+    assert.match((await snapshot()).transactions[0].label, /^Owner unfroze/);
+    await clickAndWait(page, '[data-controlled-account="8"] [data-action="freeze-user"]');
+    assert.deepEqual((await snapshot()).flow.institutional.frozen, [8]);
+    assert.match((await snapshot()).transactions[0].label, /^Owner froze/);
+    assert.match(await act("post"), /frozen from trading/);
     await clickAndWait(page, '[data-action="pause-contract"]');
     assert.match(await act("post"), /contract is paused/);
+    const pausedState = await snapshot();
+    assert.match(await act("fund", mintInput), /contract is paused/);
+    assert.deepEqual(await snapshot(), pausedState);
     await page.selectOption("#institutionalControlRole", "auditor");
+    assert.equal(await page.locator('[data-action="resume-contract"]').isDisabled(), true);
+    assert.match(await act("resume-contract", { actor: "auditor" }), /Only the contract owner/);
     await clickAndWait(page, '[data-controlled-account="8"] [data-action="unfreeze-user"]');
+    assert.deepEqual((await snapshot()).flow.institutional.frozen, []);
+    assert.match((await snapshot()).transactions[0].label, /^Auditor unfroze/);
     assert.match(await act("post"), /contract is paused/);
     await page.selectOption("#institutionalControlRole", "owner");
     await clickAndWait(page, '[data-action="resume-contract"]');
-    pass("contract pause is owner-only and independent of auditor user freezes");
+    pass("owner and auditor can freeze/unfreeze users, receipts identify the actor, and contract pause remains owner-only");
 
     const before = (await snapshot()).flow.institutional.accounts;
     await page.goto(`${BASE_URL}/#/institutional/payment`);
@@ -90,31 +231,69 @@ const pass = label => { passed++; console.log(`  PASS  ${label}`); };
     assert.equal(posted.batch.status, "confirmed");
     assert.equal(posted.batch.verification, 6);
     assert.equal(posted.from, "relayer");
-    assert.equal(current.flow.institutional.accounts.reduce((sum, a) => sum + a.balance, 0), 10000);
+    assert.equal(current.flow.institutional.accounts.reduce((sum, a) => sum + a.balance, 0), 3000);
+    assert(await checkSupply());
     assert.equal(current.flow.institutional.accounts[2].balance, 875);
-    assert.equal(current.flow.institutional.accounts[4].balance, 1125);
+    assert.equal(current.flow.institutional.accounts[4].balance, 2125);
     assert.notDeepEqual(current.flow.institutional.accounts[7].commitment, before[7].commitment);
-    assert.equal(current.flow.institutional.accounts[7].balance, 1000);
+    assert.equal(current.flow.institutional.accounts[7].balance, 0);
     assert.deepEqual(current.flow.institutional.accounts[0], before[0]);
     assert.match(await act("post"), /balances changed/);
     pass("verified posting atomically changes selected commitments, conserves supply, and prevents replay");
 
     await page.goto(`${BASE_URL}/#/institutional/chain`);
     assert.equal(await page.locator("[data-institutional-balances] tbody tr").count(), 10);
-    assert.equal(await page.locator("[data-institutional-payments] tbody tr").count(), 6);
+    assert.equal(await page.locator("[data-institutional-payments] [data-payment-account]").count(), 6);
+    assert.equal(await page.locator("#institutionalViewer option").count(), 12);
     assert.equal(await page.locator('[data-open="true"]').count(), 0);
     assert.equal(await page.locator(".institutional-opening").count(), 0);
-    await page.selectOption("#institutionalViewer", "3");
-    assert.equal(await page.locator('[data-balance-account][data-open="true"]').count(), 1);
-    assert.match(await page.locator('[data-balance-account="3"] .institutional-opening').innerText(), /875 EN/);
-    assert.equal(await page.locator('[data-payment-account][data-open="true"]').count(), 1);
+    assert.equal(await page.locator(".institutional-slot-opening").count(), 0);
+    const visibilitySnapshot = await snapshot();
+    for (let viewerId = 1; viewerId <= 10; viewerId++) {
+      const expectedOpen = viewerId === 3 ? posted.batch.accountIds : posted.batch.accountIds.includes(viewerId) ? [viewerId] : [];
+      await page.selectOption("#institutionalViewer", String(viewerId));
+      assert.equal(await page.locator("#institutionalViewer").evaluate(el => el === document.activeElement), true);
+      assert.deepEqual(await page.locator('[data-payment-account][data-open="true"]').evaluateAll(els => els.map(el => Number(el.dataset.paymentAccount))), expectedOpen);
+      assert.equal(await page.locator(".institutional-slot-opening").count(), expectedOpen.length);
+      assert.equal(await page.locator('[data-balance-account][data-open="true"]').count(), 1);
+      assert.equal(await page.locator(".institutional-slot-balance").count(), posted.batch.accountIds.includes(viewerId) ? 1 : 0, "sending a payment must not reveal other accounts' total balances");
+      const projected = await page.evaluate(async viewer => {
+        const { institutionalPaymentView } = await import("/js/institutional.js");
+        const batch = window.__ENYGMA_DEMO__.state().protocols.institutional.transactions.find(tx => tx.batch).batch;
+        return institutionalPaymentView(batch, viewer);
+      }, String(viewerId));
+      for (const row of posted.batch.rows) {
+        const slot = page.locator(`[data-payment-account="${row.accountId}"]`), projectedRow = projected.rows.find(r => r.accountId === row.accountId);
+        if (expectedOpen.includes(row.accountId)) {
+          assert.deepEqual(projectedRow.opening, { value: row.value, randomness: row.r });
+          assert((await slot.locator(".institutional-slot-opening").textContent()).includes(row.r));
+        } else {
+          assert.equal(projectedRow.opening, null);
+          assert(!(await slot.innerHTML()).includes(row.r), "sealed slots must omit their secret masks from the DOM");
+          assert.doesNotMatch(await slot.textContent(), /Received|Sent|No money moved|Verify this opening/);
+          assert.match(await slot.innerText(), /Amount hidden/);
+        }
+        assert.equal(Boolean(projectedRow.balanceOpening), row.accountId === viewerId);
+        assert.equal(projectedRow.previousRandomness, undefined);
+      }
+    }
+    await page.selectOption("#institutionalViewer", "5");
+    assert.match(await page.locator(".institutional-payment-perspective").innerText(), /You received 125 EN/);
+    assert.match(await page.locator(".institutional-payment-perspective").innerText(), /cannot tell whether other participants received money or received nothing/);
     await page.selectOption("#institutionalViewer", "8");
-    assert.match(await page.locator('[data-balance-account="8"] .institutional-opening').innerText(), /1,000 EN/);
+    assert.match(await page.locator('[data-payment-account="8"] .institutional-slot-amount').innerText(), /No money moved\s+0 EN/);
     assert.equal(await page.locator('[data-payment-account="3"]').getAttribute("data-open"), "false");
+    await page.selectOption("#institutionalViewer", "auditor");
+    assert.equal(await page.locator('[data-balance-account][data-open="true"]').count(), 10);
+    assert.equal(await page.locator('[data-payment-account][data-open="true"]').count(), 6);
+    assert.equal(await page.locator(".institutional-slot-balance").count(), 6);
+    await page.selectOption("#institutionalViewer", "public");
+    assert.equal(await page.locator(".institutional-slot-opening, .institutional-slot-balance").count(), 0, "switching back to public must remove all private openings");
+    assert.deepEqual(await snapshot(), visibilitySnapshot, "switching perspectives must not alter transactions or balances");
     await page.goto(`${BASE_URL}/#/institutional/audit`);
     assert.equal(await page.locator('[data-balance-account][data-open="true"]').count(), 10);
     assert.equal(await page.locator('[data-payment-account][data-open="true"]').count(), 6);
-    pass("public ledger seals all openings; participant and auditor selections open exactly their scope");
+    pass("sender opens every payment slot, other participants open only their own, and balance access stays separate");
 
     await page.goto(`${BASE_URL}/#/institutional/payment`);
     await clickAndWait(page, '[data-action="edit-payment"]');
@@ -127,15 +306,29 @@ const pass = label => { passed++; console.log(`  PASS  ${label}`); };
     assert.equal(current.transactions.filter(tx => tx.batch).length, 2);
     assert.equal(current.transactions.find(tx => tx.batch).batch.k, 2);
     assert.equal(current.flow.institutional.accounts[2].balance, 915);
-    assert.equal(current.flow.institutional.accounts[4].balance, 1085);
+    assert.equal(current.flow.institutional.accounts[4].balance, 2085);
+    assert(await checkSupply());
     const saved = current.flow.institutional;
     await page.reload();
     assert.deepEqual((await snapshot()).flow.institutional, saved);
+    await page.goto(`${BASE_URL}/#/institutional/chain`);
+    const secondPayment = page.locator(`[data-payment-batch="${current.transactions.find(tx => tx.batch).id}"]`);
+    const firstPayment = page.locator(`[data-payment-batch="${posted.id}"]`);
+    await page.selectOption("#institutionalViewer", "3");
+    assert.equal(await firstPayment.locator('[data-open="true"]').count(), 6);
+    assert.equal(await secondPayment.locator('[data-open="true"]').count(), 1, "sending one payment does not grant all openings in another payment");
+    assert.match(await secondPayment.locator(".institutional-payment-perspective").innerText(), /other amount can be inferred/);
+    await page.selectOption("#institutionalViewer", "5");
+    assert.equal(await firstPayment.locator('[data-open="true"]').count(), 1);
+    assert.equal(await secondPayment.locator('[data-open="true"]').count(), 2);
     await page.setViewportSize({ width: 390, height: 844 });
     assert.deepEqual(await page.evaluate(() => ({ page: document.documentElement.scrollWidth, viewport: innerWidth })), { page: 390, viewport: 390 });
-    pass("k=2 payments, subsequent balance openings, session restoration, and mobile layout remain consistent");
+    await page.selectOption("#institutionalViewer", "public");
+    assert.equal(await page.locator('[data-payment-account][data-open="true"]').count(), 0);
+    pass("per-transaction access follows changing sender/recipient roles for k=2 and k=6, including reload and mobile");
 
     await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto(`${BASE_URL}/#/institutional/payment`);
     await clickAndWait(page, '[data-action="edit-payment"]');
     const valid = { payerId: 3, recipientId: 5, k: 2, amount: 100, accountIds: [3, 5] };
     assert.match(await act("calculate", { ...valid, amount: 999999 }), /within the payer/);
@@ -148,7 +341,7 @@ const pass = label => { passed++; console.log(`  PASS  ${label}`); };
     assert.match(await act("prove"), /public inputs changed/);
     assert.equal(await act("calculate", valid), null);
     assert.equal(await act("prove"), null);
-    await act("fund", { amount: 1 });
+    assert.equal(await act("fund", { actor: "owner", recipientId: 1, amount: 1 }), null);
     assert.match(await act("post"), /Calculate the commitment batch first/);
     pass("insufficient balances, malformed sets, altered commitments/public inputs, and invalidated proofs cannot settle");
     await context.close();

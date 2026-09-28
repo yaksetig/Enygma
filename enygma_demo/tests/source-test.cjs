@@ -17,7 +17,7 @@ const checks = [
   [!/prefers-color-scheme\s*:\s*dark|data-theme|theme-toggle/i.test(source), "no dark-mode implementation"],
   [!/anonymity filler|anonymity user/i.test(source), "no invented anonymity leaves or users"],
   [!/direct tagged channel|rotating recipient tag/i.test(source), "no invented retail recipient-tag modes"],
-  [/function publicNetworkRegistry/.test(source) && /Public blockchain state/.test(source) && /publicNetworkRegistry\(p\)/.test(source), "public participant registry persists beside every protocol action"],
+  [/function publicNetworkRegistry/.test(source) && /Public blockchain state/.test(source) && /publicNetworkRegistry\(p\)/.test(source), "public participant registry is available for participant workflows"],
   [/retail:configure-tags/.test(source) && /\["none", "subset", "rift", "full"\]/.test(source) && /retailTagCandidateIndices/.test(source) && /Published bit/.test(retailSource), "retail implements the four protocol-defined private-tag bitmap modes"],
   [!/prepare-recipient|Retrieve Atlas Bank keys|Retrieve the recipient’s public keys/.test(source) && /Registry binding/.test(retailSource), "retail key lookup is a visible registry binding rather than a retrieval action"],
   [!fs.existsSync(path.join(root, "settlement.html")), "duplicate settlement page removed"],

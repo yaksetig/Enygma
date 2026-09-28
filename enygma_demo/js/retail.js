@@ -46,9 +46,20 @@ export function migrateRetail(p) {
 
 function amountValue(value, name = "Amount") {
   const number = Number(value);
-  if (!Number.isSafeInteger(number) || number <= 0) throw new Error(`${name} must be a positive whole number.`);
+  if (!/^\d+$/.test(String(value)) || !Number.isSafeInteger(number) || number <= 0) throw new Error(`${name} must be a positive whole number.`);
   return number;
 }
+export function validateRetailShieldPlan(payload, publicBalance) {
+  if (!Array.isArray(payload.amounts) || payload.amounts.length < 1 || payload.amounts.length > 4) throw new Error("Choose between one and four note amounts.");
+  const total = amountValue(payload.totalAmount, "Total to shield");
+  const amounts = payload.amounts.map((value, i) => amountValue(value, `Note ${i + 1} amount`));
+  const sum = amounts.reduce((a, b) => a + b, 0);
+  if (!Number.isSafeInteger(sum)) throw new Error("The combined note amounts are too large.");
+  if (sum !== total) throw new Error(`The note amounts must add up to ${total} USD (currently ${sum} USD).`);
+  if (total > publicBalance) throw new Error("The notes exceed your public USD balance. Mint funds first.");
+  return { amounts, total, count: amounts.length };
+}
+
 function capacity(p, count) {
   if (p.leaves.length + count > 2 ** RETAIL_DEPTH) throw new Error("This tree is full. Reset the Retail walkthrough to start a new tree.");
 }
@@ -87,15 +98,14 @@ export async function executeRetail(engine, action, payload, token, candidates) 
       const amount = amountValue(payload.amount);
       if (!Number.isSafeInteger(s.publicBalance + amount)) throw new Error("Public balance is too large.");
       s.publicBalance += amount;
-      return engine.addTransaction("retail", action, `RaylsERC20.mint() allocated ${amount} USD to You`, { from: -1, to: 0 });
+      return engine.addTransaction("retail", action, `RaylsERC20.mint() minted ${amount} USD to You`, { from: -1, to: 0 });
     }
     if (action === "shield") {
-      const amount = amountValue(payload.amount), count = amountValue(payload.count || 1, "Note count");
-      if (count > 4) throw new Error("Shield up to four notes at a time.");
-      if (amount * count > s.publicBalance) throw new Error("The notes exceed your public USD balance. Allocate funds first.");
+      const { amounts, count } = validateRetailShieldPlan(payload, s.publicBalance);
       capacity(p, count);
       let tx;
       for (let i = 0; i < count; i++) {
+        const amount = amounts[i];
         const output = makePayload(p.registrations[0], amount, token);
         await phase(engine, s, "shield", "derive", { index: i + 1, count, output });
         await phase(engine, s, "shield", "commit", { index: i + 1, count, output });
