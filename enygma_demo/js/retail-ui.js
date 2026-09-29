@@ -1,10 +1,11 @@
+import { commitmentTreeExplorer, treePageSize } from "./commitment-tree-ui.js";
+import { walletSummary, shieldingScene, shieldNotePreview as sharedShieldNotePreview } from "./shielding-ui.js";
 import { retailState, hasRetailChannel, availableRetailNotes, validateRetailShieldPlan, RETAIL_DEPTH } from "./retail.js";
 
 export const retailUI = {
   channelDraft: { recipientIndex: 1, mode: "full", excludedIndices: new Set([8, 9]) },
   channelId: "", noteId: "", txId: "", amount: "30", shieldAmount: "200", shieldCount: "2", shieldAmounts: ["100", "100"], mintAmount: "1000", viewer: "public", leafId: "", treeStart: 0, treeFollow: true
 };
-const treePageSize = () => window.innerWidth <= 600 ? 2 : window.innerWidth <= 1050 ? 4 : 8;
 const short = (value, n = 12, end = 6) => value ? String(value).length > n + end + 1 ? `${String(value).slice(0, n)}…${String(value).slice(-end)}` : String(value) : "—";
 const fmt = value => Number(value).toLocaleString("en-US");
 const inputValue = value => String(value).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -23,53 +24,12 @@ function noteCard(note, label, extra = "") {
 }
 
 function treePanel(p, viewer = "party-0", showTraffic = true) {
-  const pageSize = treePageSize();
-  const tree = p.trees?.USD, leaves = p.leaves, count = leaves.length;
-  const lastStart = Math.floor(Math.max(0, count - 1) / pageSize) * pageSize;
-  const start = retailUI.treeFollow ? lastStart : Math.min(Math.floor(retailUI.treeStart / pageSize) * pageSize, lastStart);
-  const visible = leaves.slice(start, start + pageSize);
-  const depth = Math.min(Math.log2(pageSize), Math.max(1, Math.ceil(Math.log2(Math.max(2, count)))));
-  const slots = 2 ** depth, width = Math.max(280, slots * 136), height = 144 + depth * 90;
-  const newest = leaves.at(-1)?.sourceTxId;
-  const known = (p.notes || []).filter(n => n.ownerPartyId === viewer && n.discovered !== false);
-  const owned = new Set(known.map(n => n.leafId));
-  const selection = visible.find(l => l.id === retailUI.leafId) || [...visible].reverse().find(l => owned.has(l.id)) || visible.at(-1);
-  const opening = known.find(n => n.leafId === selection?.id);
-  const levelY = level => 112 + (depth - level) * 90;
-  const nodeX = (level, index) => width * ((index + .5) * 2 ** level / slots);
-  let paths = "", nodes = "";
-  for (let level = depth; level >= 0; level--) {
-    const nodeCount = Math.ceil(Math.max(visible.length, 2) / 2 ** level);
-    for (let i = 0; i < nodeCount; i++) {
-      const index = (start >> level) + i;
-      const leaf = level === 0 ? leaves[index] : null;
-      const value = level === 0 ? leaf?.commitment : tree?.levels[level]?.[index];
-      const x = nodeX(level, i), y = levelY(level);
-      const latest = level === 0 ? leaf?.sourceTxId === newest : count > 0 && index === ((count - 1) >> level);
-      const note = known.find(n => n.leafId === leaf?.id);
-      if (level < depth) paths += `<path class="${latest ? "new-path" : ""}" d="M ${nodeX(level + 1, Math.floor(i / 2))} ${levelY(level + 1) + 23} V ${y - 34} H ${x} V ${y - 23}"/>`;
-      const title = level === 0 ? leaf ? `Leaf ${index}${note ? note.status === "spent" ? " · spent" : " · yours" : ""}` : "Empty leaf" : `Poseidon · L${level}`;
-      nodes += `<g class="retail-tree-node ${leaf && owned.has(leaf.id) ? "owned-leaf" : ""} ${note?.status === "spent" ? "spent-leaf" : ""} ${latest ? "inserted" : ""} ${!value ? "empty-leaf" : ""} ${selection?.id === leaf?.id && leaf ? "selected-leaf" : ""}" data-tree-level="${level}" data-tree-index="${index}" data-node-hash="${value || ""}" transform="translate(${x},${y})" ${leaf ? `id="retailTreeLeaf${index}" data-retail-leaf="${leaf.id}" data-owned="${owned.has(leaf.id)}" data-source-tx="${leaf.sourceTxId}" role="button" tabindex="0" aria-label="Inspect leaf ${index}${owned.has(leaf.id) ? ", recognized by your wallet" : ", commitment"}"` : ""}><title>${value || "Empty subtree"}</title><rect x="-60" y="-25" width="120" height="50" rx="9"/><text y="-5">${title}</text><text y="13" class="hash">${short(value, 6, 4)}</text></g>`;
-    }
-  }
-  const empty = count === 0;
-  const pages = Array.from({ length: Math.ceil(count / pageSize) }, (_, page) => {
-    const first = page * pageSize, last = Math.min(count, first + pageSize) - 1;
-    const recognized = leaves.slice(first, last + 1).filter(l => owned.has(l.id)).length;
-    return `<button type="button" id="retailTreePage${page}" data-retail-tree-page="${first}" class="${recognized ? "owned-group" : ""} ${first === lastStart ? "latest-group" : ""}" aria-current="${first === start ? "true" : "false"}" aria-label="Show leaves ${first} to ${last}${recognized ? `, ${recognized} recognized notes` : ""}">${first}–${last}</button>`;
-  }).join("");
-  return `<section class="retail-tree-panel" id="retailLiveTree" aria-label="Live commitment tree explorer" data-tree-start="${start}" data-tree-page-size="${pageSize}" data-tree-asset="USD" data-merkle-root="${tree?.root || ""}"><div class="retail-network-head"><div><p class="eyebrow">Live commitment tree · Erc20CoinVault</p><h3>${empty ? "Your first note starts here" : `${count} commitments, one shared tree`}</h3></div>${showTraffic ? `<label class="retail-traffic-control"><span class="traffic-dot ${p.traffic ? "on" : ""}"></span><span>Network traffic</span><span class="switch"><input type="checkbox" data-traffic ${p.traffic ? "checked" : ""} aria-label="Network traffic"><span></span></span></label>` : ""}</div><div class="retail-tree-legend"><span><i class="purple"></i>${viewer === "public" ? "Public chain · ownership hidden" : `${viewer === "party-0" ? "Your" : `${nameOf(p, viewer)}’s`} notes (${known.length})`}</span><span><i class="gold"></i>New commitments</span><span><i class="grey"></i>Other / empty leaves</span><b>Depth ${RETAIL_DEPTH} · ${count} / 256 leaves</b></div>
-    <div class="retail-tree-toolbar"><div class="retail-tree-paging"><button type="button" id="retailTreePrevious" data-retail-tree-move="previous" aria-label="Previous ${pageSize} leaves" ${start === 0 ? "disabled" : ""}>←</button><strong>${empty ? "No leaves yet" : `Leaves ${start}–${start + visible.length - 1}`}</strong><button type="button" id="retailTreeNext" data-retail-tree-move="next" aria-label="Next ${pageSize} leaves" ${start === lastStart ? "disabled" : ""}>→</button></div><span>Up to ${pageSize} leaves per group · one shared root</span><label class="retail-tree-follow"><input type="checkbox" id="retailTreeFollow" ${retailUI.treeFollow ? "checked" : ""}>Follow latest</label></div>
-    ${pages ? `<nav class="retail-tree-map" aria-label="Jump to a leaf group">${pages}</nav>` : ""}
-    <div class="retail-tree-scroll" tabindex="0" role="region" aria-label="Tree branches. Scroll horizontally on smaller screens."><svg class="retail-tree-svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" aria-label="USD commitment tree. Showing ${visible.length} of ${count} leaves. Select a leaf to inspect it."><g class="retail-tree-edges"><path class="${count && start === lastStart ? "new-path" : ""}" d="M ${width / 2} 50 V 75 H ${nodeX(depth, 0)} V 88"/>${paths}</g><g class="retail-tree-root" transform="translate(${width / 2},26)"><rect x="${-Math.min(300, width - 16) / 2}" y="-24" width="${Math.min(300, width - 16)}" height="48" rx="12"/><text y="-5">SHARED MERKLE ROOT · DEPTH 8</text><text y="12" class="hash">${tree ? short(tree.root, 18, 8) : "Waiting for the first deposit"}</text></g>${nodes}<text class="retail-collapsed-path" x="${nodeX(depth, 0) + (width < 400 ? 25 : 65)}" y="77">${RETAIL_DEPTH - depth} upper levels folded</text></svg></div>
-    <div class="retail-leaf-inspector" data-leaf-inspector>${selection ? `<div><small>SELECTED · LEAF ${leaves.indexOf(selection)}</small><strong>${opening ? `${opening.ownerName} · ${fmt(opening.amount)} USD` : "Sealed note commitment"}</strong><code>${selection.commitment}</code></div><div><small>${opening ? "PRIVATE WALLET OPENING" : "PUBLIC DATA"}</small>${opening ? `<span>Salt ${short(opening.salt, 13, 6)}</span><span>${opening.status === "spent" ? "Spent · nullifier published" : "Unspent note"}</span>` : `<span>Owner and amount hidden</span>`}<span>Source ${short(selection.sourceTxId, 13, 6)}</span></div>` : `<div><small>EMPTY TREE</small><strong>Shield a note to watch its commitment arrive.</strong><span>Each additional note gets a separate leaf.</span></div>`}</div>
-    <div class="retail-tree-hint">${retailUI.treeFollow ? "Following new commitments. Choose a group to inspect older leaves." : "Staying on this group as the tree grows. Turn on Follow latest to return to new commitments."}${viewer !== "public" ? " Purple groups contain notes recognized by this wallet." : ""}</div>
-    <div class="retail-chain-ticker" aria-label="Recent tree insertions">${p.transactions.filter(t => p.leaves.some(l => l.sourceTxId === t.id)).slice(0, 3).map(t => `<span><b>${t.background ? "NETWORK" : "YOU"}</b>${t.type.includes("shield") ? "Deposit" : "Payment"}<code>${short(t.id, 9, 4)}</code><strong>+${p.leaves.filter(l => l.sourceTxId === t.id).length} leaves</strong></span>`).join("") || `<span>Deposits and payments will appear here as they enter the tree.</span>`}</div></section>`;
+  return commitmentTreeExplorer(p, { viewer, showTraffic, state: retailUI, control: "retail", depth: RETAIL_DEPTH, capacity: 256, vault: "Erc20CoinVault" });
 }
 
 function walletStrip(p) {
   const s = retailState(p), notes = availableRetailNotes(p);
-  return `<div class="retail-wallet-strip"><div><span>Public USD</span><strong>${fmt(s.publicBalance)}</strong><small>Available to shield</small></div><b>→</b><div class="private"><span>Your private USD</span><strong>${fmt(notes.reduce((sum, n) => sum + n.amount, 0))}</strong><small>${notes.length} spendable notes</small></div><div><span>Network tree</span><strong>${p.leaves.length}</strong><small>Commitment leaves</small></div></div><div class="retail-tree-jump"><button type="button" class="button button-ghost" data-retail-tree-show>Explore live commitment tree ↓</button></div>`;
+  return `${walletSummary({ asset: "USD", publicBalance: s.publicBalance, privateBalance: notes.reduce((sum, n) => sum + n.amount, 0), noteCount: notes.length, leafCount: p.leaves.length })}<div class="retail-tree-jump"><button type="button" class="button button-ghost" data-retail-tree-show>Explore live commitment tree ↓</button></div>`;
 }
 function noteInventory(p) {
   const notes = (p.notes || []).filter(n => n.ownerPartyId === "party-0");
@@ -88,7 +48,7 @@ function shieldSummary(p) {
 }
 
 function shieldNotePreview() {
-  return shieldAmounts().map((amount, i) => `<div class="retail-mini-note" style="--i:${i}"><span>PRIVATE NOTE ${i + 1}</span><strong>${validUSD(amount) ? fmt(amount) : "—"} USD</strong><code>C${i + 1} → leaf</code></div>`).join("");
+  return sharedShieldNotePreview(shieldAmounts());
 }
 
 function refreshShieldInputs(p) {
@@ -110,9 +70,9 @@ export function retailShieldCard(p) {
   return `<article class="panel flow-card retail-workspace">${head("Fund your wallet · shield into private notes", "Watch your money become commitments", active ? `NOTE ${active.index} / ${active.count}` : "PAYER · YOU")}<div class="retail-live-layout"><div class="retail-action-pane retail-shield-action">${walletStrip(p)}
     <section class="retail-mint-stage"><h3>1. Mint public USD</h3><p>Add funds to your public wallet before choosing how to shield them.</p><div class="retail-funding-controls"><label>USD to mint<input id="retailMintAmount" type="text" inputmode="numeric" pattern="[0-9]*" value="${inputValue(retailUI.mintAmount)}"></label><button class="button button-primary" data-action="mint-cash" ${validUSD(retailUI.mintAmount) ? "" : "disabled"}>Mint USD</button><small>The issuer mints tokens to your public wallet.</small></div></section>
     <section class="retail-shield-plan"><h3>2. Choose your private notes</h3><p>Set the total, then choose how much goes into each note. Use whole USD amounts; the notes do not need to be equal.</p><div class="retail-form"><label>Total USD to shield<input id="retailShieldAmount" type="text" inputmode="numeric" pattern="[0-9]*" value="${inputValue(retailUI.shieldAmount)}"></label><label>Number of notes<select id="retailShieldCount">${[1, 2, 3, 4].map(n => `<option value="${n}" ${n === count ? "selected" : ""}>${n} ${n === 1 ? "note" : "notes"}</option>`).join("")}</select></label></div><div class="retail-split-heading"><strong>Choose each note’s amount</strong><button type="button" class="button button-ghost" data-retail-split-evenly ${!validUSD(retailUI.shieldAmount) || Number(retailUI.shieldAmount) < count ? "disabled" : ""}>Split evenly</button></div><div class="retail-note-amounts">${amounts.map((amount, i) => `<label><span>Note ${i + 1} · USD</span><input id="retailShieldNote${i}" data-retail-shield-note="${i}" type="text" inputmode="numeric" pattern="[0-9]*" value="${inputValue(amount)}"></label>`).join("")}</div><div id="retailShieldSummary" aria-live="polite">${shieldSummary(p)}</div><button class="button button-primary retail-shield-submit" data-action="shield" ${shieldPlanStatus(p).valid ? "" : "disabled"}>Shield into ${count} private ${count === 1 ? "note" : "notes"}</button></section>
-    <div class="retail-shield-scene ${active ? `animating phase-${active.step}` : ""}" aria-label="Shielding: public tokens enter the vault and produce private note commitments"><div class="retail-token-source"><div class="retail-coins"><i>$</i><i>$</i><i>$</i></div><strong>Public USD</strong><small>Approve vault spending</small></div><div class="retail-flow-track"><i></i><i></i><i></i><span>depositV2()</span></div><div class="retail-vault"><span>▥</span><strong>Erc20CoinVault</strong><small>Tokens held in custody</small></div><div class="retail-flow-track"><i></i><i></i><i></i><span>Poseidon</span></div><div class="retail-output-stack">${shieldNotePreview()}</div></div>
+    ${shieldingScene({ amounts, phase: active?.step })}
     ${steps([["derive", "Derive salt & key", "ML-KEM-768 → HKDF-SHA256"], ["commit", "Commit each note", "Poseidon(pk, salt, amount, token)"], ["insert", "Append to tree", "depositV2() → Commitment"]], active?.step)}
-    <details class="retail-math" ${latest ? "open" : ""}><summary>Commitment calculation · token_id = 0 (USD)</summary><div class="retail-hash-equation"><span><small>pk_spend</small>${code(p.registrations[0].spendPublicKey)}</span><b>+</b><span><small>salt</small>${code(latest?.salt)}</span><b>+</b><span><small>amount</small><strong ${latest ? "" : "data-retail-shield-hash-amount"}>${latest?.amount ?? (validUSD(amounts[0]) ? amounts[0] : "—")}</strong></span><b>+</b><span><small>token_id</small><strong>0</strong></span><i>→ Poseidon →</i><span class="hash-result"><small>C</small>${code(latest?.commitment)}</span></div><p>ML-KEM encapsulates to your view public key. HKDF-SHA256 derives the salt and encryption key; AES-256-GCM encrypts the note data. Each deposit adds a separate commitment.</p></details>
+    <details class="retail-math" data-disclosure="retail-shield-calculation"><summary>Commitment calculation · token_id = 0 (USD)</summary><div class="retail-hash-equation"><span><small>pk_spend</small>${code(p.registrations[0].spendPublicKey)}</span><b>+</b><span><small>salt</small>${code(latest?.salt)}</span><b>+</b><span><small>amount</small><strong ${latest ? "" : "data-retail-shield-hash-amount"}>${latest?.amount ?? (validUSD(amounts[0]) ? amounts[0] : "—")}</strong></span><b>+</b><span><small>token_id</small><strong>0</strong></span><i>→ Poseidon →</i><span class="hash-result"><small>C</small>${code(latest?.commitment)}</span></div><p>ML-KEM encapsulates to your view public key. HKDF-SHA256 derives the salt and encryption key; AES-256-GCM encrypts the note data. Each deposit adds a separate commitment.</p></details>
     </div><div class="retail-live-tree">${treePanel(p)}</div></div>${noteInventory(p)}</article>`;
 }
 

@@ -184,9 +184,12 @@ function pass(name) { passed += 1; console.log(`  PASS  ${name}`); }
     await page.goto(`${BASE_URL}/#/institutional/chain`);
     assert.match(await page.locator(".scenario-page").innerText(), /What can each participant see/);
     assert.equal(await page.locator(".commitment-tree").count(), 0);
-    assert.equal(await page.locator("[data-institutional-payments] [data-payment-account]").count(), 2);
+    assert.equal(await page.locator("[data-institutional-payments] [data-payment-account]").count(), 6);
+    const institutionalBatch = (await page.evaluate(() => window.__ENYGMA_DEMO__.state())).protocols.institutional.transactions.find(tx => tx.batch).batch;
+    assert.equal(institutionalBatch.rows.filter(row => row.value < 0).length, 1);
+    assert.equal(institutionalBatch.rows.filter(row => row.value > 0).length, 2);
     assert.equal((await page.evaluate(() => window.__ENYGMA_DEMO__.state())).protocols.institutional.leaves.length, 0);
-    pass("institutional payments post commitment batches and update account balances");
+    pass("institutional payments post one batch paying multiple banks and update account balances");
 
     await page.goto(`${BASE_URL}/#/retail/payment`);
     assert.equal(await page.locator('[data-action="payment"]').isDisabled(), true);
@@ -282,7 +285,9 @@ function pass(name) { passed += 1; console.log(`  PASS  ${name}`); }
     assert(state.protocols.dvp.notes.every(note => state.protocols.dvp.leaves.some(leaf => leaf.id === note.leafId && leaf.commitment === note.commitment)));
     assert.equal(await page.locator(".owned-note").count(), 2);
     assert.equal(await page.locator('[data-tree-asset="USD"] .leaf-node.owned-leaf').count(), 2);
-    assert.match(await page.locator(".note-construction-card").innerText(), /One shielding operation → one private note → one leaf[\s\S]*Leaf 0[\s\S]*Leaf 1/i);
+    assert.match(await page.locator(".note-construction-card").innerText(), /Private notes[\s\S]*Leaf 0[\s\S]*Leaf 1/i);
+    await page.locator('[data-disclosure="shield-calculation"] summary').click();
+    assert.match(await page.locator('[data-disclosure="shield-calculation"]').innerText(), /One shielding operation → one private note → one leaf/);
     pass("repeated partial shielding creates a new leaf for every submission");
     assert.equal(await page.locator(".shielding-network [data-traffic]").count(), 1);
     assert.equal(await page.locator('[data-tree-asset="USD"] .leaf-node').count(), 2);

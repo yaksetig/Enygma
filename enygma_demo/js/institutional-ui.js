@@ -1,7 +1,6 @@
 import { institutionalState, institutionalPaymentView, G, H } from "./institutional.js";
-import { pedersen, encodePoint } from "./institutional-crypto.js";
 
-export const institutionalUI = { payerId: 1, recipientId: 2, k: 2, amount: 100, accountIds: [1, 2], fundingRecipientId: 1, fundingAmount: 1000, viewer: "public", channelViewer: "public", controlsRole: "auditor" };
+export const institutionalUI = { payerId: 1, recipients: [{ accountId: 2, amount: "100" }, { accountId: 3, amount: "50" }], k: 6, accountIds: [1, 2, 3, 4, 5, 6], fundingRecipientId: 1, fundingAmount: 1000, viewer: "public", channelViewer: "public", controlsRole: "auditor" };
 const format = n => Number(n).toLocaleString("en-US");
 const short = s => String(s).length > 20 ? `${String(s).slice(0, 10)}…${String(s).slice(-7)}` : String(s);
 const signed = n => n > 0 ? `+${format(n)}` : n < 0 ? `−${format(-n)}` : "0";
@@ -9,20 +8,26 @@ const point = (p, label = "Coordinates") => `<details class="institutional-point
 const button = (action, label, disabled = false, extra = "") => `<button class="button button-primary" data-action="${action}" ${disabled ? "disabled" : ""} ${extra}>${label}</button>`;
 const panel = (eyebrow, title, content, badge = "") => `<article class="panel flow-card institutional-card"><div class="panel-heading"><div><p class="eyebrow">${eyebrow}</p><h2>${title}</h2></div>${badge ? `<span class="context-badge">${badge}</span>` : ""}</div>${content}</article>`;
 const canOpen = (viewer, id) => viewer === "auditor" || viewer === String(id);
-const coordinates = (value, label = "Inspect the stored point") => `<details class="mint-coordinate-details"><summary>${label}</summary><p>The commitment is one point on the curve. These two coordinates identify that point; they are not two separate balances.</p><code>x = ${value[0]}<br>y = ${value[1]}</code></details>`;
+const coordinates = (value, label = "Coordinates") => `<details class="mint-coordinate-details"><summary>${label}</summary><code>x = ${value[0]}<br>y = ${value[1]}</code></details>`;
+const recipientsFor = payment => payment.recipients || [{ accountId: payment.recipientId, amount: payment.amount }];
+const paymentTotal = payment => recipientsFor(payment).reduce((sum, recipient) => sum + Number(recipient.amount), 0);
+const recipientInputId = (field, index) => `institutional${field}${index || ""}`;
 
 function mintCommitmentExplanation(p) {
   const s = institutionalState(p), ui = institutionalUI;
   const recipient = s.accounts.find(a => a.accountId === ui.fundingRecipientId);
   const amount = Number(ui.fundingAmount);
-  if (!recipient || !Number.isSafeInteger(amount) || amount < 1 || amount > 1_000_000_000) return `<section id="institutionalMintExplanation" class="mint-commitment-guide"><h3>Money recorded as a commitment</h3><p>Enter a whole-token amount to see how the recipient’s commitment will be updated.</p></section>`;
+  if (!recipient || !Number.isSafeInteger(amount) || amount < 1 || amount > 1_000_000_000) return `<p id="institutionalMintExplanation" class="mint-commitment-guide">Choose a recipient and a whole-token amount to mint.</p>`;
   const amountLabel = format(amount);
-  return `<section id="institutionalMintExplanation" class="mint-commitment-guide"><p class="eyebrow">From EN to a balance commitment</p><h3>How ${amountLabel} EN reaches ${recipient.name}</h3><p>The ledger credits the user by adding a <strong>commitment representing ${amountLabel} EN</strong> to their existing balance commitment.</p><div class="mint-commitment-terms"><div class="mint-commitment-term"><small>Amount part</small><strong>${amountLabel} · G</strong><span>G is a fixed curve point shared by everyone. Multiplying it by the amount represents that amount on the curve.</span></div><b aria-hidden="true">+</b><div class="mint-commitment-term"><small>Blinding part</small><strong>r_mint · H</strong><span>H is another fixed curve point. A secret random number r_mint adds a mask to the commitment.</span></div></div><div class="mint-commitment-equation"><div><small>${recipient.name} · before</small><strong>B_before</strong></div><b>+</b><div><small>Minted commitment</small><strong>${amountLabel}G + r_mint H</strong></div><b>=</b><div><small>${recipient.name} · after</small><strong>B_before + C_mint</strong></div></div><p>The mint amount and recipient are public: adding a mask does not make that announced amount secret. The current mint adds a fresh secret blinding factor; registration also starts with a blinded zero balance, <code>0G + r_start H</code>.</p>${coordinates(recipient.commitment, "Inspect the recipient’s current point")}<div class="mint-commitment-note"><strong>What if there is no randomness?</strong><p>Starting from <code>0G + 0H = (0, 1)</code>, minting ${amountLabel} EN with <code>r = 0</code> gives <code>${amountLabel}G + 0H</code>. Two accounts funded this way have identical coordinates. A commitment without a secret mask does not hide the amount.</p>${coordinates(encodePoint(pedersen(amount, 0)), `Compare: the point for ${amountLabel}G + 0H`)}</div></section>`;
+  return `<p id="institutionalMintExplanation" class="mint-commitment-guide">Minting adds <strong>${amountLabel}G + 0H</strong> to the balance commitment for <strong>${recipient.name}</strong>.</p>`;
 }
 
 function mintCommitmentAccounts(p) {
   const s = institutionalState(p);
-  return `<div class="table-wrap institutional-table"><table data-institutional-mint-balances><thead><tr><th>Recipient</th><th>What the ledger stores</th><th>Meaning</th></tr></thead><tbody>${s.accounts.map(a => `<tr data-mint-account="${a.accountId}"><td><strong>${a.name}</strong><small>Account ${a.accountId}</small></td><td><strong class="mint-balance-formula">v · G + r · H</strong>${coordinates(a.commitment, "Inspect x and y")}</td><td>The account’s balance plus its secret mask.</td></tr>`).join("")}</tbody></table></div>`;
+  return `<div class="table-wrap institutional-table"><table data-institutional-mint-balances><thead><tr><th>Recipient</th><th>Balance</th><th>Balance commitment</th></tr></thead><tbody>${s.accounts.map(a => {
+    const transparent = a.randomness === "0";
+    return `<tr data-mint-account="${a.accountId}"><td><strong>${a.name}</strong></td><td>${transparent ? `${format(a.balance)} EN` : "Private"}</td><td><strong class="mint-balance-formula">${transparent ? `${format(a.balance)}G + 0H` : "vG + rH"}</strong>${coordinates(a.commitment)}</td></tr>`;
+  }).join("")}</tbody></table></div>`;
 }
 
 function mintReceiptCalculation(mint) {
@@ -32,19 +37,19 @@ function mintReceiptCalculation(mint) {
 
 export function selectInstitutionalSet(p) {
   const s = institutionalState(p), ui = institutionalUI;
-  const required = [ui.payerId, ui.recipientId];
+  const required = [ui.payerId, ...ui.recipients.map(recipient => recipient.accountId)];
   ui.accountIds = [...new Set([...required, ...ui.accountIds.filter(id => !s.frozen.includes(id))])].slice(0, ui.k);
   for (const a of s.accounts) if (ui.accountIds.length < ui.k && !ui.accountIds.includes(a.accountId) && !s.frozen.includes(a.accountId)) ui.accountIds.push(a.accountId);
 }
 
-function accountOptions(p, selected) {
-  return p.registrations.map((r, i) => `<option value="${i + 1}" ${Number(selected) === i + 1 ? "selected" : ""}>${i + 1} · ${r.name}</option>`).join("");
+function accountOptions(p, selected, excluded = []) {
+  return p.registrations.map((r, i) => `<option value="${i + 1}" ${Number(selected) === i + 1 ? "selected" : ""} ${excluded.includes(i + 1) ? "disabled" : ""}>${i + 1} · ${r.name}</option>`).join("");
 }
 
 export function institutionalAccounts(p, viewer = "public") {
   const s = institutionalState(p);
   return `<div class="table-wrap institutional-table"><table data-institutional-balances><thead><tr><th>Account</th><th>Registered user</th><th>Current balance commitment Bᵢ</th><th>Trading</th><th>Balance opening</th></tr></thead><tbody>${s.accounts.map(a => {
-    const open = canOpen(viewer, a.accountId);
+    const open = a.randomness === "0" || canOpen(viewer, a.accountId);
     return `<tr data-balance-account="${a.accountId}" data-open="${open}"><td>${a.accountId}</td><td><strong>${a.name}</strong></td><td>${point(a.commitment, "balance commitment")}</td><td><span class="policy-badge ${s.frozen.includes(a.accountId) ? "selective" : ""}">${s.frozen.includes(a.accountId) ? "Frozen" : "Eligible"}</span></td><td>${open ? `<div class="institutional-opening"><strong>${format(a.balance)} EN</strong><details><summary>Verify opening</summary><code>v = ${a.balance}<br>r = ${a.randomness}<br>Bᵢ = v·G + r·H ✓</code></details></div>` : `<span class="institutional-sealed">Sealed balance</span>`}</td></tr>`;
   }).join("")}</tbody></table></div>`;
 }
@@ -54,15 +59,36 @@ export function institutionalFundingCard(p) {
   const recipient = s.accounts.find(a => a.accountId === ui.fundingRecipientId);
   const mints = p.transactions.filter(tx => tx.type === "fund");
   const history = mints.length ? `<section class="institutional-mint-history"><div class="institutional-section-heading"><h3>Recent mints</h3><span>${mints.length} confirmed</span></div>${mints.slice(0, 5).map(tx => `<div class="institutional-mint-receipt" data-mint-receipt><span aria-hidden="true">✓</span><div><strong>${tx.label}</strong><small>${tx.mint ? `Account ${tx.mint.recipientId} · ` : ""}Confirmed${tx.block ? ` · block ${tx.block}` : ""}</small>${mintReceiptCalculation(tx.mint)}</div></div>`).join("")}</section>` : "";
-  return panel("Owner · issuance", "Mint funds to a participant", `<p>Choose a registered recipient and the amount of EN to issue. Repeat to fund another participant or add to an existing allocation. Each mint updates only the chosen account’s balance commitment.</p><div class="institutional-mint-summary"><span>Total EN issued<strong>${format(s.totalSupplyAmount)} EN</strong></span><span>Minting authority<strong>Contract owner</strong></span></div><div class="institutional-controls institutional-mint-controls"><label>Recipient<select id="institutionalFundingRecipient" ${s.paused ? "disabled" : ""}>${accountOptions(p, ui.fundingRecipientId)}</select></label><label>Amount to mint · EN<input id="institutionalFundingAmount" type="number" min="1" max="1000000000" step="1" value="${ui.fundingAmount}" ${s.paused ? "disabled" : ""}></label></div>${mintCommitmentExplanation(p)}${button("fund", `Mint EN to ${recipient?.name || "recipient"}`, s.paused || !recipient)}${s.paused ? '<div class="callout">The owner must resume the contract before minting.</div>' : ""}${history}<div class="institutional-section-heading"><h3>Account commitments</h3><span>${s.accounts.length} registered accounts</span></div>${mintCommitmentAccounts(p)}`, "OWNER ONLY");
+  return panel("Owner · issuance", "Mint funds to a participant", `<p>Every account starts at <strong>0 EN</strong>, stored as <strong>0G + 0H</strong>. Minting adds the chosen amount with zero randomness. Private transfers introduce random factors later.</p><div class="institutional-controls institutional-mint-controls"><label>Recipient<select id="institutionalFundingRecipient" ${s.paused ? "disabled" : ""}>${accountOptions(p, ui.fundingRecipientId)}</select></label><label>Amount to mint · EN<input id="institutionalFundingAmount" type="number" min="1" max="1000000000" step="1" value="${ui.fundingAmount}" ${s.paused ? "disabled" : ""}></label></div>${button("fund", `Mint EN to ${recipient?.name || "recipient"}`, s.paused || !recipient)}${mintCommitmentExplanation(p)}${s.paused ? '<div class="callout">The owner must resume the contract before minting.</div>' : ""}<div class="institutional-section-heading"><h3>Account balances</h3><span>Total issued · ${format(s.totalSupplyAmount)} EN</span></div>${mintCommitmentAccounts(p)}${history}`, "OWNER ONLY");
 }
 
 function constructionTable(p, draft) {
   const ui = draft || institutionalUI, s = institutionalState(p);
   return `<div class="table-wrap institutional-table"><table data-institutional-users><thead><tr><th>In set</th><th>Registered user</th><th>Spend public key</th><th>Balance commitment Bᵢ</th><th>Payer’s instructions</th></tr></thead><tbody>${s.accounts.map(a => {
-    const selected = ui.accountIds.includes(a.accountId), payer = a.accountId === ui.payerId, recipient = a.accountId === ui.recipientId, frozen = s.frozen.includes(a.accountId);
-    return `<tr data-institutional-account="${a.accountId}" class="${selected ? "institutional-selected" : ""}"><td><input type="checkbox" aria-label="Include ${a.name}" data-institutional-member="${a.accountId}" ${selected ? "checked" : ""} ${draft || payer || recipient || frozen || (!selected && ui.accountIds.length >= ui.k) ? "disabled" : ""}></td><td><strong>${a.name}</strong><small>Account ${a.accountId}${frozen ? " · Frozen" : ""}</small></td><td class="mono">${short(p.registrations[a.accountId - 1].spendPublicKey)}</td><td>${point(a.commitment)}</td><td>${payer ? `<b>Payer · ${signed(-ui.amount)} EN</b>` : recipient ? `<b>Recipient · ${signed(ui.amount)} EN</b>` : selected ? "Privacy participant · 0 EN" : "Outside this batch"}</td></tr>`;
+    const selected = ui.accountIds.includes(a.accountId), payer = a.accountId === ui.payerId, recipient = recipientsFor(ui).find(r => r.accountId === a.accountId), frozen = s.frozen.includes(a.accountId);
+    return `<tr data-institutional-account="${a.accountId}" class="${selected ? "institutional-selected" : ""}"><td><input type="checkbox" aria-label="Include ${a.name}" data-institutional-member="${a.accountId}" ${selected ? "checked" : ""} ${draft || payer || recipient || frozen || (!selected && ui.accountIds.length >= ui.k) ? "disabled" : ""}></td><td><strong>${a.name}</strong><small>Account ${a.accountId}${frozen ? " · Frozen" : ""}</small></td><td class="mono">${short(p.registrations[a.accountId - 1].spendPublicKey)}</td><td>${point(a.commitment)}</td><td>${payer ? `<b>Payer · ${signed(-paymentTotal(ui))} EN</b>` : recipient ? `<b>Recipient · ${signed(Number(recipient.amount))} EN</b>` : selected ? "Privacy participant · 0 EN" : "Outside this batch"}</td></tr>`;
   }).join("")}</tbody></table></div>`;
+}
+
+function paymentInputError(p, ui) {
+  const s = institutionalState(p), recipients = recipientsFor(ui), total = paymentTotal(ui);
+  if (s.paused) return "The owner has paused the contract. Resume it before making a payment.";
+  if (!p.flow.channels) return "Establish the pairwise channels before building a payment.";
+  if (!s.funded) return "Mint funds to the payer before making a payment.";
+  if (ui.accountIds.length !== ui.k || ui.accountIds.some(id => s.frozen.includes(id))) return `Select exactly ${ui.k} eligible accounts, including the payer and all recipients.`;
+  if (recipients.some(recipient => !Number.isSafeInteger(Number(recipient.amount)) || Number(recipient.amount) <= 0)) return "Enter a positive whole-token amount for each recipient.";
+  if (!Number.isSafeInteger(total) || total > s.accounts.find(a => a.accountId === ui.payerId)?.balance) return "The combined payment exceeds the payer’s available balance.";
+  return "";
+}
+
+function paymentDistribution(ui) {
+  const recipients = recipientsFor(ui), total = paymentTotal(ui), zeroCount = ui.k - 1 - recipients.length;
+  return `<div id="institutionalPaymentDistribution" class="institutional-payment-distribution"><div><small>Total paid by one account</small><strong>${Number.isSafeInteger(total) ? format(total) : "—"} EN</strong></div><span>${recipients.length} ${recipients.length === 1 ? "recipient" : "recipients"}${zeroCount ? ` · ${zeroCount} zero-value ${zeroCount === 1 ? "slot" : "slots"}` : " · every other account receives funds"}</span></div>`;
+}
+
+function recipientControls(p, ui, locked) {
+  const recipients = recipientsFor(ui), s = institutionalState(p);
+  return `<section class="institutional-recipients"><div class="institutional-section-heading"><h3>Recipients</h3><span>${recipients.length} / ${ui.k - 1} recipient slots</span></div><div class="institutional-recipient-list">${recipients.map((recipient, index) => `<div class="institutional-recipient-row" data-institutional-recipient-row="${index}"><label>Bank ${index + 1}<select id="${recipientInputId("Recipient", index)}" data-institutional-recipient="${index}" ${locked ? "disabled" : ""}>${accountOptions(p, recipient.accountId, [ui.payerId, ...s.frozen, ...recipients.filter((_, i) => i !== index).map(r => r.accountId)])}</select></label><label>Amount · EN<input id="${recipientInputId("Amount", index)}" data-institutional-recipient-amount="${index}" type="number" min="1" step="1" value="${recipient.amount}" ${locked ? "disabled" : ""}></label><button type="button" class="button button-ghost" data-institutional-remove-recipient="${index}" aria-label="Remove recipient ${index + 1}" ${locked || recipients.length === 1 ? "disabled" : ""}>Remove</button></div>`).join("")}</div><button type="button" id="institutionalAddRecipient" class="button button-ghost" data-institutional-add-recipient ${locked || recipients.length >= ui.k - 1 ? "disabled" : ""}>+ Add recipient</button>${recipients.length > 1 ? '<p class="institutional-recipient-hint">A two-account batch needs one recipient. Remove extra recipients to use that size.</p>' : ""}${paymentDistribution(ui)}</section>`;
 }
 
 function commitmentCalculation(draft) {
@@ -70,10 +96,11 @@ function commitmentCalculation(draft) {
 }
 
 function paymentProof(draft, disabled) {
+  const receiverCount = draft.rows.filter(row => row.value > 0).length, zeroCount = draft.rows.filter(row => row.value === 0).length;
   const claims = [
     ["I own the account being debited.", "I know its secret spending key and the balance behind its current commitment."],
     ["I have enough money to pay.", "The payment fits within my balance. It cannot leave me with a negative balance."],
-    ["The amount spent equals the amount received.", "Every token taken from the payer is credited to the recipient. No money is created or lost."],
+    ["The amount spent equals the total received.", "The payer’s debit equals the sum sent to all recipients. No money is created or lost."],
     [`All ${draft.k} commitments are correctly built.`, "Each commitment represents its intended balance change, combined with the correct secret mask."],
     ["I used the shared keys established with these participants.", "Those keys produce the masks and recognition tags, so participants can identify and read their own updates."]
   ];
@@ -85,8 +112,8 @@ function paymentProof(draft, disabled) {
     <p class="eyebrow">Payer generates the proof</p><h3 id="institutionalProofTitle">What this proof says</h3>
     <blockquote class="institutional-proof-statement">“Here are ${draft.k} commitments for one private transfer. I own the account being debited, and I can prove this payment follows the rules below.”</blockquote>
     <p>Each commitment records one account’s balance change while hiding the amount.</p>
-    <div class="institutional-proof-roles" aria-label="Accounts in this payment"><div><strong>1</strong><span>account pays</span></div><div><strong>1</strong><span>account receives</span></div>${draft.k > 2 ? `<div><strong>${draft.k - 2}</strong><span>extra accounts keep the same amounts</span></div>` : ""}</div>
-    ${draft.k > 2 ? '<p class="institutional-proof-context">The extra accounts get new commitments, but no money moves in or out of them. They help hide which accounts are paying and receiving.</p>' : ""}
+    <div class="institutional-proof-roles" aria-label="Accounts in this payment"><div><strong>1</strong><span>account pays</span></div><div><strong>${receiverCount}</strong><span>${receiverCount === 1 ? "account receives" : "accounts receive"}</span></div>${zeroCount ? `<div><strong>${zeroCount}</strong><span>${zeroCount === 1 ? "account has no balance change" : "accounts have no balance change"}</span></div>` : ""}</div>
+    <p class="institutional-proof-context">This ${draft.k}-account batch supports up to ${draft.k - 1} ${draft.k === 2 ? "recipient" : "recipients"}. This payment sends a total of ${format(draft.amount)} EN to ${receiverCount} ${receiverCount === 1 ? "recipient" : "recipients"}.${zeroCount ? " The remaining slots get new commitments with no money moving in or out." : " Every non-payer slot receives funds."}</p>
     <ol class="institutional-proof-claims">${claims.map(([title, description], i) => `<li><span aria-hidden="true">${i + 1}</span><div><strong>${title}</strong><p>${description}</p></div></li>`).join("")}</ol>
     <p class="institutional-proof-privacy"><strong>What stays private?</strong> The proof lets the contract check these rules without revealing the payment amount, account balances, or secret keys.</p>
     ${result}
@@ -104,19 +131,23 @@ const verificationChecks = ["Groth16 proof accepted by EnygmaVerifier", "Public 
 export function institutionalPaymentCard(p) {
   const s = institutionalState(p), draft = s.draft, ui = draft || institutionalUI;
   const validSelection = ui.accountIds.length === ui.k && !ui.accountIds.some(id => s.frozen.includes(id));
-  const controls = `<div class="institutional-controls"><label>Payer<select id="institutionalPayer" ${draft ? "disabled" : ""}>${accountOptions(p, ui.payerId)}</select></label><label>Recipient<select id="institutionalRecipient" ${draft ? "disabled" : ""}>${accountOptions(p, ui.recipientId)}</select></label><label>Commitments · k<select id="institutionalK" ${draft ? "disabled" : ""}><option value="2" ${ui.k === 2 ? "selected" : ""}>2 · Confidential</option><option value="6" ${ui.k === 6 ? "selected" : ""}>6 · With privacy participants</option></select></label><label>Amount · EN<input id="institutionalAmount" type="number" min="1" step="1" value="${ui.amount}" ${draft ? "disabled" : ""}></label></div>`;
+  const controls = `<div class="institutional-controls"><label>Payer<select id="institutionalPayer" ${draft ? "disabled" : ""}>${accountOptions(p, ui.payerId, s.frozen)}</select></label><label>Accounts in the batch<select id="institutionalK" ${draft ? "disabled" : ""}><option value="2" ${ui.k === 2 ? "selected" : ""} ${recipientsFor(ui).length > 1 ? "disabled" : ""}>2 accounts · 1 recipient</option><option value="6" ${ui.k === 6 ? "selected" : ""}>6 accounts · up to 5 recipients</option></select></label></div>${recipientControls(p, ui, Boolean(draft))}`;
   const rank = !draft ? 0 : draft.status === "calculated" ? 1 : draft.status === "proved" ? 2 : draft.status === "confirmed" ? 4 : 3;
   const progress = `<ol class="institutional-payment-progress" aria-label="Payment progress">${["Select accounts", "Calculate commitments", "Generate ZK proof", "Post and verify"].map((name, i) => `<li class="${i < rank ? "complete" : i === rank ? "active" : ""}"><b>${i < rank ? "✓" : i + 1}</b>${name}</li>`).join("")}</ol>`;
-  const gates = s.paused ? '<div class="callout">The owner has paused the contract. Payments are stopped until the owner resumes it.</div>' : !p.flow.channels ? '<div class="callout">Establish the pairwise channels before building a payment.</div>' : !s.funded ? '<div class="callout">Fund the accounts in the preceding step before making a payment.</div>' : !validSelection ? `<div class="callout">Select exactly ${ui.k} eligible users, including the payer and recipient.</div>` : "";
+  const inputError = !draft ? paymentInputError(p, ui) : s.paused ? "The owner has paused the contract." : !validSelection ? "A selected account is frozen from trading." : "";
+  const gates = `<div id="institutionalPaymentGate" class="callout" ${inputError ? "" : "hidden"}>${inputError}</div>`;
   const proof = draft ? paymentProof(draft, s.paused || !validSelection) : "";
   const verification = draft?.proof ? `<section class="institutional-verification"><p class="eyebrow">On-chain verification</p><h3>${draft.status === "confirmed" ? "Verified · balances updated" : draft.status === "verifying" ? "Enygma is verifying the batch…" : "Verify before updating balances"}</h3><ol>${verificationChecks.map((check, i) => `<li class="${(draft.verification || 0) > i ? "complete" : ""}"><b>${(draft.verification || 0) > i ? "✓" : i + 1}</b>${check}</li>`).join("")}</ol>${draft.status === "proved" ? button("post", `Post ${draft.k} commitments and proof`, s.paused || !validSelection) : draft.status === "confirmed" ? '<a class="button button-primary" href="#/institutional/chain">Inspect the transaction →</a>' : '<span class="policy-badge">Transaction pending</span>'}</section>` : "";
-  return panel("Payer’s private workspace", "Build a commitment batch", `${progress}<p>Choose any registered payer and recipient. With <strong>k=2</strong>, the two accounts keep their amounts confidential. With <strong>k=6</strong>, four additional users receive zero-value commitment updates. Choose their rows below.</p>${controls}${gates}${constructionTable(p, draft)}<div class="institutional-selection-summary"><span>${ui.accountIds.length} / ${ui.k} users selected</span><strong>Payer: ${p.registrations[ui.payerId - 1]?.name}</strong></div>${!draft ? button("calculate", `Calculate ${ui.k} commitments`, !p.flow.channels || !s.funded || s.paused || !validSelection) : `${commitmentCalculation(draft)}${proof}${publicPosting(p, draft)}${verification}<div class="button-row">${button("edit-payment", draft.status === "confirmed" ? "Build another payment" : "Edit payment", ["submitted", "verifying"].includes(draft.status))}</div>`}`, `${ui.k} COMMITMENTS`);
+  return panel("Payer’s private workspace", "Pay multiple banks in one transfer", `${progress}<p>A six-account batch has <strong>one payer and up to five recipients</strong>. Choose each recipient’s amount; the payer spends their combined total. Any remaining slots hold participants with no balance change.</p>${controls}${gates}<div class="institutional-section-heading"><h3>Accounts in this batch</h3><span>${ui.accountIds.length} / ${ui.k} selected</span></div>${constructionTable(p, draft)}${!draft ? button("calculate", `Calculate ${ui.k} commitments`, Boolean(inputError)) : `${commitmentCalculation(draft)}${proof}${publicPosting(p, draft)}${verification}<div class="button-row">${button("edit-payment", draft.status === "confirmed" ? "Build another payment" : "Edit payment", ["submitted", "verifying"].includes(draft.status))}</div>`}`, `${ui.k} COMMITMENTS`);
 }
 
 function paymentViewExplanation(view) {
   const own = view.rows.find(row => row.own), count = view.rows.length;
-  if (view.scope === "sender") return ["You created this payment.", `You know the amount and secret mask for all ${count} slots, including any that move no money. Opening these changes does not reveal other participants’ total balances.`];
-  if (view.scope === "auditor") return ["Audit access opens every slot.", "The view-key access granted at registration lets you inspect all payment changes and the corresponding account balances."];
+  if (view.scope === "sender" || view.scope === "auditor") {
+    const recipients = view.rows.filter(row => row.opening.value > 0), total = recipients.reduce((sum, row) => sum + row.opening.value, 0);
+    const distribution = `One account paid ${format(total)} EN to ${recipients.length} ${recipients.length === 1 ? "recipient" : "recipients"} in this transfer.`;
+    return view.scope === "sender" ? ["You created this payment.", `${distribution} You can open all ${count} slots, including any that move no money. Opening these changes does not reveal other participants’ total balances.`] : ["Audit access opens every slot.", `${distribution} Your registered view-key access opens all payment changes and account balances.`];
+  }
   if (view.scope === "participant") return [own.opening.value > 0 ? `You received ${format(own.opening.value)} EN.` : "Your balance did not change.", count > 2
     ? `Your shared key opens your slot. The other ${count - 1} slots remain hidden: you cannot tell whether other participants received money or received nothing.`
     : "Your shared key opens only your slot directly. With just two accounts, the other amount can be inferred because money out must equal money in."];
@@ -145,7 +176,7 @@ function paymentHistory(p, viewer) {
 
 export function institutionalChainCard(p) {
   const viewer = institutionalUI.viewer;
-  return panel("Transaction inspection", "What can each participant see?", `<p>Choose a view to open the parts of each payment that participant knows. The sender can open every slot in a payment they created. Each other participant can open only their own slot.</p><div class="institutional-view-selector"><label>Inspect transactions as<select id="institutionalViewer"><option value="public" ${viewer === "public" ? "selected" : ""}>Public network · all amounts hidden</option>${accountOptions(p, viewer)}<option value="auditor" ${viewer === "auditor" ? "selected" : ""}>Auditor · authorized audit access</option></select></label><span>${viewer === "public" ? "No private openings are available to the public." : viewer === "auditor" ? "View-key access opens all registered accounts and their payment slots." : "Your access is evaluated for each payment: all slots if you sent it, only your slot otherwise."}</span></div>${paymentHistory(p, viewer)}<details class="institutional-account-ledger"><summary>Current account balances and commitments</summary><p>The ledger stores Pedersen commitments on BabyJubJub. Participants can open only their own total balance, even when they know every amount in a payment they sent. The auditor has the registered users’ view-key access.</p>${institutionalAccounts(p, viewer)}</details>`);
+  return panel("Transaction inspection", "What can each participant see?", `<p>Choose a view to open the parts of each payment that participant knows. The sender can open every slot in a payment they created. Each other participant can open only their own slot.</p><div class="institutional-view-selector"><label>Inspect transactions as<select id="institutionalViewer"><option value="public" ${viewer === "public" ? "selected" : ""}>Public network · payment amounts hidden</option>${accountOptions(p, viewer)}<option value="auditor" ${viewer === "auditor" ? "selected" : ""}>Auditor · authorized audit access</option></select></label><span>${viewer === "public" ? "No private openings are available to the public." : viewer === "auditor" ? "View-key access opens all registered accounts and their payment slots." : "Your access is evaluated for each payment: all slots if you sent it, only your slot otherwise."}</span></div>${paymentHistory(p, viewer)}<details class="institutional-account-ledger"><summary>Current account balances and commitments</summary><p>Balances with zero randomness are public. After private transfers add random factors, participants can open only their own balance. The auditor can open all registered accounts.</p>${institutionalAccounts(p, viewer)}</details>`);
 }
 
 export function institutionalControlCard(p) {
@@ -159,9 +190,13 @@ export function institutionalAuditCard(p) {
   return panel("Auditor workspace", "Open the authorized audit records", `<div class="audit-registration-status"><span>✓</span><div><strong>View-key access established during registration</strong><small>${grants} registered users shared their view keys with this auditor.</small></div></div><p>Use the granted audit access to inspect balance openings and each posted commitment delta. The secret spend keys remain with the participants. Contract pause remains an owner-only action.</p>${institutionalAccounts(p, "auditor")}<div class="institutional-section-heading"><h3>Audited payment history</h3><a href="#/institutional/policy">Open trading controls →</a></div>${paymentHistory(p, "auditor")}`, "AUDITOR");
 }
 
-export function institutionalPayload(action, target) {
+export function institutionalPayload(action, target, p) {
   if (action === "fund") return { actor: "owner", recipientId: document.querySelector("#institutionalFundingRecipient")?.value, amount: document.querySelector("#institutionalFundingAmount")?.value };
-  if (action === "calculate") return { ...institutionalUI, accountIds: [...institutionalUI.accountIds], amount: document.querySelector("#institutionalAmount")?.value };
+  if (action === "calculate") return { payerId: institutionalUI.payerId, k: institutionalUI.k, accountIds: [...institutionalUI.accountIds], recipients: institutionalUI.recipients.map((recipient, index) => ({ accountId: recipient.accountId, amount: document.getElementById(recipientInputId("Amount", index))?.value ?? recipient.amount })) };
+  if (action === "edit-payment") {
+    const draft = institutionalState(p).draft;
+    if (draft) Object.assign(institutionalUI, { payerId: draft.payerId, k: draft.k, accountIds: [...draft.accountIds], recipients: recipientsFor(draft).map(recipient => ({ accountId: recipient.accountId, amount: String(recipient.amount) })) });
+  }
   if (["pause-contract", "resume-contract", "freeze-user", "unfreeze-user"].includes(action)) return { actor: institutionalUI.controlsRole, accountId: target.closest("[data-action]")?.dataset.accountId };
   return {};
 }
@@ -169,7 +204,7 @@ export function institutionalPayload(action, target) {
 export function changeInstitutionalControl(target, p) {
   const ui = institutionalUI;
   if (target.id === "institutionalFundingAmount") { ui.fundingAmount = target.value; return false; }
-  if (target.id === "institutionalAmount") { ui.amount = Number(target.value); return false; }
+  if (target.matches("[data-institutional-recipient-amount]")) return false;
   if (target.id === "institutionalViewer") ui.viewer = target.value;
   else if (target.id === "institutionalFundingRecipient") ui.fundingRecipientId = Number(target.value);
   else if (target.id === "institutionalChannelViewer") ui.channelViewer = target.value;
@@ -177,14 +212,44 @@ export function changeInstitutionalControl(target, p) {
   else if (target.matches("[data-institutional-member]")) {
     const id = Number(target.dataset.institutionalMember);
     ui.accountIds = target.checked ? [...new Set([...ui.accountIds, id])] : ui.accountIds.filter(value => value !== id);
-  } else if (["institutionalPayer", "institutionalRecipient", "institutionalK", "institutionalAmount"].includes(target.id)) {
-    const field = { institutionalPayer: "payerId", institutionalRecipient: "recipientId", institutionalK: "k", institutionalAmount: "amount" }[target.id];
-    const previous = ui[field];
-    ui[field] = Number(target.value);
-    if (ui.payerId === ui.recipientId) ui[field === "payerId" ? "recipientId" : "payerId"] = previous;
-    if (field !== "amount") selectInstitutionalSet(p);
+  } else if (target.matches("[data-institutional-recipient]")) {
+    const index = Number(target.dataset.institutionalRecipient), accountId = Number(target.value);
+    if (accountId === ui.payerId || ui.recipients.some((r, i) => i !== index && r.accountId === accountId)) return false;
+    ui.recipients[index].accountId = accountId;
+    selectInstitutionalSet(p);
+  } else if (target.id === "institutionalPayer") {
+    const previous = ui.payerId;
+    ui.payerId = Number(target.value);
+    const recipient = ui.recipients.find(r => r.accountId === ui.payerId);
+    if (recipient) recipient.accountId = previous;
+    selectInstitutionalSet(p);
+  } else if (target.id === "institutionalK") {
+    const k = Number(target.value);
+    if (ui.recipients.length > k - 1) return false;
+    ui.k = k;
+    selectInstitutionalSet(p);
   } else return false;
   return true;
+}
+
+export function clickInstitutionalControl(target, p) {
+  const ui = institutionalUI, s = institutionalState(p);
+  if (s.draft) return false;
+  if (target.closest("[data-institutional-add-recipient]") && ui.recipients.length < ui.k - 1) {
+    const available = s.accounts.filter(a => a.accountId !== ui.payerId && !s.frozen.includes(a.accountId) && !ui.recipients.some(r => r.accountId === a.accountId));
+    const next = available.find(a => ui.accountIds.includes(a.accountId)) || available[0];
+    if (!next) return false;
+    ui.recipients.push({ accountId: next.accountId, amount: "" });
+    selectInstitutionalSet(p);
+    return recipientInputId("Amount", ui.recipients.length - 1);
+  }
+  const remove = target.closest("[data-institutional-remove-recipient]");
+  if (remove && ui.recipients.length > 1) {
+    ui.recipients.splice(Number(remove.dataset.institutionalRemoveRecipient), 1);
+    selectInstitutionalSet(p);
+    return "institutionalAddRecipient";
+  }
+  return false;
 }
 
 export function inputInstitutionalAmount(target, p) {
@@ -194,10 +259,18 @@ export function inputInstitutionalAmount(target, p) {
     if (explanation) explanation.outerHTML = mintCommitmentExplanation(p);
     return;
   }
-  if (target.id !== "institutionalAmount") return;
-  institutionalUI.amount = Number(target.value);
+  if (!target.matches("[data-institutional-recipient-amount]") || institutionalState(p).draft) return;
+  const index = Number(target.dataset.institutionalRecipientAmount);
+  institutionalUI.recipients[index].amount = target.value;
+  const total = paymentTotal(institutionalUI);
   const payerCell = document.querySelector(`[data-institutional-account="${institutionalUI.payerId}"] td:last-child b`);
-  const recipientCell = document.querySelector(`[data-institutional-account="${institutionalUI.recipientId}"] td:last-child b`);
-  if (payerCell) payerCell.textContent = `Payer · ${signed(-institutionalUI.amount)} EN`;
-  if (recipientCell) recipientCell.textContent = `Recipient · ${signed(institutionalUI.amount)} EN`;
+  const recipientCell = document.querySelector(`[data-institutional-account="${institutionalUI.recipients[index].accountId}"] td:last-child b`);
+  if (payerCell) payerCell.textContent = `Payer · ${signed(-total)} EN`;
+  if (recipientCell) recipientCell.textContent = `Recipient · ${signed(Number(target.value))} EN`;
+  const distribution = document.getElementById("institutionalPaymentDistribution");
+  if (distribution) distribution.outerHTML = paymentDistribution(institutionalUI);
+  const error = paymentInputError(p, institutionalUI), gate = document.getElementById("institutionalPaymentGate");
+  if (gate) { gate.textContent = error; gate.hidden = !error; }
+  const calculate = document.querySelector('[data-action="calculate"]');
+  if (calculate) calculate.disabled = Boolean(error);
 }

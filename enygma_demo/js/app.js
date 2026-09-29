@@ -1,9 +1,11 @@
+import { singleNoteShieldCard, shieldAmountInput } from "./shielding-ui.js";
+import { noteTreeClick, noteTreeChange } from "./commitment-tree-ui.js";
 import { retailState, hasRetailChannel } from "./retail.js";
 import { retailUI, retailShieldCard, retailChannelCard, retailPaymentCard, retailScanCard, retailChainCard, retailPayload, retailInput, retailChange, retailClick } from "./retail-ui.js";
 import { PROTOCOLS, PROTOCOL_IDS, SETUP_STEPS, PARTY_NAMES, PROTOCOL_PRIMITIVES, spendPublicKeyFor, initializationSteps } from "./config.js";
 import { engineAdapter } from "./demo-engine.js";
 import { institutionalState, institutionalChannelView } from "./institutional.js";
-import { institutionalUI, institutionalFundingCard, institutionalPaymentCard, institutionalChainCard, institutionalControlCard, institutionalAuditCard, institutionalPayload, changeInstitutionalControl, inputInstitutionalAmount } from "./institutional-ui.js";
+import { institutionalUI, institutionalFundingCard, institutionalPaymentCard, institutionalChainCard, institutionalControlCard, institutionalAuditCard, institutionalPayload, changeInstitutionalControl, clickInstitutionalControl, inputInstitutionalAmount } from "./institutional-ui.js";
 
 const $ = selector => document.querySelector(selector);
 const els = {
@@ -227,18 +229,12 @@ function retailTagCandidateIndices(mode, recipientIndex, excludedIndices = []) {
   return PARTY_NAMES.map((_, index) => index);
 }
 
-function publicNetworkRegistry(p, featured = false) {
-  const retail = p.id === "retail" ? retailState(p) : null;
-  const scanPayment = retail && screenFromHash() === "scan" ? p.transactions.find(t => t.id === retailUI.txId && t.type === "payment") || p.transactions.find(t => t.type === "payment") : null;
-  const channel = retail ? retail.channels.find(c => c.id === (scanPayment?.tagChannelId || retailUI.channelId)) || retail.channels.at(-1) : null;
+function publicNetworkRegistry(p) {
   const rows = p.registrations.map((registration, index) => {
-    const bit = channel ? channel.candidateIndices.includes(index) : null;
-    const participant = featured
-      ? `<div class="registry-party"><span class="avatar" aria-hidden="true">${registration.name.split(" ").map(value => value[0]).slice(0, 2).join("")}</span><span><strong>${registration.name}</strong><small>${index === 0 ? "You · " : ""}Keys registered</small></span></div>`
-      : `<strong>${registration.name}</strong>${index === 0 ? "<small>You</small>" : ""}`;
-    return `<tr data-public-party-row="${index}"><td><span class="registry-index">${String(p.id === "institutional" ? index + 1 : index).padStart(2, "0")}</span></td><td>${participant}</td><td>${registryKey("spend public key", registration.spendPublicKey)}</td><td>${registryKey("view public key", registration.viewPublicKey)}</td>${featured ? `<td><span class="registry-status ${registration.auditEnvelope ? "registered" : "pending"}">${registration.auditEnvelope ? "✓ View key shared" : "Pending"}</span></td>` : ""}${p.id === "retail" ? `<td><span class="compact-bitmap ${bit === null ? "unset" : bit ? "included" : "outside"}">${bit === null ? "—" : bit ? "1" : "0"}</span></td>` : ""}</tr>`;
+    const participant = `<div class="registry-party"><span class="avatar" aria-hidden="true">${registration.name.split(" ").map(value => value[0]).slice(0, 2).join("")}</span><span><strong>${registration.name}</strong><small>${index === 0 ? "You · " : ""}Keys registered</small></span></div>`;
+    return `<tr data-public-party-row="${index}"><td><span class="registry-index">${String(p.id === "institutional" ? index + 1 : index).padStart(2, "0")}</span></td><td>${participant}</td><td>${registryKey("spend public key", registration.spendPublicKey)}</td><td>${registryKey("view public key", registration.viewPublicKey)}</td><td><span class="registry-status ${registration.auditEnvelope ? "registered" : "pending"}">${registration.auditEnvelope ? "✓ View key shared" : "Pending"}</span></td></tr>`;
   }).join("");
-  return `<section class="network-registry${featured ? " network-registry-featured" : ""}" aria-label="Public participant registry"><header><div><p class="eyebrow">Public blockchain state</p><h3>${featured ? "Registered participants" : "Participant registry"}</h3></div><span>${p.registrations.length} ${featured ? "participants" : "entries"}</span></header><p>${featured ? "These accounts form the institution network in the next step. Select a public key to inspect its full value." : "Names and both public keys remain available throughout the protocol."}</p><div class="network-registry-scroll"${featured ? ' tabindex="0" role="region" aria-label="Registered participants and public keys"' : ""}><table><thead><tr><th>${featured ? "Account" : "#"}</th><th>Participant</th><th>${featured ? "Spend public key" : "pk_spend"}</th><th>${featured ? "View public key" : "pk_view"}</th>${featured ? "<th>Auditor access</th>" : ""}${p.id === "retail" ? "<th>Tag bit</th>" : ""}</tr></thead><tbody>${rows}</tbody></table></div>${channel ? `<footer><span>${channel.mode} · channel ${channel.index ?? 0}</span><code>${channel.bitmap}</code></footer>` : ""}</section>`;
+  return `<section class="network-registry network-registry-featured" aria-label="Public participant registry"><header><div><p class="eyebrow">Public blockchain state</p><h3>Registered participants</h3></div><span>${p.registrations.length} participants</span></header><p>These participants are registered for this protocol. Select a public key to inspect its full value.</p><div class="network-registry-scroll" tabindex="0" role="region" aria-label="Registered participants and public keys"><table><thead><tr><th>Account</th><th>Participant</th><th>Spend public key</th><th>View public key</th><th>Auditor access</th></tr></thead><tbody>${rows}</tbody></table></div></section>`;
 }
 
 function retailTagRegistry(p) {
@@ -359,30 +355,6 @@ function commitmentTree(p, assetId = null, ownerPartyId = null) {
   return `<div class="commitment-tree" data-tree-asset="${resolvedAsset}" data-merkle-root="${tree.root}"><div class="tree-heading"><div><p class="eyebrow">${resolvedAsset} Merkle tree</p><strong>${leaves.length} transaction-backed ${leaves.length === 1 ? "leaf" : "leaves"}${hasWalletPerspective ? ` · ${ownedLeafIds.size} recognized by this wallet` : " · ownership hidden"}</strong></div><div class="tree-legend">${hasWalletPerspective ? `<span class="tree-owner-key"><i></i>Wallet-recognized leaves</span>` : ""}<span class="tree-insertion-key"><i></i>Newest insertion path</span></div></div><div class="tree-scroll"><div class="tree-canvas" style="min-width:${minWidth}px">${renderedLevels}</div></div><div class="tree-insertion-receipt"><span>Latest insertion</span><strong>${short(newestSource, 18, 8)}</strong><small>Commitment appended → ${resolvedAsset} root updated</small></div></div>`;
 }
 
-function shieldingNetwork(p, assetId, ownerPartyId) {
-  const leafCount = p.trees?.[assetId]?.leafIds.length || 0;
-  return `<section class="shielding-network"><div class="shielding-network-head"><div><p class="eyebrow">Live ${assetId} network context</p><h3>Watch commitments enter this asset’s tree</h3></div><span class="context-badge">${leafCount} ${assetId} LEAVES</span></div><p>Every purple leaf is controlled by the participant executing this shielding step and remains highlighted after later insertions. Background commitments stay neutral; cash and bond commitments never share a root.</p>${trafficSwitch(p, assetId)}${commitmentTree(p, assetId, ownerPartyId)}</section>`;
-}
-
-function privateNoteConstruction(p, ownerPartyId, assetId, origins = ["shielding"]) {
-  const notes = (p.notes || []).filter(note => note.ownerPartyId === ownerPartyId && note.assetId === assetId && origins.includes(note.origin));
-  const latest = notes.at(-1);
-  const owner = p.registrations.find(item => item.partyId === ownerPartyId);
-  const construction = latest ? `<div class="commitment-construction" data-note-id="${latest.id}">
-      <div><span>1</span><small>Fresh salt</small><strong class="mono">${short(latest.salt, 18, 8)}</strong></div>
-      <div><span>2</span><small>Note fields</small><strong>${formatAmount(latest.amount)} ${latest.assetId}</strong></div>
-      <div><span>3</span><small>Commitment</small><strong class="mono">${short(latest.commitment, 18, 8)}</strong></div>
-      <div><span>4</span><small>Tree insertion</small><strong>Leaf ${latest.leafIndex}</strong></div>
-    </div>` : `<div class="commitment-construction pending"><div><span>1</span><small>Generate</small><strong>fresh salt</strong></div><div><span>2</span><small>Bind</small><strong>token_id + amount</strong></div><div><span>3</span><small>Hash</small><strong>create C</strong></div><div><span>4</span><small>Append</small><strong>new leaf</strong></div></div>`;
-  const rows = notes.map(note => `<tr class="owned-note" data-note-id="${note.id}"><td>Leaf ${note.leafIndex}</td><td>${formatAmount(note.amount)} ${note.assetId}</td><td class="mono">${short(note.salt, 12, 6)}</td><td class="mono">${short(note.commitment, 16, 7)}</td><td><span class="policy-badge ${note.status === "unspent" ? "" : "selective"}">${note.status}</span></td></tr>`).join("");
-  return `<section class="note-construction-card"><div class="panel-heading"><div><p class="eyebrow">Commitment construction</p><h3>One shielding operation → one private note → one leaf</h3></div><span class="context-badge">${notes.length} OWNED ${notes.length === 1 ? "NOTE" : "NOTES"}</span></div>
-    <p>The participant generates a fresh salt, then commits to the note as <code>C = Poseidon(pk_spend, salt, amount, token_id)</code>. Repeating shielding never overwrites an earlier note.</p>
-    <div class="commitment-formula"><span>pk_spend</span><b>${short(owner?.spendPublicKey || "pending", 16, 7)}</b><i>+</i><span>salt</span><b>${latest ? short(latest.salt, 16, 7) : "generated on shield"}</b><i>+</i><span>amount</span><b>${latest ? formatAmount(latest.amount) : "chosen above"}</b><i>+</i><span>token_id</span><b>${assetId}</b></div>
-    ${construction}
-    <div class="owned-notes"><div class="owned-notes-heading"><strong>Participant’s private notes</strong><span>Every shielding leaf remains independently tracked</span></div>${rows ? `<div class="table-wrap"><table><thead><tr><th>Tree position</th><th>Value</th><th>Salt</th><th>Commitment</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table></div>` : `<div class="empty-state">No private notes yet. The first shielding operation will create leaf 0.</div>`}</div>
-  </section>`;
-}
-
 function dvpAuditCard(p) {
   const transferId = p.flow.dvpTransfer?.id;
   const outputs = (p.notes || []).filter(note => note.origin === "dvp_output" && note.transferId === transferId);
@@ -461,8 +433,7 @@ function protocolPrimitiveDetails(p) {
 }
 
 function registrationReviewCard(p) {
-  const featuredRegistry = p.id === "institutional";
-  return `<article class="panel flow-card registration-review-card"><div class="panel-heading"><div><p class="eyebrow">Registration complete</p><h2>The network is ready</h2></div><span class="context-badge complete">10 / 10 REGISTERED</span></div><p>Every participant has registered both public keys and separately shared its view key with the auditor. The public participant registry remains visible beside every subsequent protocol action.</p>${featuredRegistry ? publicNetworkRegistry(p, true) : registrationProcess(p)}${deploymentReceipts(p)}${protocolPrimitiveDetails(p)}<div class="callout success-callout">The registry shown on this page is persistent public blockchain state. Protocol actions look up keys directly from those rows; there is no separate “retrieve keys” transaction.</div></article>`;
+  return `<article class="panel flow-card registration-review-card"><div class="panel-heading"><div><p class="eyebrow">Registration complete</p><h2>The network is ready</h2></div><span class="context-badge complete">10 / 10 REGISTERED</span></div><p>Every participant has registered both public keys and separately shared its view key with the auditor.</p>${p.id === "institutional" ? "" : registrationProcess(p)}${publicNetworkRegistry(p)}${deploymentReceipts(p)}${protocolPrimitiveDetails(p)}<div class="callout success-callout">The registry shown on this page is persistent public blockchain state. Protocol actions look up keys directly from those rows; there is no separate “retrieve keys” transaction.</div></article>`;
 }
 
 function institutionalChannelCard(p) {
@@ -579,8 +550,8 @@ function dvpSteps(p) {
   const securityContent = `<article class="panel flow-card"><div class="panel-heading"><div><p class="eyebrow">Seller response · security leg</p><h2>Complete the DvP</h2></div><span class="context-badge ${settled ? "complete" : ""}">${settled ? "ATOMICALLY SETTLED" : p.flow.cashLocked ? "CASH LOCKED · WAITING" : "NOT INITIATED"}</span></div><p>The buyer initiated this transfer with its cash leg. The seller can now submit the matching encrypted security leg; because both legs are then present, the contract settles immediately.</p>${dvpTransferIdentity(p.flow.dvpTransfer)}${dvpTermSheet(terms)}${settled ? `<div class="callout success-callout dvp-result"><strong>Atomic DvP complete.</strong> The buyer received ${formatAmount(terms.quantity)} ${terms.securityId}; the seller received ${formatAmount(terms.cashAmount)} ${terms.cashToken}.</div>` : ""}<div class="button-row"><button class="button button-primary" data-action="lock-security" ${!transferActive || !p.flow.cashLocked || !bothShielded || p.flow.securityLocked || settled ? "disabled" : ""}>${settled ? "Both legs settled" : "Submit security leg and settle"}</button></div></article>`;
   const securityDefaultShield = Math.min(p.flow.sellerPublicSecurity || 1, 500);
   const cashDefaultShield = Math.min(p.flow.buyerPublicCash || 1, 2500000);
-  const securityContentBefore = `<article class="panel flow-card"><div class="panel-heading"><div><p class="eyebrow">Pre-trade privacy · seller</p><h2>Shield securities</h2></div><span class="context-badge ${securityShielded ? "complete" : ""}">${formatAmount(p.flow.sellerShieldedSecurity)} PRIVATE UNITS</span></div><p>Choose how much of the seller’s public inventory becomes a private note. You can shield repeatedly; every submission creates and retains another independently spendable leaf in the ${p.flow.securityAssetId} tree.</p><div class="balance-movement"><span>Public balance<strong>${formatAmount(p.flow.sellerPublicSecurity)} ${p.flow.securityAssetId}</strong></span><b aria-hidden="true">→</b><span>Private balance<strong>${formatAmount(p.flow.sellerShieldedSecurity)} ${p.flow.securityAssetId}</strong></span></div><div class="amount-action"><label>Amount to shield<input id="dvpShieldSecurityAmount" type="number" min="1" max="${p.flow.sellerPublicSecurity}" step="1" value="${securityDefaultShield}" ${!p.flow.sellerPublicSecurity || proposed ? "disabled" : ""}></label><button class="button button-primary" data-action="shield-security" ${!p.flow.sellerPublicSecurity || proposed ? "disabled" : ""}>${securityShielded ? "Shield again · create another leaf" : "Shield securities"}</button></div>${privateNoteConstruction(p, "party-2", p.flow.securityAssetId)}${shieldingNetwork(p, p.flow.securityAssetId, "party-2")}</article>`;
-  const cashContent = `<article class="panel flow-card"><div class="panel-heading"><div><p class="eyebrow">Pre-trade privacy · buyer</p><h2>Shield cash</h2></div><span class="context-badge ${cashShielded ? "complete" : ""}">${formatAmount(p.flow.buyerShieldedCash)} PRIVATE USD</span></div><p>Choose how much of the buyer’s public cash balance becomes a private note. Each submission creates and retains a separate leaf in the ${terms.cashToken} tree.</p><div class="balance-movement"><span>Public balance<strong>${formatAmount(p.flow.buyerPublicCash)} ${terms.cashToken}</strong></span><b aria-hidden="true">→</b><span>Private balance<strong>${formatAmount(p.flow.buyerShieldedCash)} ${terms.cashToken}</strong></span></div><div class="amount-action"><label>Amount to shield<input id="dvpShieldCashAmount" type="number" min="1" max="${p.flow.buyerPublicCash}" step="1" value="${cashDefaultShield}" ${!p.flow.buyerPublicCash || proposed ? "disabled" : ""}></label><button class="button button-primary" data-action="shield-cash" ${!p.flow.buyerPublicCash || proposed ? "disabled" : ""}>${cashShielded ? "Shield again · create another leaf" : "Shield cash"}</button></div>${privateNoteConstruction(p, "party-1", terms.cashToken)}${shieldingNetwork(p, terms.cashToken, "party-1")}</article>`;
+  const securityContentBefore = singleNoteShieldCard(p, { title: "Shield securities", role: "Seller · Boreal Markets", ownerPartyId: "party-2", assetId: p.flow.securityAssetId, unit: "units", assetLabel: "securities", publicBalance: p.flow.sellerPublicSecurity, privateBalance: p.flow.sellerShieldedSecurity, inputId: "dvpShieldSecurityAmount", defaultAmount: securityDefaultShield, action: "shield-security", locked: proposed, traffic: true, vault: "Security vault", description: "Move public securities into private notes before trading. Each submission creates a separate note in this asset’s tree." });
+  const cashContent = singleNoteShieldCard(p, { title: "Shield cash", role: "Buyer · Atlas Bank", ownerPartyId: "party-1", assetId: terms.cashToken, unit: "USD", assetLabel: "USD", publicBalance: p.flow.buyerPublicCash, privateBalance: p.flow.buyerShieldedCash, inputId: "dvpShieldCashAmount", defaultAmount: cashDefaultShield, action: "shield-cash", locked: proposed, traffic: true, vault: "Cash vault", description: "Move public cash into private notes before trading. Cash and securities stay in separate commitment trees." });
   let timeoutState;
   if (settled) timeoutState = `<div class="timeout-state"><div class="callout success-callout"><strong>This transfer settled.</strong> Both identified input notes were consumed, so its timeout is no longer available. The timeout branch applies only while exactly one leg is locked.</div></div>`;
   else if (oneLegLocked) timeoutState = `<div class="timeout-state"><div class="dvp-leg"><span>1</span><div><small>Current state</small><strong>${p.flow.securityLocked ? "Security locked; waiting for buyer cash" : "Cash locked; waiting for seller security"}</strong></div><b>${terms.expiryBlocks} block window</b></div><button class="button button-auditor" data-action="timeout">Expire and return locked leg</button></div>`;
@@ -616,7 +587,7 @@ function auctionSteps(p) {
   const listContent = `<article class="panel flow-card"><div class="panel-heading"><div><p class="eyebrow">Seller listing</p><h2>Lock the asset and open the auction</h2></div><span class="context-badge ${auction.listed ? "complete" : ""}">${auction.listed ? `${auction.biddingDuration} BLOCK WINDOW` : "DRAFT"}</span></div><p>The seller converts its specific certificate into a locked auction commitment and defines when bidding closes. Bidders see the asset type, auction reference, and remaining time—not the certificate’s private details.</p><div class="listing-visibility"><section><small>Seller and auditor know</small><strong>${auction.assetTokenId}</strong><span>Specific certificate · ${formatAmount(auction.assetQuantity)} Class A shares</span></section><section><small>Bidders are shown</small><strong>${auction.assetType}</strong><span>Asset type only · certificate details remain private</span></section></div><div class="amount-action"><label>Bidding timeout · blocks<input id="auctionDuration" type="number" min="2" value="${auction.biddingDuration}" ${auction.listed ? "disabled" : ""}></label><button class="button button-primary" data-action="list-asset" ${!auction.nftMinted || auction.listed ? "disabled" : ""}>${auction.listed ? "Asset locked · bidding open" : "List asset for auction"}</button></div>${auction.listed ? commitmentTree(p, auction.assetType, "party-2") : ""}</article>`;
   const mintCashContent = `<article class="panel flow-card"><div class="panel-heading"><div><p class="eyebrow">Bidder funding · operator</p><h2>Mint USD to the bidder</h2></div><span class="context-badge ${auction.publicCash > 0 || auction.privateCash > 0 ? "complete" : ""}">${formatAmount(auction.publicCash)} PUBLIC USD</span></div><p>The bidder needs funds before constructing a bid. The operator allocates a public USD balance; this operation reveals no bid and creates no auction commitment.</p><div class="dvp-leg cash-leg"><span>$</span><div><small>Your public balance</small><strong>${formatAmount(auction.publicCash)} USD</strong></div><b>${auction.publicCash > 0 ? "Available" : "Empty"}</b></div><div class="amount-action"><label>Amount to mint<input id="auctionMintCashAmount" type="number" min="1" value="1000"></label><button class="button button-primary" data-action="mint-cash">Mint USD to user</button></div></article>`;
   const shieldDefault = Math.min(auction.publicCash || 1, 650);
-  const shieldCashContent = `<article class="panel flow-card"><div class="panel-heading"><div><p class="eyebrow">Bidder funding · you</p><h2>Shield USD for bidding</h2></div><span class="context-badge ${auction.privateCash > 0 ? "complete" : ""}">${formatAmount(auction.privateCash)} PRIVATE USD</span></div><p>Choose the value of a private funding note. Each shielding action creates its own salt, commitment, and USD-tree leaf. A later bid may spend any amount up to that note’s value and returns the remainder as a new private change leaf.</p><div class="balance-movement"><span>Public balance<strong>${formatAmount(auction.publicCash)} USD</strong></span><b aria-hidden="true">→</b><span>Private notes<strong>${formatAmount(auction.privateCash)} USD</strong></span></div><div class="amount-action"><label>Amount to shield<input id="auctionShieldCashAmount" type="number" min="1" max="${auction.publicCash}" value="${shieldDefault}" ${auction.publicCash <= 0 || userBid ? "disabled" : ""}></label><button class="button button-primary" data-action="shield-cash" ${auction.publicCash <= 0 || userBid ? "disabled" : ""}>Shield into a new USD note</button></div>${privateNoteConstruction(p, "party-0", auction.cashToken, ["auction_funding", "auction_change"])}${commitmentTree(p, auction.cashToken, "party-0")}</article>`;
+  const shieldCashContent = singleNoteShieldCard(p, { title: "Shield USD for bidding", role: "Bidder · You", ownerPartyId: "party-0", assetId: auction.cashToken, unit: "USD", assetLabel: "USD", publicBalance: auction.publicCash, privateBalance: auction.privateCash, inputId: "auctionShieldCashAmount", defaultAmount: shieldDefault, action: "shield-cash", locked: Boolean(userBid), origins: ["auction_funding", "auction_change"], vault: "USD vault", description: "Create a private funding note for your bid. You can spend part of a note and receive the remainder as private change." });
   const noteOptions = availableNotes.map(note => `<option value="${note.id}" data-amount="${note.amount}">Leaf ${note.leafIndex} · ${formatAmount(note.amount)} USD · ${short(note.commitment, 11, 5)}</option>`).join("");
   const bidContent = `<article class="panel flow-card"><div class="panel-heading"><div><p class="eyebrow">Sealed bid · you</p><h2>Choose and submit your bid</h2></div><span class="context-badge ${userBid ? "complete" : ""}">${userBid ? "BID LOCKED" : `${auction.blocksRemaining} BLOCKS LEFT`}</span></div><p>You know the auction reference and asset type, while the specific certificate data stays private. Select a funding note and choose any bid up to its value; unused value returns immediately as a new private change note.</p><div class="bid-target"><span>AUCTION TARGET</span><strong>${auction.assetType}</strong><small>${auction.reference} · certificate ID, quantity, and metadata withheld</small></div>${userBid ? `<div class="sealed-bid-receipt"><span><small>Your private bid</small><strong>${formatAmount(userBid.amount)} USD</strong></span><span><small>Private change</small><strong>${formatAmount((p.notes || []).find(note => note.id === userBid.changeNoteId)?.amount || 0)} USD</strong></span><span><small>Published bid commitment</small><strong class="mono">${short(userBid.commitA, 18, 8)}</strong></span></div><div class="callout success-callout">The original funding leaf was consumed. The bid amount is locked behind an opaque commitment, while any remainder is now a separate participant-controlled USD leaf. The auctioneer and auditor can open the bid data; the public cannot.</div>` : `<div class="bid-entry-grid"><label class="bid-note-select">Private USD note to spend<select id="auctionBidNote">${noteOptions}</select><small>The selected leaf defines the maximum, not the required bid.</small></label><label class="bid-note-select">Your bid amount<input id="auctionBidAmount" type="number" min="1" max="${availableNotes[0]?.amount || 1}" value="${bidDefault}"><small>Any unbid remainder becomes a fresh private change note.</small></label></div><div class="payment-construction"><span><b>1</b><strong>Spend funding leaf</strong><small>Prove ownership and membership</small></span><span><b>2</b><strong>Create bid</strong><small>Lock only the chosen amount</small></span><span><b>3</b><strong>Create change</strong><small>Return the unused value privately</small></span><span><b>4</b><strong>Seal and submit</strong><small>Encrypt bid to pk_auction</small></span></div><div class="button-row"><button class="button button-primary" data-action="submit-bid" ${!availableNotes.length || auction.status !== "bidding" ? "disabled" : ""}>Submit sealed bid</button></div>`}</article>`;
   const biddingContent = `<article class="panel flow-card"><div class="panel-heading"><div><p class="eyebrow">Bidding window</p><h2>Collect bids until timeout</h2></div><span class="context-badge ${auction.status === "closed" || auction.status === "winner_announced" || auction.status === "settled" ? "complete" : ""}">${auction.blocksRemaining} BLOCKS REMAINING</span></div><p>Bid envelopes enter against the same auction reference. The public network can count them but cannot read their amounts or associate commitments with participant identities.</p><div class="auction-clock"><span>${auction.blocksRemaining}</span><div><small>Bidding timeout</small><strong>${auction.status === "bidding" ? "Submissions remain open" : "Deadline reached · submissions closed"}</strong></div><b>${auction.bids.length} sealed bids</b></div><div class="opaque-bid-stream">${auction.bids.map((bid, index) => `<div><span>Bid ${String(index + 1).padStart(2, "0")}</span><strong class="mono">${short(bid.commitA, 16, 7)}</strong><small>amount hidden</small></div>`).join("") || `<div class="empty-state">No bids submitted.</div>`}</div><div class="button-row">${!auction.otherBidsCollected ? `<button class="button button-primary" data-action="collect-bids" ${!userBid ? "disabled" : ""}>Receive remaining sealed bids</button>` : `<button class="button button-auditor" data-action="close-bidding" ${auction.status !== "bidding" ? "disabled" : ""}>Advance to bidding timeout</button>`}</div></article>`;
@@ -659,15 +630,11 @@ function scenarioSteps(p) {
   return auctionSteps(p);
 }
 
-function scenarioActivity(p, showRegistry = true) {
-  const items = p.ledger.slice(0, 5);
-  return `<aside class="panel scenario-aside${showRegistry ? "" : " scenario-aside-compact"}"><div><p class="eyebrow">Executing entity</p><div class="scenario-actor"><span aria-hidden="true">${screenFromHash() === "audit" ? "AU" : "→"}</span><strong data-scenario-actor></strong></div></div>${showRegistry ? publicNetworkRegistry(p) : ""}<details class="scenario-receipts"><summary>Recent protocol receipts</summary>${items.map(item => `<div class="scenario-receipt"><strong>${item.label}</strong><span>block ${item.block} · ${short(item.hash, 11, 6)}</span></div>`).join("") || `<div class="activity-empty">No action receipts yet.</div>`}</details></aside>`;
-}
-
 function renderExperience(p) {
   const oldTreeScroll = els.experience.querySelector(".retail-tree-scroll");
   const oldScroll = oldTreeScroll ? { left: oldTreeScroll.scrollLeft, top: oldTreeScroll.scrollTop, start: oldTreeScroll.closest(".retail-tree-panel").dataset.treeStart, pageSize: oldTreeScroll.closest(".retail-tree-panel").dataset.treePageSize, mapTop: els.experience.querySelector(".retail-tree-map")?.scrollTop || 0 } : null;
-  const activeInput = p.id === "retail" ? document.activeElement : null;
+  const openDetails = [...els.experience.querySelectorAll("details[data-disclosure][open]")].map(el => el.dataset.disclosure);
+  const activeInput = document.activeElement;
   const focused = activeInput?.id ? { id: activeInput.id, start: activeInput.selectionStart, end: activeInput.selectionEnd, direction: activeInput.selectionDirection } : null;
   const ready = engineAdapter.isReady(p.id);
   els.experience.hidden = !ready;
@@ -676,18 +643,15 @@ function renderExperience(p) {
   const requested = p.id === "retail" && screenFromHash() === "traffic" ? "shielding" : screenFromHash();
   const activeIndex = Math.max(0, steps.findIndex(step => step.id === requested));
   const active = steps[activeIndex];
-  const featuredRegistry = p.id === "institutional" && active.id === "registration";
-  const showActivityRegistry = !featuredRegistry && !(p.id === "retail" && active.id === "shielding");
   const stepLinks = steps.map((step, index) => `<a href="#/${p.id}/${step.id}" class="${index === activeIndex ? "active" : step.complete ? "complete" : ""}" ${index === activeIndex ? 'aria-current="step"' : ""}><span>${step.complete ? "✓" : index + 1}</span><strong>${step.label}</strong></a>`).join("");
   const previous = activeIndex > 0 ? `<a class="button button-ghost" href="#/${p.id}/${steps[activeIndex - 1].id}">← Previous</a>` : `<span></span>`;
   const next = activeIndex < steps.length - 1 ? `<a class="button button-primary" href="#/${p.id}/${steps[activeIndex + 1].id}">Next: ${steps[activeIndex + 1].label} →</a>` : `<a class="button button-primary" href="#/choose">Finish walkthrough</a>`;
   els.experience.innerHTML = `<div class="experience-header"><div><p class="eyebrow">Protocol walkthrough · ${activeIndex + 1} of ${steps.length}</p><h2>${active.label}</h2></div><span class="context-badge">ONE STEP AT A TIME</span></div>
     <nav class="scenario-progress" aria-label="${PROTOCOLS[p.id].name} walkthrough">${stepLinks}</nav>
-    <div class="scenario-layout ${p.id === "institutional" ? "institutional-layout" : p.id === "retail" ? "retail-layout" : ""}${featuredRegistry ? " institutional-registration-layout" : ""}"><section class="scenario-page" aria-live="polite">${active.content}</section>${scenarioActivity(p, showActivityRegistry)}</div>
+    <div class="scenario-layout"><section class="scenario-page" aria-live="polite">${active.content}</section></div>
     <nav class="scenario-footer" aria-label="Walkthrough navigation">${previous}${next}</nav>`;
-  els.experience.querySelector("[data-scenario-actor]").textContent = active.actor;
   const currentScreen = `${p.id}/${active.id}`;
-  if (p.id === "retail" && els.experience.dataset.screen === currentScreen) {
+  if (els.experience.dataset.screen === currentScreen) {
     const scroll = els.experience.querySelector(".retail-tree-scroll");
     if (scroll && oldScroll) {
       const sameGroup = scroll.closest(".retail-tree-panel").dataset.treeStart === oldScroll.start && scroll.closest(".retail-tree-panel").dataset.treePageSize === oldScroll.pageSize;
@@ -700,7 +664,7 @@ function renderExperience(p) {
       if (input && focused.start != null) input.setSelectionRange(focused.start, focused.end, focused.direction);
     }
   }
-  if (p.id === "retail" && els.experience.dataset.screen !== currentScreen) {
+  if (els.experience.dataset.screen !== currentScreen) {
     const scroll = els.experience.querySelector(".retail-tree-scroll");
     if (scroll) scroll.scrollLeft = 0;
   }
@@ -710,6 +674,7 @@ function renderExperience(p) {
     if (oldScroll && els.experience.dataset.screen === currentScreen && tree.dataset.treeStart === oldScroll.start && tree.dataset.treePageSize === oldScroll.pageSize) treeMap.scrollTop = oldScroll.mapTop;
     else if (selected) treeMap.scrollTop = selected.offsetTop - (treeMap.clientHeight - selected.offsetHeight) / 2;
   }
+  if (els.experience.dataset.screen === currentScreen) els.experience.querySelectorAll("details[data-disclosure]").forEach(el => { el.open = openDetails.includes(el.dataset.disclosure); });
   els.experience.dataset.screen = currentScreen;
   if (busy && p.id === "retail") els.experience.querySelectorAll("button, input, select").forEach(control => {
     if (!control.matches("[data-retail-tree-show], [data-retail-tree-page], [data-retail-tree-move], #retailTreeFollow")) control.disabled = true;
@@ -765,6 +730,10 @@ for (const eventName of ["pointerover", "focusin"]) {
   });
 }
 document.addEventListener("keydown", event => {
+  if (["dvp", "auctions"].includes(route) && ["Enter", " "].includes(event.key) && event.target.matches("[data-note-leaf]")) {
+    event.preventDefault();
+    if (noteTreeClick(event.target, engineAdapter.protocol(route))) render();
+  }
   if (event.key !== "Escape") return;
   document.querySelectorAll(".contract-card").forEach(card => {
     card.classList.add("tooltip-dismissed");
@@ -789,6 +758,11 @@ document.addEventListener("click", async event => {
     return;
   }
   if (route === "retail" && retailClick(event.target, engineAdapter.protocol(route))) { render(); return; }
+  if (["dvp", "auctions"].includes(route) && noteTreeClick(event.target, engineAdapter.protocol(route))) { render(); return; }
+  if (route === "institutional") {
+    const focusId = clickInstitutionalControl(event.target, engineAdapter.protocol(route));
+    if (focusId) { render(); document.getElementById(focusId)?.focus({ preventScroll: true }); return; }
+  }
   const tagMode = event.target.closest("[data-retail-tag-mode]")?.dataset.retailTagMode;
   if (tagMode) {
     retailTagDraft.mode = tagMode;
@@ -831,7 +805,7 @@ document.addEventListener("click", async event => {
     if (operations[command]) await run(...operations[command]);
   }
   if (action) {
-    let payload = route === "institutional" ? institutionalPayload(action, event.target) : {};
+    let payload = route === "institutional" ? institutionalPayload(action, event.target, engineAdapter.protocol(route)) : {};
     if (route === "dvp" && action === "mint-security") payload = { amount: $("#dvpMintSecurityAmount")?.value };
     if (route === "dvp" && action === "mint-cash") payload = { amount: $("#dvpMintCashAmount")?.value };
     if (route === "dvp" && action === "shield-security") payload = { amount: $("#dvpShieldSecurityAmount")?.value };
@@ -856,6 +830,7 @@ document.addEventListener("click", async event => {
 });
 
 document.addEventListener("input", event => {
+  shieldAmountInput(event.target);
   if (route === "institutional") inputInstitutionalAmount(event.target, engineAdapter.protocol(route));
   if (route === "retail" && retailInput(event.target, engineAdapter.protocol(route))) {
     const id = event.target.id;
@@ -865,11 +840,12 @@ document.addEventListener("input", event => {
 });
 
 document.addEventListener("change", event => {
+  if (["dvp", "auctions"].includes(route) && noteTreeChange(event.target, engineAdapter.protocol(route))) { render(); return; }
   if (route === "retail" && retailChange(event.target)) { render(); return; }
   if (route === "institutional" && changeInstitutionalControl(event.target, engineAdapter.protocol(route))) {
     const id = event.target.id;
     render();
-    if (["institutionalChannelViewer", "institutionalFundingRecipient", "institutionalViewer"].includes(id)) document.getElementById(id)?.focus({ preventScroll: true });
+    if (["institutionalChannelViewer", "institutionalFundingRecipient", "institutionalViewer", "institutionalPayer", "institutionalK"].includes(id) || event.target.matches("[data-institutional-recipient]")) document.getElementById(id)?.focus({ preventScroll: true });
     return;
   }
   if (event.target.matches("[data-traffic]")) engineAdapter.setTraffic(route, event.target.checked, event.target.dataset.trafficAsset || null);
@@ -898,14 +874,21 @@ $("#resetAll").addEventListener("click", () => {
 });
 
 document.addEventListener("keydown", event => {
+  if (["dvp", "auctions"].includes(route) && ["Enter", " "].includes(event.key) && event.target.matches("[data-note-leaf]")) {
+    event.preventDefault();
+    if (noteTreeClick(event.target, engineAdapter.protocol(route))) render();
+  }
   if (route === "retail" && ["Enter", " "].includes(event.key) && event.target.matches("[data-retail-leaf]")) {
     event.preventDefault();
     if (retailClick(event.target, engineAdapter.protocol(route))) render();
   }
 });
-window.addEventListener("hashchange", render);
+window.addEventListener("hashchange", () => {
+  render();
+  window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+});
 for (const query of ["(max-width: 600px)", "(max-width: 1050px)"]) {
-  window.matchMedia(query).addEventListener("change", () => { if (route === "retail") render(); });
+  window.matchMedia(query).addEventListener("change", () => { if (["retail", "dvp", "auctions"].includes(route)) render(); });
 }
 engineAdapter.addEventListener("change", render);
 engineAdapter.restoreTimers();

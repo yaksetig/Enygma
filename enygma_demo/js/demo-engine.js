@@ -1,7 +1,7 @@
 import { PARTY_NAMES, PROTOCOL_IDS, PROTOCOLS, PROTOCOL_PRIMITIVES, spendPublicKeyFor, initializationSteps } from "./config.js";
 import { executeRetail, migrateRetail, retailTree, retailTraffic } from "./retail.js";
 import { spendPublic } from "./institutional-crypto.js";
-import { institutionalState, mintInstitutional, buildInstitutionalPayment, validateInstitutionalPayment, institutionalBinding, settleInstitutionalPayment } from "./institutional.js";
+import { institutionalState, migrateInstitutionalFunding, mintInstitutional, buildInstitutionalPayment, validateInstitutionalPayment, institutionalBinding, settleInstitutionalPayment } from "./institutional.js";
 
 const STORAGE_KEY = "enygma-demo-state-v12";
 const VERSION = 12;
@@ -375,6 +375,7 @@ export class DemoEngine extends EventTarget {
           delete institutional.flow.bridgeReady;
           institutional.transactions = institutional.transactions.filter(tx => !["bridge", "freeze", "resume"].includes(tx.type) && (tx.type !== "payment" || tx.batch));
           institutional.ledger = institutional.ledger.filter(entry => !["bridge", "freeze", "resume"].includes(entry.kind) && (entry.kind !== "payment" || !entry.label.includes("envelope")));
+          migrateInstitutionalFunding(institutional);
           const accountState = institutionalState(institutional);
           if (["submitted", "verifying"].includes(accountState.draft?.status)) {
             accountState.draft.status = "proved";
